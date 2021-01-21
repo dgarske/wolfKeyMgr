@@ -1,0 +1,12 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+
+noinst_PROGRAMS+= examples/client/client
+examples_client_client_SOURCES = examples/client/client.c  src/evt_log.c src/helpers.c
+examples_client_client_CFLAGS       = -Isrc
+examples_client_client_LDFLAGS      = -Lsrc
+examples_client_client_LDADD        =
+examples_client_client_DEPENDENCIES = src/evt.h
+EXTRA_DIST += 

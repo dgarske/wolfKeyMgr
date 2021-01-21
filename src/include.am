@@ -1,0 +1,15 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+
+bin_PROGRAMS+= src/cert
+src_cert_SOURCES = src/evt.c src/evt_log.c src/evt_err.c src/helpers.c \
+                   src/driver.c 
+src_cert_CFLAGS       =
+src_cert_LDFLAGS      = -Lsrc
+src_cert_LDADD        = $(LTLIBEVENT)
+src_cert_DEPENDENCIES =
+
+
+nobase_include_HEADERS+= src/evt.h src/evt_log.h src/evt_err.h src/helpers.h

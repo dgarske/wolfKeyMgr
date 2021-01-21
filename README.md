@@ -52,3 +52,43 @@ in the Asymmetric Key Package shall have the following fields set as follows:
 3) privateKey shall be set to the Diffie-Hellman private key encoded as an octet string.
 4) publicKey shall be set to the Diffie-Hellman public key encoded as a bit string.
 5) Attributes shall include a validity period for the key pair using the attribute defined in clause 15 of IETF RFC 7906 [4].
+
+
+## Installation
+
+0. Install libevent version 2.0+
+
+    $ ./configure
+    $ make
+    $ make check   # (optional, but highly recommended)
+    $ sudo make install
+
+    * smartos will require a non default install location of /opt/local
+    $ ./configure --prefix=/opt/local
+
+1. Install wolfssl version 3.4.2+
+
+    $ ./configure --enable-certservice --enable-des3
+    $ make
+    $ make check   # (optional, but highly recommended)
+    $ sudo make install
+
+    * smartos will require a non default install location of /opt/local
+    $ ./configure --prefix=/opt/local
+
+2. Building on *nix from git repository
+
+    Run the autogen script to generate configure, you'll need the autoconf tools
+    installed, then proceed to the next step. 
+
+    $ ./autogen.sh
+
+3. Building on *nix from a release
+
+    $ ./configure
+    $ make
+    $ make check   # (optional, but highly recommended)
+    $ sudo make install
+
+    * smartos will require a non default install location of /opt/local
+    $ ./configure --prefix=/opt/local

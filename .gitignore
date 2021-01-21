@@ -1,52 +1,35 @@
-# Prerequisites
-*.d
+# http://www.gnu.org/software/automake
 
-# Object files
+Makefile.in
+
+# http://www.gnu.org/software/autoconf
+
+/autom4te.cache
+/aclocal.m4
+/compile
+/configure
+/depcomp
+/install-sh
+/missing
+
+# autoconf files
+Makefile
+*.deps
+*.dirstamp
 *.o
-*.ko
-*.obj
-*.elf
+config*
+config/*
+stamp-h1
+examples/client/client
+src/cert
+*.gz
+*.log
+*.trs
+aminclude.am
 
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# misc
+tags
+cert.pid
+response.pem
+dump.der
+diff
