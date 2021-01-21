@@ -1,12 +1,31 @@
-# Key Manager
+# wolf Key Manager
 
-This is an HTTPS server for Key and Certificate provisioning.
+This is an secure service for Key and Certificate management.
 
 Based on:
 * ETSI TS 103 523-3 V1.3.1 (2019-08)
 * IETF RFC 5958
 
+## Features
+
+* Protection of key material / sensitive data:
+* Provisioning keys using an asymmetric key package request
+* Provisioning a trusted certificate using a CSR.
+
 ## Design
+
+* Low level socket handling using libevent, which is a portable framework for handling sockets.
+* An HTTPS server supports GET requests using HTTP/1.1.
+* A TLS server supports custom commands for CSR signing and Generic hash signatures using a trusted CA.
+* The CA key can be local PKCS #8 (simple password/encrypted), PKCS #11 HSM or TPM 2.0.
+* Generated key and certificate material is encrypted with AES XTS and indexed.
+* Uses stdint.h types.
+
+## Layout of files
+
+* 
+
+## ETSI Design
 
 Server Side
 1) KeyGen (Gen Key)
@@ -19,8 +38,7 @@ Client side
 
 libevent is fine - callbacks and what you want to respond to.
 
-
-## GET Request
+## GET Request (ETSI)
 
 `GET /.well-known/enterprise-transport-security/keys?fingerprints=[fingerprints]`, where:
 
@@ -38,7 +56,7 @@ ETSI
 16 ETSI TS 103 523-3 V1.3.1 (2019-08)
 e) If no group in [groups] is supported by the key manager, the key manager shall return an appropriate HTTP error code as defined in clause 6 of IETF RFC 7231 [12]. If the key manager is unable to use contextstr, the key manager may return an appropriate HTTP error code, as defined in clause 6 of IETF RFC 7231 [12], or it may handle the error itself in a way outside the scope of the present document.
 
-## Asymmetric Key Packages
+## Asymmetric Key Packages (RFC 5958)
 
 When an Enterprise Transport Security static Diffie-Hellman public/private key pair are sent from the key manager to a key consumer, they shall be packaged using the Asymmetric Key Package defined in IETF RFC 5958 [3]. Each Asymmetric Key Package shall contain one or more OneAsymmetricKey elements. Such an element will be one of either:
 a) a static Diffie-Hellman key pair, hereafter referred to as Type A elements; or
@@ -56,39 +74,40 @@ in the Asymmetric Key Package shall have the following fields set as follows:
 
 ## Installation
 
-0. Install libevent version 2.0+
+1. Install libevent version 2.0+
 
-    $ ./configure
-    $ make
-    $ make check   # (optional, but highly recommended)
+```sh
+$ ./configure
+$ make
+$ make check   # (optional, but highly recommended)
+$ sudo make install
+```
+
+2. Install wolfssl version 3.4.2+
+
+```sh
+$ ./configure --enable-certservice --enable-des3
+$ make
+$ make check   # (optional, but highly recommended)
     $ sudo make install
+```
 
-    * smartos will require a non default install location of /opt/local
-    $ ./configure --prefix=/opt/local
-
-1. Install wolfssl version 3.4.2+
-
-    $ ./configure --enable-certservice --enable-des3
-    $ make
-    $ make check   # (optional, but highly recommended)
-    $ sudo make install
-
-    * smartos will require a non default install location of /opt/local
-    $ ./configure --prefix=/opt/local
-
-2. Building on *nix from git repository
+3. Building on *nix from git repository
 
     Run the autogen script to generate configure, you'll need the autoconf tools
-    installed, then proceed to the next step. 
+    installed, then proceed to the next step.
 
-    $ ./autogen.sh
+```sh
+$ ./autogen.sh
+```
 
-3. Building on *nix from a release
+4. Building on *nix from a release
 
-    $ ./configure
-    $ make
-    $ make check   # (optional, but highly recommended)
-    $ sudo make install
+```sh
+$ ./configure
+$ make
+$ make check   # (optional, but highly recommended)
+$ sudo make install
+```
 
-    * smartos will require a non default install location of /opt/local
-    $ ./configure --prefix=/opt/local
+Note: A custom install location can be specified using: `./configure --prefix=/opt/local`

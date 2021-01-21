@@ -1,18 +1,14 @@
 /* client.c
 *
-* Copyright (C) 2013 wolfSSL Inc.
+* Copyright (C) 2021 wolfSSL Inc.
 *
-* This file is part of cert service
+* This file is part of wolf key manager
 *
 * All rights reserved.
 *
 */
 
-
-#include "config.h"
-#include "src/evt.h"
-#include "src/evt_log.h"
-#include "src/helpers.h"
+#include "client.h"
 
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/asn_public.h>
@@ -21,12 +17,12 @@
 #include <wolfssl/ssl.h>
 #include <wolfssl/test.h>
 
-
+#include "src/keymanager.h"
 
 static pthread_t*  tids;          /* our threads */
 static int         poolSize = 0;  /* number of threads */
 static word16      port;          /* peer port */
-static const char* host =  EVT_DEFAULT_HOST;  /* peer host */
+static const char* host =  WOLFKM_DEFAULT_HOST;  /* peer host */
 static int         doCert   = 1;  /* cert request flag, on by default */
 static int         doSign   = 0;  /* sign request flag */
 
@@ -45,7 +41,7 @@ static int DoSend(int sockfd, WOLFSSL* ssl, const byte* p, int len)
         ret = wolfSSL_write(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
-            XLOG(EVT_LOG_ERROR, "DoSend err = %s\n",
+            XLOG(WOLFKM_LOG_ERROR, "DoSend err = %s\n",
                                  wolfSSL_ERR_reason_error_string(err));
             if (err < 0) ret = err;
         }
@@ -66,7 +62,7 @@ static int DoRead(int sockfd, WOLFSSL* ssl, byte* p, int len)
         ret = wolfSSL_read(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
-            XLOG(EVT_LOG_ERROR, "DoRead err = %s\n",
+            XLOG(WOLFKM_LOG_ERROR, "DoRead err = %s\n",
                                  wolfSSL_ERR_reason_error_string(err));
             if (err < 0) ret = err;
         }
@@ -85,7 +81,7 @@ static WOLFSSL* NewSSL(int sockfd)
 
     ssl = wolfSSL_new(sslCtx);
     if (ssl == NULL) {
-        XLOG(EVT_LOG_ERROR, "wolfSSL_new memory failure");
+        XLOG(WOLFKM_LOG_ERROR, "wolfSSL_new memory failure");
         exit(EXIT_FAILURE);
     }
     wolfSSL_set_fd(ssl, sockfd);
@@ -108,7 +104,7 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
     byte     answer = 0;
 
     WOLFSSL_EVP_PKEY* public = NULL;
-    WOLFSSL_X509*    x509 = wolfSSL_X509_load_certificate_file(EVT_DEFAULT_CERT,
+    WOLFSSL_X509*    x509 = wolfSSL_X509_load_certificate_file(WOLFKM_DEFAULT_CERT,
                                                               SSL_FILETYPE_PEM);
     /* write header */
     tmp[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
@@ -117,19 +113,19 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
 
 
     if (x509 == NULL) {
-        XLOG(EVT_LOG_ERROR, "Unable to convert cert %s to x509\n",
-                                                    EVT_DEFAULT_CERT);
+        XLOG(WOLFKM_LOG_ERROR, "Unable to convert cert %s to x509\n",
+                                                    WOLFKM_DEFAULT_CERT);
         return -1;
     }
     public = wolfSSL_X509_get_pubkey(x509);
     if (public == NULL) {
-        XLOG(EVT_LOG_ERROR, "Unable to get pub key from  %s\n",
-                                                         EVT_DEFAULT_CERT);
+        XLOG(WOLFKM_LOG_ERROR, "Unable to get pub key from  %s\n",
+                                                         WOLFKM_DEFAULT_CERT);
         return -1;
     }
 
     if (WORD16_LEN * 3 + msgSz + signSz + public->pkey_sz > sizeof(tmp)) {
-        XLOG(EVT_LOG_ERROR, "Verify request size too big\n");
+        XLOG(WOLFKM_LOG_ERROR, "Verify request size too big\n");
         return -1;
     }
     /* key size */
@@ -161,53 +157,53 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
     requestSz = outLen + CERT_HEADER_SZ;
 
     /* send it off */
-    XLOG(EVT_LOG_INFO, "Created verify request\n");
+    XLOG(WOLFKM_LOG_INFO, "Created verify request\n");
 
     while (sent < requestSz) {
         ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(EVT_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
         if (sent == requestSz)
             break;
     }
-    XLOG(EVT_LOG_INFO, "Sent request\n");
+    XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
     ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(EVT_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
-        XLOG(EVT_LOG_ERROR, "peer closed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     requestSz = ret - CERT_HEADER_SZ;
-    XLOG(EVT_LOG_INFO, "Got response sz = %d\n", requestSz);
+    XLOG(WOLFKM_LOG_INFO, "Got response sz = %d\n", requestSz);
 
     /* verify response header */
     if (tmp[CERT_HEADER_VERSION_OFFSET] != CERT_VERSION) {
-        XLOG(EVT_LOG_ERROR, "Bad response version\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response version\n");
         exit(EXIT_FAILURE);
     }
 
     if (tmp[CERT_HEADER_TYPE_OFFSET] != VERIFY_RESPONSE) {
-        XLOG(EVT_LOG_ERROR, "Bad response type\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response type\n");
         exit(EXIT_FAILURE);
     }
 
     ato16(tmp+CERT_HEADER_SZ_OFFSET, &sSz);  /* header size */
     if (sSz != requestSz || sSz != 1) {
-        XLOG(EVT_LOG_ERROR, "Bad response header size = %d\n", sSz);
+        XLOG(WOLFKM_LOG_ERROR, "Bad response header size = %d\n", sSz);
         exit(EXIT_FAILURE);
     }
 
     /* store answer */
     answer = *request;
     if (answer != 0x1) {
-        XLOG(EVT_LOG_ERROR, "Bad verify answer = %02x\n", answer);
+        XLOG(WOLFKM_LOG_ERROR, "Bad verify answer = %02x\n", answer);
         exit(EXIT_FAILURE);
     }
 
@@ -243,62 +239,62 @@ static int DoBadVersion(void)
     requestSz = requestSz + CERT_HEADER_SZ;
 
     /* send it off */
-    XLOG(EVT_LOG_INFO, "Sending Bad Version request\n");
+    XLOG(WOLFKM_LOG_INFO, "Sending Bad Version request\n");
     tcp_connect(&sockfd, host, port, 0, 0, NULL);
     ssl = NewSSL(sockfd);
-    XLOG(EVT_LOG_INFO, "Connected to cert service\n");
+    XLOG(WOLFKM_LOG_INFO, "Connected to cert service\n");
 
     while (sent < requestSz) {
         ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(EVT_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
         if (sent == requestSz)
             break;
     }
-    XLOG(EVT_LOG_INFO, "Sent request\n");
+    XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
     ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(EVT_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
-        XLOG(EVT_LOG_ERROR, "peer closed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     requestSz = ret - CERT_HEADER_SZ;
-    XLOG(EVT_LOG_INFO, "Got response sz = %d\n", requestSz);
+    XLOG(WOLFKM_LOG_INFO, "Got response sz = %d\n", requestSz);
     CloseSocket(sockfd);
     wolfSSL_free(ssl);
 
     /* verify response header */
     if (tmp[CERT_HEADER_VERSION_OFFSET] != CERT_VERSION) {
-        XLOG(EVT_LOG_ERROR, "Bad response version\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response version\n");
         exit(EXIT_FAILURE);
     }
 
     if (tmp[CERT_HEADER_TYPE_OFFSET] != ERROR_RESPONSE) {
-        XLOG(EVT_LOG_ERROR, "Bad response type\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response type\n");
         exit(EXIT_FAILURE);
     }
 
     ato16(tmp+CERT_HEADER_SZ_OFFSET, &eSz);  /* header size */
     if (eSz < WORD16_LEN * 2) {
-        XLOG(EVT_LOG_ERROR, "Bad response header size = %d\n", eSz);
+        XLOG(WOLFKM_LOG_ERROR, "Bad response header size = %d\n", eSz);
         exit(EXIT_FAILURE);
     }
 
     ato16(request, &eSz);  /* error code */
     request += WORD16_LEN;
     error = eSz;
-    XLOG(EVT_LOG_INFO, "Error code = %d\n", error);
+    XLOG(WOLFKM_LOG_INFO, "Error code = %d\n", error);
 
     ato16(request, &eSz);  /* error string size */
     request += WORD16_LEN;
-    XLOG(EVT_LOG_INFO, "Error string = %s, sz = %d\n", request, eSz);
+    XLOG(WOLFKM_LOG_INFO, "Error string = %s, sz = %d\n", request, eSz);
 
     return 0;
 }
@@ -309,7 +305,7 @@ static int DoErrorMode(void)
 {
     int ret = DoBadVersion();
     if (ret != 0) {
-        XLOG(EVT_LOG_ERROR, "BadVersion request didn't fail\n");
+        XLOG(WOLFKM_LOG_ERROR, "BadVersion request didn't fail\n");
         return -1;
     }
 
@@ -328,17 +324,17 @@ static int DoOurVerify(const void* msg, word32 msgSz, byte* signature,
     byte             hash[SHA256_DIGEST_SIZE];
     ecc_key          verifyKey;
     WOLFSSL_EVP_PKEY* public = NULL;
-    WOLFSSL_X509*     x509 = wolfSSL_X509_load_certificate_file(EVT_DEFAULT_CERT,
+    WOLFSSL_X509*     x509 = wolfSSL_X509_load_certificate_file(WOLFKM_DEFAULT_CERT,
                                                               SSL_FILETYPE_PEM);
     if (x509 == NULL) {
-        XLOG(EVT_LOG_ERROR, "Unable to convert cert %s to x509\n",
-                                                    EVT_DEFAULT_CERT);
+        XLOG(WOLFKM_LOG_ERROR, "Unable to convert cert %s to x509\n",
+                                                    WOLFKM_DEFAULT_CERT);
         return -1;
     }
     public = wolfSSL_X509_get_pubkey(x509);
     if (public == NULL) {
-        XLOG(EVT_LOG_ERROR, "Unable to get pub key from  %s\n",
-                                                         EVT_DEFAULT_CERT);
+        XLOG(WOLFKM_LOG_ERROR, "Unable to get pub key from  %s\n",
+                                                         WOLFKM_DEFAULT_CERT);
         return -1;
     }
 
@@ -346,8 +342,8 @@ static int DoOurVerify(const void* msg, word32 msgSz, byte* signature,
     ret = wc_ecc_import_x963((byte*)public->pkey.ptr, public->pkey_sz,
                              &verifyKey);
     if (ret < 0) {
-        XLOG(EVT_LOG_ERROR, "Unable to import ecc key from  %s\n",
-                                                            EVT_DEFAULT_CERT);
+        XLOG(WOLFKM_LOG_ERROR, "Unable to import ecc key from  %s\n",
+                                                            WOLFKM_DEFAULT_CERT);
         return -1;
     }
 
@@ -358,7 +354,7 @@ static int DoOurVerify(const void* msg, word32 msgSz, byte* signature,
     ret = wc_ecc_verify_hash(signature, signSz, hash, sizeof(hash), &stat,
                              &verifyKey);
     if (ret < 0 || stat != 1) {
-        XLOG(EVT_LOG_ERROR, "Unable verify signature, ret = %d, stat = %d\n",
+        XLOG(WOLFKM_LOG_ERROR, "Unable verify signature, ret = %d, stat = %d\n",
                                                         ret, stat);
         return -1;
     }
@@ -395,60 +391,60 @@ static int DoSignRequest(SOCKET_T sockfd, WOLFSSL* ssl)
     c16toa((word16)msgSz, tmp+CERT_HEADER_SZ_OFFSET); /* msg size */
     requestSz = msgSz + CERT_HEADER_SZ;               /* into header */
 
-    XLOG(EVT_LOG_INFO, "Created sign request\n");
+    XLOG(WOLFKM_LOG_INFO, "Created sign request\n");
 
     while (sent < requestSz) {
         ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(EVT_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
         if (sent == requestSz)
             break;
     }
-    XLOG(EVT_LOG_INFO, "Sent request\n");
+    XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
     ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(EVT_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
-        XLOG(EVT_LOG_ERROR, "peer closed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     requestSz = ret - CERT_HEADER_SZ;
-    XLOG(EVT_LOG_INFO, "Got response sz = %d\n", requestSz);
+    XLOG(WOLFKM_LOG_INFO, "Got response sz = %d\n", requestSz);
 
     /* verify response header */
     if (tmp[CERT_HEADER_VERSION_OFFSET] != CERT_VERSION) {
-        XLOG(EVT_LOG_ERROR, "Bad response version\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response version\n");
         exit(EXIT_FAILURE);
     }
 
     if (tmp[CERT_HEADER_TYPE_OFFSET] != SIGN_RESPONSE) {
-        XLOG(EVT_LOG_ERROR, "Bad response type\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response type\n");
         exit(EXIT_FAILURE);
     }
 
     ato16(tmp+CERT_HEADER_SZ_OFFSET, &sSz);  /* header size */
     if (sSz != requestSz) {
-        XLOG(EVT_LOG_ERROR, "Bad response header size = %d\n", sSz);
+        XLOG(WOLFKM_LOG_ERROR, "Bad response header size = %d\n", sSz);
         exit(EXIT_FAILURE);
     }
 
     /* check signature ourselves */
     ret = DoOurVerify(msg, msgSz, request, requestSz);
     if (ret != 0) {
-        XLOG(EVT_LOG_ERROR, "Our signature verify failure  = %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "Our signature verify failure  = %d\n", ret);
         exit(EXIT_FAILURE);
     }
 
     /* check verify with service */
     ret = DoVerifyRequest(msg, msgSz, request, requestSz, sockfd, ssl);
     if (ret != 0) {
-        XLOG(EVT_LOG_ERROR, "Service signature verify failure  = %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "Service signature verify failure  = %d\n", ret);
         exit(EXIT_FAILURE);
     }
 
@@ -486,7 +482,7 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
 
     ret = wc_InitRng(&rng);
     if (ret < 0) {
-        XLOG(EVT_LOG_INFO, "ecc_make_key failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_INFO, "ecc_make_key failed: %d\n", ret);
         return ret;
     }
     wc_ecc_init(&reqKey);
@@ -495,7 +491,7 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
 
     ret = wc_ecc_make_key(&rng, 32, &reqKey);
     if (ret < 0) {
-        XLOG(EVT_LOG_INFO, "ecc_make_key failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_INFO, "ecc_make_key failed: %d\n", ret);
         return ret;
     }
 
@@ -507,9 +503,9 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     strncpy(reqCert.subject.commonName, "todd user", CTC_NAME_SIZE);
     strncpy(reqCert.subject.email, "todd@user.com", CTC_NAME_SIZE);
 
-    ret = wc_SetIssuer(&reqCert, EVT_DEFAULT_CERT);
+    ret = wc_SetIssuer(&reqCert, WOLFKM_DEFAULT_CERT);
     if (ret < 0) {
-        XLOG(EVT_LOG_INFO, "SetIssuer failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_INFO, "SetIssuer failed: %d\n", ret);
         wc_ecc_free(&reqKey);
         return ret;
     }
@@ -517,17 +513,17 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     ret = wc_MakeCert(&reqCert, request, sizeof(tmp), NULL, &reqKey, &rng);
     wc_ecc_free(&reqKey);
     if (ret < 0) {
-        XLOG(EVT_LOG_INFO, "MakeCert failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_INFO, "MakeCert failed: %d\n", ret);
         return ret;
     }
     if (dumpFile) {
         FILE* raw = fopen(dumpFile, "wb");
         if (raw == NULL) {
-            XLOG(EVT_LOG_INFO, "Can't use dump file %s for writing\n",dumpFile);
+            XLOG(WOLFKM_LOG_INFO, "Can't use dump file %s for writing\n",dumpFile);
             exit(EXIT_FAILURE);
         }
         if ((int)fwrite(request, ret, 1, raw) != 1) {
-            XLOG(EVT_LOG_ERROR, "fwrite failed\n");
+            XLOG(WOLFKM_LOG_ERROR, "fwrite failed\n");
             exit(EXIT_FAILURE);
         }
         fclose(raw);
@@ -535,53 +531,53 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     c16toa((word16)ret, tmp+CERT_HEADER_SZ_OFFSET); /* der sz (ret) goes */
     requestSz = ret + CERT_HEADER_SZ;               /* into header */
 
-    XLOG(EVT_LOG_INFO, "Created cert request\n");
+    XLOG(WOLFKM_LOG_INFO, "Created cert request\n");
 
     while (sent < requestSz) {
         ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(EVT_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
         if (sent == requestSz)
             break;
     }
-    XLOG(EVT_LOG_INFO, "Sent request\n");
+    XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
     ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(EVT_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
-        XLOG(EVT_LOG_ERROR, "peer closed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     requestSz = ret - CERT_HEADER_SZ;
-    XLOG(EVT_LOG_INFO, "Got response\n");
+    XLOG(WOLFKM_LOG_INFO, "Got response\n");
 
     /* verify response header */
     if (tmp[CERT_HEADER_VERSION_OFFSET] != CERT_VERSION) {
-        XLOG(EVT_LOG_ERROR, "Bad response version\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response version\n");
         exit(EXIT_FAILURE);
     }
 
     if (tmp[CERT_HEADER_TYPE_OFFSET] != CERT_RESPONSE) {
-        XLOG(EVT_LOG_ERROR, "Bad response type\n");
+        XLOG(WOLFKM_LOG_ERROR, "Bad response type\n");
         exit(EXIT_FAILURE);
     }
 
     ato16(tmp+CERT_HEADER_SZ_OFFSET, &sSz);  /* header size */
     if (sSz != requestSz) {
-        XLOG(EVT_LOG_ERROR, "Bad response header size = %d\n", sSz);
+        XLOG(WOLFKM_LOG_ERROR, "Bad response header size = %d\n", sSz);
         exit(EXIT_FAILURE);
     }
 
     /* convert to pem */
     pemSz = wc_DerToPem(request, requestSz, pem, sizeof(pem), CERT_TYPE);
     if (pemSz < 0) {
-        XLOG(EVT_LOG_INFO, "wc_DerToPem failed: %d\n", pemSz);
+        XLOG(WOLFKM_LOG_INFO, "wc_DerToPem failed: %d\n", pemSz);
         exit(EXIT_FAILURE);
     }
 
@@ -589,12 +585,12 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
         /* store it */
         pemFile = fopen(savePem, "wb");
         if (pemFile == NULL) {
-            XLOG(EVT_LOG_ERROR, "pemFile fopen failed %s\n", savePem);
+            XLOG(WOLFKM_LOG_ERROR, "pemFile fopen failed %s\n", savePem);
             exit(EXIT_FAILURE);
         }
         ret = (int)fwrite(pem, pemSz, 1, pemFile);
         if (ret != 1) {
-            XLOG(EVT_LOG_ERROR, "fwrite failed\n");
+            XLOG(WOLFKM_LOG_ERROR, "fwrite failed\n");
             exit(EXIT_FAILURE);
         }
         fclose(pemFile);
@@ -603,21 +599,21 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     /* do sanity verify */
     cm = wolfSSL_CertManagerNew();
     if (cm == NULL) {
-        XLOG(EVT_LOG_ERROR, "wolfSSL_CertManagerNew failed\n");
+        XLOG(WOLFKM_LOG_ERROR, "wolfSSL_CertManagerNew failed\n");
         exit(EXIT_FAILURE);
     }
-    ret = wolfSSL_CertManagerLoadCA(cm, EVT_DEFAULT_CERT, NULL);
+    ret = wolfSSL_CertManagerLoadCA(cm, WOLFKM_DEFAULT_CERT, NULL);
     if (ret != SSL_SUCCESS) {
-        XLOG(EVT_LOG_ERROR, "wolfSSL_CertManagerLoadCA failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "wolfSSL_CertManagerLoadCA failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     ret = wolfSSL_CertManagerVerifyBuffer(cm, pem, pemSz, SSL_FILETYPE_PEM);
     if (ret != SSL_SUCCESS) {
-        XLOG(EVT_LOG_ERROR, "wolfSSL_CertManagerVerifyBuffer failed: %d\n",ret);
+        XLOG(WOLFKM_LOG_ERROR, "wolfSSL_CertManagerVerifyBuffer failed: %d\n",ret);
         exit(EXIT_FAILURE);
     }
     wolfSSL_CertManagerFree(cm);
-    XLOG(EVT_LOG_INFO, "Response verify OK\n");
+    XLOG(WOLFKM_LOG_INFO, "Response verify OK\n");
 
 #if defined(HAVE_HASHDRBG)
     wc_FreeRng(&rng);
@@ -646,7 +642,7 @@ static void* DoRequests(void* arg)
         else if (doSign)
             ret = DoSignRequest(sockfd, ssl);
         if (ret != 0) {
-            XLOG(EVT_LOG_ERROR, "DoRequests failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_ERROR, "DoRequests failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
     }
@@ -664,13 +660,13 @@ static void InitSSL(void)
     int ret;
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
     if (sslCtx == NULL) {
-        XLOG(EVT_LOG_ERROR, "Can't alloc TLS 1.2 context");
+        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context");
         exit(EXIT_FAILURE);
     }
 
-    ret = wolfSSL_CTX_load_verify_locations(sslCtx, EVT_DEFAULT_CERT, NULL);
+    ret = wolfSSL_CTX_load_verify_locations(sslCtx, WOLFKM_DEFAULT_CERT, NULL);
     if (ret != SSL_SUCCESS) {
-        XLOG(EVT_LOG_ERROR, "Can't load TLS CA cert into context. Error: %s (%d)\n", 
+        XLOG(WOLFKM_LOG_ERROR, "Can't load TLS CA cert into context. Error: %s (%d)\n", 
             wolfSSL_ERR_reason_error_string(ret), ret);
         exit(EXIT_FAILURE);
     }
@@ -684,12 +680,12 @@ static void Usage(void)
     printf("-?          Help, print this usage\n");
     printf("-s          Do signature request instead of cert request\n");
     printf("-e          Error mode, force error response\n");
-    printf("-h <str>    Host to connect to, default %s\n", EVT_DEFAULT_HOST);
-    printf("-p <num>    Port to connect to, default %s\n", EVT_DEFAULT_PORT);
+    printf("-h <str>    Host to connect to, default %s\n", WOLFKM_DEFAULT_HOST);
+    printf("-p <num>    Port to connect to, default %s\n", WOLFKM_DEFAULT_CERT_PORT);
     printf("-t <num>    Thread pool size (stress test), default  %d\n", 0);
-    printf("-l <num>    Log Level, default %d\n", EVT_DEFAULT_LOG_LEVEL);
+    printf("-l <num>    Log Level, default %d\n", WOLFKM_DEFAULT_LOG_LEVEL);
     printf("-r <num>    Requests per thread, default %d\n",
-                                                          EVT_DEFAULT_REQUESTS);
+                                                          WOLFKM_DEFAULT_REQUESTS);
     printf("-d <file>   Dump raw binary cert request fo <file>\n");
     printf("-f <file>   <file> to store cert response in PEM\n");
 }
@@ -702,13 +698,13 @@ int main(int argc, char** argv)
     int         ret;
     char*       dumpFile = NULL;        /* dump raw request cert */
     char*       savePem  = NULL;        /* dump PEM response cert */
-    int         requests = EVT_DEFAULT_REQUESTS;
+    int         requests = WOLFKM_DEFAULT_REQUESTS;
     int         errorMode = 0;
     SOCKET_T    sockfd;
     WOLFSSL*    ssl = NULL;
-    enum log_level_t logLevel = EVT_DEFAULT_LOG_LEVEL;
+    enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
 
-    port       = atoi(EVT_DEFAULT_PORT);
+    port       = atoi(WOLFKM_DEFAULT_CERT_PORT);
 
 #ifdef DISABLE_SSL
     usingSSL = 0;    /* can only disable at build time */
@@ -747,7 +743,7 @@ int main(int argc, char** argv)
                 break;
             case 'l' :
                 logLevel = atoi(optarg);
-                if (logLevel < EVT_LOG_DEBUG || logLevel > EVT_LOG_ERROR) {
+                if (logLevel < WOLFKM_LOG_DEBUG || logLevel > WOLFKM_LOG_ERROR) {
                     perror("loglevel [1:4] only");
                     exit(EX_USAGE);
                 }
@@ -760,8 +756,8 @@ int main(int argc, char** argv)
     }
 
     /* log setup */
-    SetLogFile(NULL, 0, logLevel);
-    XLOG(EVT_LOG_INFO, "Starting client\n");
+    wolfKeyMgr_SetLogFile(NULL, 0, logLevel);
+    XLOG(WOLFKM_LOG_INFO, "Starting client\n");
 
     if (errorMode)
         return DoErrorMode();
@@ -771,25 +767,25 @@ int main(int argc, char** argv)
 
     tcp_connect(&sockfd, host, port, 0, 0, NULL);
     ssl = NewSSL(sockfd);
-    XLOG(EVT_LOG_INFO, "Connected to cert service\n");
+    XLOG(WOLFKM_LOG_INFO, "Connected to cert service\n");
 
     if (doCert) {
         /* Do a cert test and save the pem */
         ret = DoCertRequest(savePem, dumpFile, sockfd, ssl);
         if (ret != 0) {
-            XLOG(EVT_LOG_ERROR, "DoCertRequest savePem failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_ERROR, "DoCertRequest savePem failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
-        XLOG(EVT_LOG_INFO, "First cert test worked!\n");
+        XLOG(WOLFKM_LOG_INFO, "First cert test worked!\n");
     }
     else if (doSign) {
         /* Do a sign test */
         ret = DoSignRequest(sockfd, ssl);
         if (ret != 0) {
-            XLOG(EVT_LOG_ERROR, "DoSignRequest failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_ERROR, "DoSignRequest failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
-        XLOG(EVT_LOG_INFO, "First sign test worked!\n");
+        XLOG(WOLFKM_LOG_INFO, "First sign test worked!\n");
     }
 
     CloseSocket(sockfd);
@@ -800,14 +796,14 @@ int main(int argc, char** argv)
         /* thread id holder */
         tids = calloc(poolSize, sizeof(pthread_t));
         if (tids == NULL) {
-            XLOG(EVT_LOG_ERROR, "calloc tids failed");
+            XLOG(WOLFKM_LOG_ERROR, "calloc tids failed");
             exit(EXIT_FAILURE);
         }
 
         /* create workers */
         for (i = 0; i < poolSize; i++) {
             if (pthread_create(&tids[i], NULL, DoRequests, &requests) != 0){
-                XLOG(EVT_LOG_ERROR, "pthread_create failed");
+                XLOG(WOLFKM_LOG_ERROR, "pthread_create failed");
                 exit(EXIT_FAILURE);
             }
         }
@@ -815,7 +811,7 @@ int main(int argc, char** argv)
         /* wait until they're all done */
         for (i = 0; i < poolSize; i++) {
             ret = pthread_join(tids[i], NULL);
-            XLOG(EVT_LOG_INFO, "pthread_join ret = %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "pthread_join ret = %d\n", ret);
         }
 
         free(tids);

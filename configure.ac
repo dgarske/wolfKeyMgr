@@ -1,15 +1,14 @@
-# cert service
-# Copyright (C) 2013 wolfSSL Inc.
+# wolf Key Manager
+# Copyright (C) 2021 wolfSSL Inc.
 # All rights reserved.
 #
 
 AC_PREREQ(2.59)
 
-AC_INIT([cert],[0.8],[http://www.wolfssl.com])
+AC_INIT([wolfKeyManager],[0.1],[http://www.wolfssl.com])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_HEADER(src/config.h)
 AC_CONFIG_MACRO_DIR(m4)
-AC_CANONICAL_SYSTEM
 
 AM_INIT_AUTOMAKE(subdir-objects foreign)
 
@@ -36,9 +35,14 @@ m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 # Checks for programs.
 AC_PROG_CC
-AM_PROG_CC_C_O
 AC_PROG_CC_C_O
 AC_PROG_INSTALL
+
+# Setup visibility
+gl_VISIBILITY
+AS_IF([ test -n "$CFLAG_VISIBILITY" ], [
+       AM_CFLAGS="$AM_CPPFLAGS $CFLAG_VISIBILITY"
+       ])
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -59,6 +63,23 @@ PANDORA_REQUIRE_PTHREAD
 PANDORA_REQUIRE_LIBEVENT
 WOLF_REQUIRE_LIBWOLFSSL
 
+LT_PREREQ([2.2])
+LT_INIT([disable-static win32-dll])
+
+# Shared library versioning
+WOLFKM_LIBRARY_VERSION=1:0:0
+#                      | | |
+#               +------+ | +---+
+#               |        |     |
+#             current:revision:age
+#               |        |     |
+#               |        |     +- increment if interfaces have been added
+#               |        |        set to zero if interfaces have been removed
+#               |        |        or changed
+#               |        +- increment if source code has changed
+#               |           set to zero if current is incremented
+#               +- increment if interfaces have been added, removed or changed
+AC_SUBST([WOLFKM_LIBRARY_VERSION])
 
 # compiler options
 CFLAGS="$CFLAGS -Wall -g -O2"
@@ -89,7 +110,7 @@ esac
 LIB_SOCKET_NSL
 
 # FINAL
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile src/options.h])
 
 AX_AM_JOBSERVER([yes])
 
@@ -100,6 +121,74 @@ AC_OUTPUT()
 echo "---"
 echo "Running make clean..."
 make clean >/dev/null 2>&1
+echo
+
+
+# generate user options header
+echo "---"
+echo "Generating user options header..."
+
+OPTION_FILE="src/options.h"
+rm -f $OPTION_FILE
+
+echo "/* wolf key manager options.h" > $OPTION_FILE
+echo " * generated from configure options" >> $OPTION_FILE
+echo " *" >> $OPTION_FILE
+echo " * Copyright (C) 2006-2021 wolfSSL Inc." >> $OPTION_FILE
+echo " *" >> $OPTION_FILE
+echo " */" >> $OPTION_FILE
+
+echo "" >> $OPTION_FILE
+echo "#ifndef WOLFKM_OPTIONS_H" >> $OPTION_FILE
+echo "#define WOLFKM_OPTIONS_H" >> $OPTION_FILE
+echo "" >> $OPTION_FILE
+echo "" >> $OPTION_FILE
+echo "#ifdef __cplusplus" >> $OPTION_FILE
+echo "extern \"C\" {" >> $OPTION_FILE
+echo "#endif" >> $OPTION_FILE
+echo "" >> $OPTION_FILE
+
+for option in $CPPFLAGS $AM_CPPFLAGS $CFLAGS $AM_CFLAGS; do
+    defonly=`echo $option | sed 's/^-D//'`
+    if test "$defonly" != "$option"
+    then
+        noequalsign=`echo $defonly | sed 's/=/ /'`
+        if test "$noequalsign" = "NDEBUG" || test "$noequalsign" = "DEBUG"
+        then
+            echo "not outputting (N)DEBUG to $OPTION_FILE"
+            continue
+        fi
+
+        # allow user to ignore system options
+        ignoresys=$(echo "$noequalsign" | grep '^_.*')
+        if test -n "$ignoresys"
+        then
+            echo "#ifndef WOLFKM_OPTIONS_IGNORE_SYS" >> $OPTION_FILE
+        fi
+
+        noarg=`echo $defonly | sed 's/=.*//'`
+        echo "#undef  $noarg" >> $OPTION_FILE
+        echo "#define $noequalsign" >> $OPTION_FILE
+
+        if test -n "$ignoresys"
+        then
+            echo "#endif" >> $OPTION_FILE
+        fi
+
+        echo "" >> $OPTION_FILE
+    else
+        echo "option w/o begin -D is $option, not saving to $OPTION_FILE"
+    fi
+done
+
+echo "" >> $OPTION_FILE
+echo "#ifdef __cplusplus" >> $OPTION_FILE
+echo "}" >> $OPTION_FILE
+echo "#endif" >> $OPTION_FILE
+echo "" >> $OPTION_FILE
+echo "" >> $OPTION_FILE
+echo "#endif /* WOLFKM_OPTIONS_H */" >> $OPTION_FILE
+echo "" >> $OPTION_FILE
 echo
 
 

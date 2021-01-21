@@ -3,13 +3,12 @@
 # All paths should be given relative to the root
 
 
-bin_PROGRAMS+= src/cert
-src_cert_SOURCES = src/evt.c src/evt_log.c src/evt_err.c src/helpers.c \
-                   src/driver.c 
-src_cert_CFLAGS       =
-src_cert_LDFLAGS      = -Lsrc
-src_cert_LDADD        = $(LTLIBEVENT)
-src_cert_DEPENDENCIES =
+bin_PROGRAMS+= src/wolfkm
+src_wolfkm_SOURCES = src/main.c src/keymanager.c src/http.c src/sock_mgr.c src/svc_cert.c src/svc_etsi.c src/utils.c
+src_wolfkm_CFLAGS       =
+src_wolfkm_LDFLAGS      = -Lsrc
+src_wolfkm_LDADD        = $(LTLIBEVENT)
+src_wolfkm_DEPENDENCIES =
 
 
-nobase_include_HEADERS+= src/evt.h src/evt_log.h src/evt_err.h src/helpers.h
+nobase_include_HEADERS+= src/http.h src/keymanager.h src/sock_mgr.h src/svc_cert.h src/svc_etsi.h src/utils.h

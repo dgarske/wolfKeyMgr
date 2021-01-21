@@ -20,8 +20,6 @@ Makefile
 config*
 config/*
 stamp-h1
-examples/client/client
-src/cert
 *.gz
 *.log
 *.trs
@@ -33,3 +31,9 @@ cert.pid
 response.pem
 dump.der
 diff
+
+# applications
+examples/client/client
+src/wolfkm
+libtool
+src/options.h
