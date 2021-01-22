@@ -111,3 +111,10 @@ $ sudo make install
 ```
 
 Note: A custom install location can be specified using: `./configure --prefix=/opt/local`
+
+## Running
+
+```
+$ ./src/wolfkeymgr
+$ ./examples/client/client
+```

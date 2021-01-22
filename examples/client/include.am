@@ -4,7 +4,7 @@
 
 
 noinst_PROGRAMS+= examples/client/client
-examples_client_client_SOURCES = examples/client/client.c src/utils.c
+examples_client_client_SOURCES = examples/client/client.c src/wkm_utils.c
 examples_client_client_CFLAGS       = -Isrc
 examples_client_client_LDFLAGS      = -Lsrc
 examples_client_client_LDADD        =

@@ -3,12 +3,12 @@
 # All paths should be given relative to the root
 
 
-bin_PROGRAMS+= src/wolfkm
-src_wolfkm_SOURCES = src/keymanager.c src/http.c src/sock_mgr.c src/svc_cert.c src/svc_etsi.c src/utils.c
-src_wolfkm_CFLAGS       =
-src_wolfkm_LDFLAGS      = -Lsrc
-src_wolfkm_LDADD        = $(LTLIBEVENT)
-src_wolfkm_DEPENDENCIES =
+bin_PROGRAMS+= src/wolfkeymgr
+src_wolfkeymgr_SOURCES = src/keymanager.c src/sock_mgr.c src/svc_cert.c src/svc_etsi.c src/svc_https.c src/wkm_utils.c
+src_wolfkeymgr_CFLAGS       =
+src_wolfkeymgr_LDFLAGS      = -Lsrc
+src_wolfkeymgr_LDADD        = $(LTLIBEVENT)
+src_wolfkeymgr_DEPENDENCIES =
 
 
-nobase_include_HEADERS+= src/http.h src/keymanager.h src/sock_mgr.h src/svc_cert.h src/svc_etsi.h src/utils.h
+nobase_include_HEADERS+= src/keymanager.h src/sock_mgr.h src/svc_cert.h src/svc_etsi.h src/svc_https.h src/wkm_utils.h

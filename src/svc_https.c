@@ -1,4 +1,4 @@
-/* options.h
+/* svc_https.c
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,17 +19,4 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef WOLFKM_OPTIONS_H
-#define WOLFKM_OPTIONS_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* WOLFKM_OPTIONS_H */
+#include "svc_https.h"
