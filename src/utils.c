@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <time.h>
+#include <sys/time.h>
 
 /* our log file */
 static FILE* logFile = NULL;
@@ -137,6 +138,16 @@ void wolfKeyMgr_Log(enum log_level_t level, const char* fmt, ...)
         timeStr, wolfKeyMgr_GetLogLevel(level), msgStr);
 }
 
+
+/* return time in seconds with precision */
+double wolfKeyMgr_GetCurrentTime(void)
+{
+    struct timeval tv;
+
+    gettimeofday(&tv, 0);
+
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+}
 
 
 #ifndef min

@@ -27,21 +27,21 @@ static int         doCert   = 1;  /* cert request flag, on by default */
 static int         doSign   = 0;  /* sign request flag */
 
 static WOLFSSL_CTX* sslCtx;       /* ssl context factory */
-static int usingSSL = 1;          /* ssl is on by default */
+static int usingTLS = 1;          /* ssl is on by default */
 
 
 /* return sent bytes or < 0 on error */
-static int DoSend(int sockfd, WOLFSSL* ssl, const byte* p, int len)
+static int DoClientSend(int sockfd, WOLFSSL* ssl, const byte* p, int len)
 {
     int ret = -1;
 
-    if (usingSSL == 0) {
+    if (usingTLS == 0) {
         ret = send(sockfd, p, len, 0);
     } else {
         ret = wolfSSL_write(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
-            XLOG(WOLFKM_LOG_ERROR, "DoSend err = %s\n",
+            XLOG(WOLFKM_LOG_ERROR, "DoClientSend err = %s\n",
                                  wolfSSL_ERR_reason_error_string(err));
             if (err < 0) ret = err;
         }
@@ -52,17 +52,17 @@ static int DoSend(int sockfd, WOLFSSL* ssl, const byte* p, int len)
 
 
 /* return bytes read or < 0 on error */
-static int DoRead(int sockfd, WOLFSSL* ssl, byte* p, int len)
+static int DoClientRead(int sockfd, WOLFSSL* ssl, byte* p, int len)
 {
     int ret;
 
-    if (usingSSL == 0) {
+    if (usingTLS == 0) {
         ret = recv(sockfd, p, len, 0);
     } else {
         ret = wolfSSL_read(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
-            XLOG(WOLFKM_LOG_ERROR, "DoRead err = %s\n",
+            XLOG(WOLFKM_LOG_ERROR, "DoClientRead err = %s\n",
                                  wolfSSL_ERR_reason_error_string(err));
             if (err < 0) ret = err;
         }
@@ -77,7 +77,7 @@ static WOLFSSL* NewSSL(int sockfd)
 {
     WOLFSSL* ssl;
 
-    if (usingSSL == 0) return NULL;
+    if (usingTLS == 0) return NULL;
 
     ssl = wolfSSL_new(sslCtx);
     if (ssl == NULL) {
@@ -160,9 +160,9 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
     XLOG(WOLFKM_LOG_INFO, "Created verify request\n");
 
     while (sent < requestSz) {
-        ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
+        ret = DoClientSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
@@ -171,9 +171,9 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
     }
     XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
-    ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
+    ret = DoClientRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
@@ -245,9 +245,9 @@ static int DoBadVersion(void)
     XLOG(WOLFKM_LOG_INFO, "Connected to cert service\n");
 
     while (sent < requestSz) {
-        ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
+        ret = DoClientSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
@@ -256,9 +256,9 @@ static int DoBadVersion(void)
     }
     XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
-    ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
+    ret = DoClientRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
@@ -394,9 +394,9 @@ static int DoSignRequest(SOCKET_T sockfd, WOLFSSL* ssl)
     XLOG(WOLFKM_LOG_INFO, "Created sign request\n");
 
     while (sent < requestSz) {
-        ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
+        ret = DoClientSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
@@ -405,9 +405,9 @@ static int DoSignRequest(SOCKET_T sockfd, WOLFSSL* ssl)
     }
     XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
-    ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
+    ret = DoClientRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
@@ -534,9 +534,9 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     XLOG(WOLFKM_LOG_INFO, "Created cert request\n");
 
     while (sent < requestSz) {
-        ret = DoSend(sockfd, ssl, tmp + sent, requestSz - sent);
+        ret = DoClientSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
-            XLOG(WOLFKM_LOG_INFO, "DoSend failed: %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
             exit(EXIT_FAILURE);
         }
         sent += ret;
@@ -545,9 +545,9 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     }
     XLOG(WOLFKM_LOG_INFO, "Sent request\n");
 
-    ret = DoRead(sockfd, ssl, tmp, sizeof(tmp));
+    ret = DoClientRead(sockfd, ssl, tmp, sizeof(tmp));
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoRead failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
         exit(EXIT_FAILURE);
     }
     else if (ret == 0) {
@@ -655,21 +655,23 @@ static void* DoRequests(void* arg)
 
 
 /* setup SSL */
-static void InitSSL(void)
+static int InitClientTLS(void)
 {
     int ret;
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
     if (sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context");
-        exit(EXIT_FAILURE);
+        return MEMORY_E;
     }
 
     ret = wolfSSL_CTX_load_verify_locations(sslCtx, WOLFKM_DEFAULT_CERT, NULL);
-    if (ret != SSL_SUCCESS) {
+    if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS CA cert into context. Error: %s (%d)\n", 
             wolfSSL_ERR_reason_error_string(ret), ret);
-        exit(EXIT_FAILURE);
+        wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
+        return ret;
     }
+    return 0;
 }
 
 
@@ -707,7 +709,7 @@ int main(int argc, char** argv)
     port       = atoi(WOLFKM_DEFAULT_CERT_PORT);
 
 #ifdef DISABLE_SSL
-    usingSSL = 0;    /* can only disable at build time */
+    usingTLS = 0;    /* can only disable at build time */
 #endif
 
     /* argument processing */
@@ -762,8 +764,12 @@ int main(int argc, char** argv)
     if (errorMode)
         return DoErrorMode();
 
-    if (usingSSL)
-        InitSSL();
+    if (usingTLS) {
+        ret = InitClientTLS();
+        if (ret != 0) {
+            exit(EXIT_FAILURE);
+        }
+    }
 
     tcp_connect(&sockfd, host, port, 0, 0, NULL);
     ssl = NewSSL(sockfd);

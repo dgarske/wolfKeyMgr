@@ -37,3 +37,4 @@ examples/client/client
 src/wolfkm
 libtool
 src/options.h
+settings.json

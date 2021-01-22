@@ -4,7 +4,7 @@
 
 
 bin_PROGRAMS+= src/wolfkm
-src_wolfkm_SOURCES = src/main.c src/keymanager.c src/http.c src/sock_mgr.c src/svc_cert.c src/svc_etsi.c src/utils.c
+src_wolfkm_SOURCES = src/keymanager.c src/http.c src/sock_mgr.c src/svc_cert.c src/svc_etsi.c src/utils.c
 src_wolfkm_CFLAGS       =
 src_wolfkm_LDFLAGS      = -Lsrc
 src_wolfkm_LDADD        = $(LTLIBEVENT)

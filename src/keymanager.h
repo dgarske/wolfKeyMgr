@@ -8,12 +8,24 @@
 *
 */
 
+#ifndef KEYMANAGER_H
+#define KEYMANAGER_H
+
+/* Key Manager Headers */
 #include "config.h"
 #include "visibility.h"
 #include "sock_mgr.h"
 #include "utils.h"
 #include "svc_cert.h"
 #include "svc_etsi.h"
+
+/* wolfssl headers */
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+
+#include <wolfssl/wolfcrypt/ecc.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/asn.h>
 
 
 /* string constants */
@@ -30,11 +42,7 @@ enum ProgramConstMisc {
     WOLFKM_DEFAULT_TIMEOUT     =     3,        /* default timeout in seconds */
     WOLFKM_CONN_ITEMS          =  1024,        /* new conn item pool size */
     WOLFKM_BACKOFF_TIME        = 10000,        /* in microseconds */
-    CERT_HEADER_SZ             =     4,        /* version (1), type(1), len(2) */
-    CERT_VERSION               =     1,        /* current version */
-    CERT_HEADER_VERSION_OFFSET =     0,        /* at front */
-    CERT_HEADER_TYPE_OFFSET    =     1,        /* version (1) */
-    CERT_HEADER_SZ_OFFSET      =     2,        /* version (1), type(1) */
-    WORD16_LEN                 =     2,        /* sizeof word16 */
-    MAX_PASSWORD_SZ            =   160,        /* max password size */
 };
+
+
+#endif /* KEYMANAGER_H */

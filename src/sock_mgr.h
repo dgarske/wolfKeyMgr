@@ -24,6 +24,13 @@
 #include <event2/buffer.h>
 #include <event2/dns.h>
 
+
+/* wolfssl headers */
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/ssl.h>
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,7 +38,8 @@ extern "C" {
 /* string constants */
 
 /* program constants */
-#define MAX_SOCKADDR_SZ 32
+#define MAX_SOCKADDR_SZ   32
+#define MAX_REQUEST_SIZE (16*1024)
 
 /* program types */
 
@@ -41,15 +49,51 @@ typedef struct {
     struct event*      ev;         /* actual signal event */
 } signalArg;
 
+/* forward declarations */
 typedef struct connItem connItem;
+typedef struct svcConn svcConn;
+typedef struct svcInfo svcInfo;
+typedef struct eventThread eventThread;
+
+/* service connection */
+typedef int  (*svcRequestCb)(svcConn*);
+typedef int  (*initThreadCb)(svcInfo*, eventThread*);
+typedef void (*freeThreadCb)(svcInfo*, eventThread*);
+
+struct svcInfo {
+    const char*   desc;
+
+    initThreadCb  initCb;
+    svcRequestCb  requestCb;
+    freeThreadCb  freeCb;
+
+    /* TLS key */
+    byte   keyBuffer[ECC_BUFSIZE*4]; /* from file, private includes public */
+    word32 keyBufferSz;              /* size */
+
+    /* Subject for certs : TODO: Move to cert service */
+    char subjectStr[ASN_NAME_MAX*2]; /* from file, for matching request */
+    int  subjectStrLen;              /* length of above str for matching */
+};
 
 /* each connection item */
 struct connItem {
     connItem* next;                        /* next item on freeList */
     int       fd;                          /* file descriptor */
     char      peerAddr[MAX_SOCKADDR_SZ];   /* copy of peer sockaddr */
+    svcInfo*  svc;
 };
 
+struct svcConn {
+    struct bufferevent* stream;     /* buffered stream */
+    WOLFSSL*            ssl;        /* ssl object */
+    unsigned int        requestSz;  /* bytes in request buffer */
+    unsigned char       request[MAX_REQUEST_SIZE]; /* full input request */
+    svcInfo*            svc;
+    void*               svcCtx;
+    double              start;      /* response processing time start */
+    svcConn*            next;       /* for free list */
+};
 
 /* queue for connections, shared between main thread and worker threads */
 typedef struct {
@@ -73,32 +117,37 @@ typedef struct {
 
 
 /* each thread in the pool has some unique data */
-typedef struct {
+struct eventThread{
     pthread_t          tid;             /* this thread's ID */
     struct event_base* threadBase;      /* base handle for this thread */
     struct event*      notify;          /* listen event for notify pipe */
     connQueue*         connections;     /* queue for new connections */
     int                notifyRecv;      /* receiving end of notification pipe */
     int                notifySend;      /* sending  end of notification pipe */
-} eventThread;
+    svcInfo*           svc;
+    void*              svcCtx;
+};
 
 
 /* forward headers, see definitions in evt.c for more info on each */
-void InitThreads(int numThreads, const char* certName);
+int  InitThreads(svcInfo* svc, int numThreads, const char* certName);
 int  MakeDaemon(int chDir);
-void SetKeyFile(const char* fileName);
-void SetCertFile(const char* fileName);
 void SetMaxFiles(int max);
 void SetCore(void);
 void SignalCb(evutil_socket_t fd, short event, void* arg);
 int  SigIgnore(int sig);
 void ShowStats(void);
 FILE* GetPidFile(const char* pidFile, pid_t pid);
-void SetTimeout(struct timeval);
-int AddListeners(int af_v, char* listenPort, struct event_base* mainBase);
+
+int AddListeners(int af_v, char* listenPort, struct event_base* mainBase,
+    svcInfo* svc);
 void FreeListeners(void);
+
 void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
               struct sockaddr* a, int slen, void* p);
+int DoSend(svcConn* conn);
+void SetTimeout(struct timeval);
+
 int GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz);
 
 #ifdef __cplusplus

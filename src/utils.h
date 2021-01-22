@@ -60,6 +60,7 @@ void ato16(const unsigned char*, unsigned short*);
 #if !defined(min) && !defined(WOLFSSL_HAVE_MIN)
 int min(int a, int b);
 #endif
+double wolfKeyMgr_GetCurrentTime(void);
 
 
 #endif /* WOLFKM_UTILS_H */

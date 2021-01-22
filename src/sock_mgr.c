@@ -17,7 +17,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -30,14 +29,7 @@
 
 #include "keymanager.h"
 
-#include <wolfssl/options.h>       /* wolfssl headers */
-#include <wolfssl/wolfcrypt/ecc.h>
-#include <wolfssl/wolfcrypt/sha256.h>
-#include <wolfssl/wolfcrypt/asn.h>
-#include <wolfssl/ssl.h>  /* wolfSSL_KeyPemToDer */
-
 /* file locals */
-
 static struct timeval readto;     /* our event timeout */
 static int initCount = 0;         /* number of worker threads done setting up */
 static pthread_mutex_t initLock;  /* for initCount */
@@ -52,37 +44,10 @@ static pthread_mutex_t itemLock;                /* for freeItems */
 static __thread stats threadStats;    /* per thread stats, doesn't use lock */
 static stats globalStats;             /* global (all threads) total stats */
 
-static __thread int     maxSigns  = WOLFKM_DEFAULT_MAX_SIGNS;  /* max b4 re-init */
-static __thread int     signCount = 0;/* per thread signing count */
-static __thread RNG     rng;          /* per thread rng */
-static __thread ecc_key eccKey;       /* per thread ecc key */
-static byte keyBuffer[ECC_BUFSIZE*4]; /* from file, private includes public */
-static word32 keyBufferSz;            /* size */
-static char subjectStr[ASN_NAME_MAX*2]; /* from file, for matching request */
-static int  subjectStrLen;              /* length of above str for matching */
-
 static WOLFSSL_CTX* sslCtx;             /* ssl context factory */
-static int usingSSL = 1;                /* ssl is on by default */
+static int usingTLS = 1;                /* ssl is on by default */
 
-/* a cert request connection */
-enum {
-    FOURK_BUFFER_SZ = 4096 - sizeof(int*)*3 - sizeof(int) - sizeof(double)
-                        /* allow certConn to be <= 4k */
-};
-
-typedef struct certConn certConn;
-
-/* cert connection */
-struct certConn {
-    struct bufferevent* stream;     /* buffered stream */
-    WOLFSSL*            ssl;        /* ssl object */
-    certConn*           next;       /* for free list */
-    double              start;      /* response processing time start */
-    unsigned int        requestSz;  /* bytes in request buffer */
-    unsigned char       request[FOURK_BUFFER_SZ];   /* full input request */
-};
-
-static __thread certConn* freeCertConns = NULL;  /* per thread conn list */
+static __thread svcConn* freeSvcConns = NULL;  /* per thread conn list */
 
 
 /* listener list */
@@ -93,17 +58,6 @@ struct listener {
 };
 
 static listener* listenerList = NULL;  /* main list of listeners */
-
-
-/* verify request message */
-typedef struct verifyReq {
-    byte*  key;       /* key        pointer into request  */
-    byte*  msg;       /* message    pointer into request */
-    byte*  sig;       /* signature pointer into request */
-    word16 keyLen;    /* length of key       in bytes */
-    word16 msgLen;    /* length of message   in bytes */
-    word16 sigLen;    /* length of signature in bytes */
-} verifyReq;
 
 
 
@@ -173,18 +127,6 @@ void SignalCb(evutil_socket_t fd, short event, void* arg)
     wolfSSL_CTX_free(sslCtx);
 }
 
-
-/* return time in seconds with precision */
-static double current_time(void)
-{
-    struct timeval tv;
-
-    gettimeofday(&tv, 0);
-
-    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
-}
-
-
 /* Initialize all stats to zero, pre allocs may increment some counters */
 static void InitStats(stats* myStats)
 {
@@ -217,10 +159,10 @@ static inline void IncrementTotalConnections(void)
 
 
 /* Add to total per thread completed stats */
-static inline void IncrementCompleted(certConn* conn)
+static inline void IncrementCompleted(svcConn* conn)
 {
     threadStats.completedRequests++;
-    threadStats.responseTime += current_time() - conn->start;
+    threadStats.responseTime += wolfKeyMgr_GetCurrentTime() - conn->start;
 }
 
 
@@ -319,7 +261,7 @@ static void ConnItemFree(connItem* item)
 
 
 /* Get a new connection item */
-static connItem* ConnItemNew(void)
+static connItem* ConnItemNew(svcInfo* svc)
 {
     connItem* item;
 
@@ -332,7 +274,7 @@ static connItem* ConnItemNew(void)
 
     if (item == NULL) {
         /* free list empty, add more items to the free list pool */
-        XLOG(WOLFKM_LOG_INFO, "Setting up new conn item pool\n");
+        XLOG(WOLFKM_LOG_INFO, "Setting up new %s conn item pool\n", svc->desc);
         item = (connItem*)malloc(sizeof(connItem) * WOLFKM_CONN_ITEMS);
         if (item) {
             int i;
@@ -355,6 +297,7 @@ static connItem* ConnItemNew(void)
     if (item) {
         item->next = NULL;
         item->fd   = -1;
+        item->svc  = svc;
     }
 
     return item;
@@ -398,12 +341,12 @@ static connItem* ConnQueuePop(connQueue* cq)
 
 
 /* put cert connection item back onto the free item list, handle stats */
-static void CertConnFree(certConn* conn)
+static void ServiceConnFree(svcConn* conn)
 {
     if (conn == NULL)
         return;
 
-    XLOG(WOLFKM_LOG_DEBUG, "Freeing Cert Connection\n");
+    XLOG(WOLFKM_LOG_DEBUG, "Freeing Service Connection\n");
     DecrementCurrentConnections();
 
     /* release per connection resources */
@@ -418,23 +361,24 @@ static void CertConnFree(certConn* conn)
     }
 
     /* push to fee list */
-    conn->next    = freeCertConns;
-    freeCertConns = conn;
+    conn->next    = freeSvcConns;
+    freeSvcConns = conn;
 }
 
 
 /* get a new cert connection, handle stats */
-static certConn* CertConnNew(void)
+static svcConn* ServiceConnNew(eventThread* me)
 {
-    certConn* conn;
+    svcInfo* svc = me->svc;
+    svcConn* conn;
 
-    if ( (conn = freeCertConns) )
-        freeCertConns = conn->next;
+    if ( (conn = freeSvcConns) )
+        freeSvcConns = conn->next;
 
     if (conn == NULL) {
         /* free list empty, add more items to the free list pool */
-        XLOG(WOLFKM_LOG_INFO, "Setting up new cert conn pool\n");
-        conn = (certConn*)malloc(sizeof(certConn) * WOLFKM_CONN_ITEMS);
+        XLOG(WOLFKM_LOG_INFO, "Setting up new %s service conn pool\n", svc->desc);
+        conn = (svcConn*)malloc(sizeof(svcConn) * WOLFKM_CONN_ITEMS);
         if (conn) {
             int i;
 
@@ -442,11 +386,11 @@ static certConn* CertConnNew(void)
             for (i = 1; i < WOLFKM_CONN_ITEMS; i++)
                 conn[i].next = &conn[i+1];
 
-            conn[WOLFKM_CONN_ITEMS-1].next = freeCertConns;
-            freeCertConns = &conn[1];
+            conn[WOLFKM_CONN_ITEMS-1].next = freeSvcConns;
+            freeSvcConns = &conn[1];
         }
         else
-            XLOG(WOLFKM_LOG_ERROR, "CertConnNew pool malloc error\n");
+            XLOG(WOLFKM_LOG_ERROR, "ServiceConnNew pool malloc error\n");
     }
 
     if (conn) {
@@ -456,6 +400,8 @@ static certConn* CertConnNew(void)
         conn->ssl       = NULL;
         conn->start     = 0.0f;
         conn->requestSz = 0;
+        conn->svc       = svc;
+        conn->svcCtx    = me->svcCtx;
         IncrementTotalConnections();
     }
 
@@ -468,45 +414,29 @@ static void WorkerExit(void* arg)
 {
     eventThread* me = (eventThread*)arg;
 
+    if (me->svc && me->svc->freeCb) {
+        me->svc->freeCb(me->svc, me);
+    }
+
     event_del(me->notify);
     event_base_loopexit(me->threadBase, NULL);
-
-#if defined(HAVE_HASHDRBG)
-    wc_FreeRng(&rng);
-#endif
 
     XLOG(WOLFKM_LOG_INFO, "Worker thread exiting, tid = %ld\n",
                         (long)pthread_self());
     /* put per thread stats into global stats*/
     pthread_mutex_lock(&globalStats.lock);
 
-        globalStats.totalConnections   += threadStats.totalConnections;
-        globalStats.completedRequests  += threadStats.completedRequests;
-        globalStats.timeouts           += threadStats.timeouts;
-        globalStats.currentConnections += threadStats.currentConnections;
-        globalStats.maxConcurrent      += threadStats.maxConcurrent;
-        globalStats.responseTime       += threadStats.responseTime;
+    globalStats.totalConnections   += threadStats.totalConnections;
+    globalStats.completedRequests  += threadStats.completedRequests;
+    globalStats.timeouts           += threadStats.timeouts;
+    globalStats.currentConnections += threadStats.currentConnections;
+    globalStats.maxConcurrent      += threadStats.maxConcurrent;
+    globalStats.responseTime       += threadStats.responseTime;
 
     pthread_mutex_unlock(&globalStats.lock);
 
     pthread_exit(NULL);
 }
-
-
-/* our close on write callback
-Not needed now with persistent connection
-static void CloseOnFinishedWriteCb(struct bufferevent* bev, void* ctx)
-{
-    certConn* conn = (certConn*)ctx;
-
-    XLOG(WOLFKM_LOG_DEBUG, "CloseOnFinishedWriteCb\n");
-    if (conn == NULL)
-        return;
-
-    if (evbuffer_get_length(bufferevent_get_output(bev)) == 0)
-        CertConnFree(conn);
-}
-*/
 
 
 /* our event callback */
@@ -516,425 +446,32 @@ static void EventCb(struct bufferevent* bev, short what, void* ctx)
 
     if (what & BEV_EVENT_TIMEOUT) {
         XLOG(WOLFKM_LOG_INFO, "Got timeout on connection, closing\n");
-        CertConnFree(ctx);
+        ServiceConnFree(ctx);
         IncrementTimeouts();
         return;
     }
 
     if (what & BEV_EVENT_EOF) {
         XLOG(WOLFKM_LOG_INFO, "Peer ended connection, closing\n");
-        CertConnFree(ctx);
+        ServiceConnFree(ctx);
         return;
     }
 
     if (what & BEV_EVENT_ERROR) {
         XLOG(WOLFKM_LOG_INFO, "Generic connection error, closing\n");
-        CertConnFree(ctx);
+        ServiceConnFree(ctx);
         return;
     }
 }
 
 
-/* parse in verify response, 0 on success */
-static int ParseVerifyRequest(byte* request, int requestSz, verifyReq* vr)
-{
-    byte* requestMax = request + requestSz;
-
-    /* make sure we can read in key legnth */
-    if (request + WORD16_LEN > requestMax) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyRequest size for keyLen\n"); 
-        return WOLFKM_BAD_VERIFY_SIZE;
-    }
-    ato16(request, &vr->keyLen);
-    request += WORD16_LEN;
-
-    /* make sure we can read in key */
-    if (request + vr->keyLen > requestMax) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyRequest size for key\n"); 
-        return WOLFKM_BAD_VERIFY_SIZE; 
-    }
-    vr->key  = request;
-    request += vr->keyLen;
-
-    /* make sure we can read in msg legnth */
-    if (request + WORD16_LEN > requestMax) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyRequest size for msgLen\n"); 
-        return WOLFKM_BAD_VERIFY_SIZE; 
-    }
-    ato16(request, &vr->msgLen);
-    request += WORD16_LEN;
-
-    /* make sure we can read in msg */
-    if (request + vr->msgLen > requestMax) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyRequest size for msg\n"); 
-        return WOLFKM_BAD_VERIFY_SIZE; 
-    }
-    vr->msg  = request;
-    request += vr->msgLen;
-
-    /* make sure we can read in sig legnth */
-    if (request + WORD16_LEN > requestMax) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyRequest size for sigLen\n"); 
-        return WOLFKM_BAD_VERIFY_SIZE;
-    }
-    ato16(request, &vr->sigLen);
-    request += WORD16_LEN;
-
-    /* make sure we can read in msg */
-    if (request + vr->sigLen > requestMax) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyRequest size for sig\n"); 
-        return WOLFKM_BAD_VERIFY_SIZE;
-    }
-    vr->sig  = request;
-    request += vr->sigLen;
-
-    (void)request;  /* silence scan-build, leave request += for changes */
-
-    return 0;
-}
-
-
-/* create our verify response (place into request buffer), 0 on success */
-static int GenerateVerify(certConn* conn)
-{
-    int    ret;
-    Sha256 sha256;
-    int    stat   = 0;
-    word32 outlen = 1;
-    byte   hash[SHA256_DIGEST_SIZE];
-    verifyReq vr;
-    ecc_key verifyKey;
-
-    /* we put response into request buffer since we already have it */
-    byte* request   = conn->request;
-    byte* hdrSz     = request + CERT_HEADER_SZ_OFFSET;
-    int   requestSz = conn->requestSz - CERT_HEADER_SZ;
-
-    /* make header */
-    request[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
-    request[CERT_HEADER_TYPE_OFFSET]    = VERIFY_RESPONSE;
-    request += CERT_HEADER_SZ;
-
-    /* get input */
-    ret = ParseVerifyRequest(request, requestSz, &vr);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad ParseVerifyRequest: %d\n", ret); 
-        return ret;
-    }
-
-    /* import key */
-    wc_ecc_init(&verifyKey);
-    ret = wc_ecc_import_x963(vr.key, vr.keyLen, &verifyKey);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad ParseVerifyRequest import key: %d\n", ret); 
-        return ret;
-    }
-
-    /* make hash */
-    wc_InitSha256(&sha256);
-    wc_Sha256Update(&sha256, vr.msg, vr.msgLen);
-    wc_Sha256Final(&sha256, hash);
-
-    /* do verify */
-    ret = wc_ecc_verify_hash(vr.sig, vr.sigLen, hash, sizeof(hash), &stat,
-                             &verifyKey);
-    wc_ecc_free(&verifyKey);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad ParseVerifyRequest verify hash: %d\n", ret); 
-        return ret;
-    }
-
-    /* store answer */
-    *request = stat ? 0x1 : 0x0;
-
-    /* out size */
-    c16toa((unsigned short)outlen, hdrSz);  /* size in header */
-    conn->requestSz = outlen + CERT_HEADER_SZ;
-
-    return 0;
-}
-
-
-/* increment signing counter, re-init rng if over max signs, 0 on success */
-static int IncrementSignCounter(void)
-{
-    int ret = 0;
-
-    signCount++;
-    if (signCount > maxSigns) {
-        XLOG(WOLFKM_LOG_INFO, "Sign cout over threshold, rng re-init: %d\n",
-                                                                    signCount);
-#if defined(HAVE_HASHDRBG)
-        wc_FreeRng(&rng);
-#endif
-        ret = wc_InitRng(&rng);
-        if (ret < 0) {
-            XLOG(WOLFKM_LOG_ERROR, "RNG re-init failed: %d\n", ret);
-            return ret;
-        }
-        signCount = 0;  /* re-init success, counter back to zero */
-    }
-
-    return ret;
-}
-
-
-/* create our signing response (place into request buffer), 0 on success */
-static int GenerateSign(certConn* conn)
-{
-    int    ret;
-    word32 outlen = sizeof(conn->request);
-    Sha256 sha256;
-    byte   hash[SHA256_DIGEST_SIZE];
-
-    /* we put response into request buffer since we already have it */
-    byte* request   = conn->request;
-    byte* hdrSz     = request + CERT_HEADER_SZ_OFFSET;
-    int   requestSz = conn->requestSz - CERT_HEADER_SZ;
-
-    /* make header */
-    request[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
-    request[CERT_HEADER_TYPE_OFFSET]    = SIGN_RESPONSE;
-    request += CERT_HEADER_SZ;
-
-    /* make hash */
-    wc_InitSha256(&sha256);
-    wc_Sha256Update(&sha256, request, requestSz);
-    wc_Sha256Final(&sha256, hash);
-
-    /* actual sign */
-    ret = IncrementSignCounter();
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Increment Sign Counter failed: %d\n", ret);
-        return ret;
-    }
-    ret = wc_ecc_sign_hash(hash, sizeof(hash), request, &outlen, &rng, &eccKey);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Sign failed: %d\n", ret);
-        return ret;
-    }
-    c16toa((unsigned short)outlen, hdrSz);  /* size in header */
-    conn->requestSz = outlen + CERT_HEADER_SZ;
-
-    return 0;
-}
-
-
-/* create our cert response (place into request buffer), 0 on success */
-static int GenerateCert(certConn* conn)
-{
-    int ret;
-
-    /* we put response into request buffer since we already have it */
-    byte* request   = conn->request;
-    byte* hdrSz     = request + CERT_HEADER_SZ_OFFSET;
-    int   requestSz = conn->requestSz - CERT_HEADER_SZ;
-
-    /* make header */
-    request[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
-    request[CERT_HEADER_TYPE_OFFSET]    = CERT_RESPONSE;
-    request += CERT_HEADER_SZ;
-
-    /* actual sign */
-    ret = IncrementSignCounter();
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Increment Sign Counter failed: %d\n", ret);
-        return ret;
-    }
-    ret = wc_SignCert(requestSz, CTC_SHA256wECDSA, request,
-                      sizeof(conn->request), NULL, &eccKey, &rng);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "SignCert failed: %d\n", ret);
-        return ret;
-    } else {
-        /* let's do sanity check on request issuer vs our subject */
-        int  issuerStrLen;
-        char issuerStr[sizeof(subjectStr)];
-        WOLFSSL_X509_NAME* issuer;
-        WOLFSSL_X509* x509 = wolfSSL_X509_d2i(NULL, request, ret);
-        if (x509 == NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "X509 d2i failed\n");
-            return WOLFKM_BAD_X509_D2I;
-        }
-
-        issuer = wolfSSL_X509_get_issuer_name(x509);
-        if (issuer == NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "X509 get issuer failed\n");
-            wolfSSL_X509_free(x509);
-            return WOLFKM_BAD_X509_GET_NAME;
-        }
-
-        issuerStr[0] = '\0';
-        issuerStr[sizeof(issuerStr)-1] = '\0';
-        if (wolfSSL_X509_NAME_oneline(issuer, issuerStr, sizeof(issuerStr)-1) ==
-                                                                  NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "X509 get name oneline failed\n");
-            wolfSSL_X509_free(x509);
-            return WOLFKM_BAD_X509_ONELINE;
-        }
-
-        issuerStrLen = strlen(issuerStr);
-        if (issuerStrLen <= 0 || subjectStrLen <= 0) {
-            XLOG(WOLFKM_LOG_ERROR, "X509 str lens bad\n");
-            wolfSSL_X509_free(x509);
-            return WOLFKM_BAD_X509_MATCH;
-        }
-        if (memcmp(issuerStr, subjectStr, min(issuerStrLen, subjectStrLen))
-                                                                        != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "X509 memcmp match failed on request\n");
-            wolfSSL_X509_free(x509);
-            return WOLFKM_BAD_X509_MATCH;
-        }
-
-        XLOG(WOLFKM_LOG_INFO, "X509 issuer subject match\n");
-        wolfSSL_X509_free(x509);
-        /* issuer doesn't need to be freed, points into x509 */
-    }
-
-
-    c16toa((unsigned short)ret, hdrSz);  /* size in header */
-    conn->requestSz = ret + CERT_HEADER_SZ;
-
-    return 0;
-}
-
-
-/* create our error response (place into request buffer), 0 on success */
-static int GenerateError(certConn* conn, int err)
-{
-    int   totalSz = WORD16_LEN * 2;  /* error code + string length */
-    int   strLen;
-    char  tmp[WOLFSSL_MAX_ERROR_SZ];
-    char* errStr = tmp;
-    short int serr = (short int)err;
-
-    /* we put response into request buffer since we already have it */
-    byte* request   = conn->request;
-    byte* hdrSz     = request + CERT_HEADER_SZ_OFFSET;
-
-    /* make header */
-    request[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
-    request[CERT_HEADER_TYPE_OFFSET]    = ERROR_RESPONSE;
-    request += CERT_HEADER_SZ;
-
-    c16toa((unsigned short)serr, request);  /* error code */
-    request += WORD16_LEN;
-
-    tmp[0]                     = '\0';
-    tmp[WOLFSSL_MAX_ERROR_SZ-1] = '\0';
-
-    if (err < WOLFKM_ERROR_BEGIN)   /* WOLFKM_ERROR uses lower errors than CyaSSL */
-        errStr = (char*)wolfKeyMgr_GetError(err); 
-    else
-        wolfSSL_ERR_error_string(err, errStr);
-
-    strLen = strlen(errStr);                    /* str length */
-    c16toa((unsigned short)strLen, request); 
-    request += WORD16_LEN;
-
-    memcpy(request, errStr, strLen);            /* error string */
-    totalSz += strLen;
-
-    c16toa((unsigned short)totalSz, hdrSz);     /* size in header */
-    conn->requestSz = totalSz + CERT_HEADER_SZ;
-
-    return 0;
-}
-
-
-static const char* GetRequestStr(int type)
-{
-    switch (type) {
-        case CERT_REQUEST:
-            return "CERT Type";
-
-        case SIGN_REQUEST:
-            return "SIGN Type";
-
-        case VERIFY_REQUEST:
-            return "VERIFY Type";
-
-        default:
-            return "Unknown type";
-    }
-}
-
-
-/* verify input request, 0 on success, 1 on need more input, <0 error */
-static int VerifyHeader(certConn* conn, int* type)
-{
-    unsigned short size = 0;
-
-    if (conn == NULL || type == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad VerifyHeader pointers\n"); 
-        return WOLFKM_BAD_ARGS;
-    }
-
-    /* need full header to verify, ok, just continue */
-    if (conn->requestSz < CERT_HEADER_SZ) {
-        XLOG(WOLFKM_LOG_INFO, "Not enough input to process request header\n"); 
-        return 1;
-    }
-
-    /* version */
-    if (conn->request[CERT_HEADER_VERSION_OFFSET] != CERT_VERSION) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad version on request header\n"); 
-        return WOLFKM_BAD_VERSION;
-    }
-
-    /* type */
-    *type = conn->request[CERT_HEADER_TYPE_OFFSET];
-    XLOG(WOLFKM_LOG_INFO, "Request type = %s\n", GetRequestStr(*type));
-    if (*type != CERT_REQUEST && *type != SIGN_REQUEST &&
-                                 *type != VERIFY_REQUEST) {
-        XLOG(WOLFKM_LOG_ERROR, "Not a valid REQUEST header\n"); 
-        return WOLFKM_BAD_REQUEST_TYPE;
-    }
-
-    /* size */
-    ato16(&conn->request[CERT_HEADER_SZ_OFFSET], &size);
-    XLOG(WOLFKM_LOG_DEBUG, "Request header size = %d, read = %d\n", size,
-                         conn->requestSz); 
-    if (size > (conn->requestSz - CERT_HEADER_SZ)) {
-        XLOG(WOLFKM_LOG_INFO, "Not enough input to process full request\n"); 
-        return 1;
-    } else if (size < (conn->requestSz - CERT_HEADER_SZ)) {
-        XLOG(WOLFKM_LOG_ERROR, "Request data bigger than request header size\n");
-        return WOLFKM_BAD_HEADER_SZ;
-    }
-
-    return 0;
-}
-
-
-/* Response message handler by type, 0 on success */
-static int DoResponse(certConn* conn, int type)
-{
-    conn->start = current_time();  /* response start time */
-
-    switch (type) {
-        case CERT_REQUEST:
-            return GenerateCert(conn);
-
-        case SIGN_REQUEST:
-            return GenerateSign(conn);
-
-        case VERIFY_REQUEST:
-            return GenerateVerify(conn);
-
-        default:
-            XLOG(WOLFKM_LOG_ERROR, "Bad DoResponse Type: %d\n", type);
-            return WOLFKM_BAD_REQUEST_TYPE;
-    }
-}
-
 
 /* return sent bytes or < 0 on error */
-static int DoSend(certConn* conn)
+int DoSend(svcConn* conn)
 {
     int ret = -1;
 
-    if (usingSSL == 0) {
+    if (usingTLS == 0) {
         ret = evbuffer_add( bufferevent_get_output(conn->stream),
                             conn->request, conn->requestSz);
     } else if (conn->ssl) {
@@ -946,7 +483,7 @@ static int DoSend(certConn* conn)
                                  wolfSSL_ERR_reason_error_string(err));
         }
     } else {
-       XLOG(WOLFKM_LOG_ERROR, "DoSend() usingSSL but no SSL object");
+       XLOG(WOLFKM_LOG_ERROR, "DoSend() usingTLS but no SSL object");
        ret = -1;
     }
 
@@ -954,70 +491,13 @@ static int DoSend(certConn* conn)
 }
 
 
-/* our request handler */
-static void DoRequest(certConn* conn)
-{
-    int ret;
-    int type = -1;
-
-    if (conn == NULL || conn->stream == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Bad DoRequest pointers\n");
-        return;
-    }
-
-    XLOG(WOLFKM_LOG_INFO, "Got Request\n");
-
-    /* verify input, let error fall down to send error */
-    ret = VerifyHeader(conn, &type);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Verify request failed: %d\n", ret);
-    }
-    else if (ret == 1) {
-        XLOG(WOLFKM_LOG_INFO, "Verify request needs more input\n");
-        return;
-    }
-
-    /* Make response, if ok */
-    if (ret == 0) {
-        ret = DoResponse(conn, type);
-        if (ret < 0)
-            XLOG(WOLFKM_LOG_ERROR, "DoResponse failed: %d\n", ret);
-    }
-
-    /* if not ok let's send error response */
-    if (ret < 0) {
-        ret = GenerateError(conn, ret);
-        if (ret < 0) {
-            XLOG(WOLFKM_LOG_ERROR, "GenerateError failed: %d, closing\n", ret);
-            CertConnFree(conn);
-            return;
-        }
-        XLOG(WOLFKM_LOG_INFO, "Generated Error response: %d\n", ret);
-    }
-    else {
-        IncrementCompleted(conn);  /* success on request */
-    }
-
-    ret = DoSend(conn);
-    /* send it, response is now in request buffer */
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoSend failed: %d\n", ret);
-        CertConnFree(conn);
-        return;
-    }
-    XLOG(WOLFKM_LOG_INFO, "Sent Response\n");
-
-    /* reset request size for next request */
-    conn->requestSz = 0;
-}
-
 
 /* return number of bytes read, 0 on wouldblock, < 0 on error */
-static int DoRead(struct bufferevent* bev, certConn* conn)
+static int DoRead(struct bufferevent* bev, svcConn* conn)
 {
     int ret = 0;
 
-    if (usingSSL == 0) {
+    if (usingTLS == 0) {
         ret = evbuffer_remove(bufferevent_get_input(bev),
                               conn->request + conn->requestSz,
                               sizeof(conn->request) - conn->requestSz);
@@ -1039,7 +519,7 @@ static int DoRead(struct bufferevent* bev, certConn* conn)
                                     wolfSSL_ERR_reason_error_string(err));
         }
     } else {
-       XLOG(WOLFKM_LOG_ERROR, "DoRead() usingSSL but no SSL object");
+       XLOG(WOLFKM_LOG_ERROR, "DoRead() usingTLS but no SSL object");
        ret = -1;
     }
 
@@ -1050,7 +530,7 @@ static int DoRead(struct bufferevent* bev, certConn* conn)
 /* our read callback */
 static void ReadCb(struct bufferevent* bev, void* ctx)
 {
-    certConn* conn = (certConn*)ctx;
+    svcConn* conn = (svcConn*)ctx;
     int       ret;
 
     if (bev == NULL || conn == NULL) {
@@ -1066,12 +546,29 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
     }
     else if (ret > 0) {
         conn->requestSz += ret;
-        return DoRequest(conn);
+
+        /* handle request with callback */
+        if (conn->svc && conn->svc->requestCb) {
+            ret = conn->svc->requestCb(conn);
+            if (ret < 0) {
+                /* error */
+                ServiceConnFree(conn);
+                conn = NULL;
+            }
+            else {
+                /* success on request */
+                IncrementCompleted(conn);
+            }
+        }
+        if (conn) {
+            /* reset request size for next request */
+            conn->requestSz = 0;
+        }
     }
     else {
         /* ret < 0, we have an actual error */
         XLOG(WOLFKM_LOG_ERROR, "DoRead error %d\n", ret);
-        CertConnFree(conn);
+        ServiceConnFree(conn);
     }
 }
 
@@ -1095,12 +592,12 @@ static void ThreadEventProcess(int fd, short which, void* arg)
     if (item) {
         /* Do new connection here from item->fd */
         int clientFd = item->fd;
-        certConn* conn = CertConnNew();
+        svcConn* conn = ServiceConnNew(me);
 
         ConnItemFree(item);  /* no longer need item, give it back */
 
         if (conn == NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "CertConnNew() failed\n");
+            XLOG(WOLFKM_LOG_ERROR, "ServiceConnNew() failed\n");
             close(clientFd);
             return;
         }
@@ -1108,15 +605,15 @@ static void ThreadEventProcess(int fd, short which, void* arg)
                                  BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
         if (conn->stream == NULL) {
             XLOG(WOLFKM_LOG_ERROR, "bufferevent_socket_new() failed\n");
-            CertConnFree(conn);
-            close(clientFd);  /* normally CertConnFree would close fd by stream
+            ServiceConnFree(conn);
+            close(clientFd);  /* normally ServiceConnFree would close fd by stream
                                  but since stream is NULL, force it */
             return;
-        } else if (usingSSL) {
+        } else if (usingTLS) {
             conn->ssl = wolfSSL_new(sslCtx);
             if (conn->ssl == NULL) {
                 XLOG(WOLFKM_LOG_ERROR, "wolfSSL_New() failed\n");
-                CertConnFree(conn);
+                ServiceConnFree(conn);
                 return;
             }
             wolfSSL_SetIOReadCtx( conn->ssl, conn->stream);
@@ -1138,7 +635,7 @@ void SetTimeout(struct timeval to)
 
 
 /* Individual thread setup */
-static void SetupThread(eventThread* me)
+static void SetupThread(svcInfo* svc, eventThread* me)
 {
     /* thread base */
     me->threadBase = event_base_new();
@@ -1162,6 +659,12 @@ static void SetupThread(eventThread* me)
         exit(EXIT_FAILURE);
     }
     ConnQueueInit(me->connections);
+
+    /* issue callback to service to init */
+    me->svc = svc;
+    if (svc->initCb) {
+        svc->initCb(svc, me);
+    }
 }
 
 
@@ -1179,28 +682,12 @@ static void SignalSetup(void)
 /* worker event to signal done with thread setup, starts loop */
 static void* WorkerEvent(void* arg)
 {
-    int    ret;
-    word32 idx = 0;
     eventThread* me = (eventThread*)arg;
 
     /* zero out per thread stats, after creating pool */
-    certConn* conn = CertConnNew();
-    CertConnFree(conn);
+    svcConn* conn = ServiceConnNew(me);
+    ServiceConnFree(conn);
     InitStats(&threadStats);
-
-    /* do per thread rng, key init */
-    ret = wc_InitRng(&rng);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "RNG Init failed %d\n", ret);
-        exit(EXIT_FAILURE);
-    }
-
-    wc_ecc_init(&eccKey);
-    ret = wc_EccPrivateKeyDecode(keyBuffer, &idx, &eccKey, keyBufferSz);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "EccPrivateKeyDecode failed %d\n", ret);
-        exit(EXIT_FAILURE);
-    }
 
     /* tell creator we're ready */
     me->tid = pthread_self();
@@ -1277,34 +764,39 @@ static int wolfsslSendCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
 
 
 /* setup ssl context */
-static void InitSSL(const char* certName)
+static int InitServerTLS(svcInfo* svc, const char* certName)
 {
+    int ret;
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
     if (sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context\n");
-        exit(EXIT_FAILURE);
+        return MEMORY_E;
     }
     wolfSSL_SetIORecv(sslCtx, wolfsslRecvCb);
     wolfSSL_SetIOSend(sslCtx, wolfsslSendCb);
 
-    if (wolfSSL_CTX_use_certificate_file(sslCtx, certName, SSL_FILETYPE_PEM)
-                                        != SSL_SUCCESS) {
+    ret = wolfSSL_CTX_use_certificate_file(sslCtx, certName, WOLFSSL_FILETYPE_PEM);
+    if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS cert into context\n");
-        exit(EXIT_FAILURE);
+        wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
+        return ret;
     }
 
-    if (wolfSSL_CTX_use_PrivateKey_buffer(sslCtx, keyBuffer, keyBufferSz,
-                                          SSL_FILETYPE_ASN1) != SSL_SUCCESS) {
+    ret = wolfSSL_CTX_use_PrivateKey_buffer(sslCtx, 
+        svc->keyBuffer, svc->keyBufferSz, WOLFSSL_FILETYPE_ASN1);
+    if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS key into context\n");
-        exit(EXIT_FAILURE);
+        wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
+        return ret;
     }
+    return 0;
 }
 
 
 /* Initialize all worker threads */
-void InitThreads(int numThreads, const char* certName)
+int InitThreads(svcInfo* svc, int numThreads, const char* certName)
 {
-    int i;
+    int ret = 0, i;
     connItem*  item;
 
     /* pthread inits */
@@ -1317,11 +809,11 @@ void InitThreads(int numThreads, const char* certName)
     threads = calloc(numThreads, sizeof(eventThread));
     if (threads == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't allocate thread pool\n");
-        exit(EXIT_FAILURE);
+        return MEMORY_E;
     }
 
     /* pre allocate pool memory */
-    item = ConnItemNew();
+    item = ConnItemNew(svc);
     ConnItemFree(item);
     InitStats(&globalStats);   /* items above for pre alloc shouldn't count */
 
@@ -1336,12 +828,12 @@ void InitThreads(int numThreads, const char* certName)
         int fds[2];
         if (pipe(fds)) {
             XLOG(WOLFKM_LOG_ERROR, "Can't make notify pipe\n");
-            exit(EXIT_FAILURE);
+            return -1; /* TOOD: Add return code */
         }
 
         threads[i].notifyRecv = fds[0];
         threads[i].notifySend = fds[1];
-        SetupThread(&threads[i]);
+        SetupThread(svc, &threads[i]);
     }
 
     /* start threads */
@@ -1356,10 +848,12 @@ void InitThreads(int numThreads, const char* certName)
 
     /* setup ssl ctx */
 #ifdef DISABLE_SSL
-    usingSSL = 0;    /* build time only disable for now */
+    usingTLS = 0;    /* build time only disable for now */
 #endif
-    if (usingSSL)
-        InitSSL(certName);
+    if (usingTLS)
+        ret = InitServerTLS(svc, certName);
+
+    return ret;
 }
 
 
@@ -1373,7 +867,7 @@ void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
     char w = 'w';    /* send wakeup flag */
 
     eventThread* thread = threads + currentId;
-    connItem*    item = ConnItemNew();
+    connItem*    item = ConnItemNew((svcInfo*)p);
 
     if (item == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to process accept request, low memory\n");
@@ -1492,41 +986,6 @@ int MakeDaemon(int chDir)
     return 0;
 }
 
-
-/* load our cert file subject (that's always us) into our buffer */
-void SetCertFile(const char* fileName)
-{
-    WOLFSSL_X509_NAME* subject = NULL;
-    WOLFSSL_X509*      x509     = wolfSSL_X509_load_certificate_file(fileName,
-                                                              SSL_FILETYPE_PEM);
-    if (x509 == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "load X509 cert file %s failed\n", fileName);
-        exit(EXIT_FAILURE);
-    }
-    XLOG(WOLFKM_LOG_INFO, "loaded X509 cert file %s\n", fileName);
-
-    subject = wolfSSL_X509_get_subject_name(x509);
-    if (subject == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "get subject name failed\n");
-        wolfSSL_X509_free(x509);
-        exit(EXIT_FAILURE);
-    }
-
-    subjectStr[0] = '\0';
-    subjectStr[sizeof(subjectStr)-1] = '\0';
-    if (wolfSSL_X509_NAME_oneline(subject, subjectStr, sizeof(subjectStr)-1)
-                                                                      == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "get subject name oneline failed\n");
-        wolfSSL_X509_free(x509);
-        exit(EXIT_FAILURE);
-    }
-    subjectStrLen = strlen(subjectStr);
-    XLOG(WOLFKM_LOG_INFO, "X509 subject %s\n", subjectStr);
-
-    wolfSSL_X509_free(x509);
-    /* subject doesn't need to be freed, points into x509 */
-}
-
 int GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz)
 {
     int ret = -1;
@@ -1550,91 +1009,6 @@ int GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz)
     return ret;
 }
 
-/* password getter for encrypted pem private key, caller should call
- * ClearPassword to wipe and free */
-static char* GetPassword(void)
-{
-    char* passwd = (char*)malloc(MAX_PASSWORD_SZ);
-    if (passwd == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Memory failure for password\n");
-        exit(EXIT_FAILURE);
-    }
-
-    memset(passwd, 0, MAX_PASSWORD_SZ);
-    strncpy(passwd, WOLFKM_DEFAULT_KEY_PASSWORD, MAX_PASSWORD_SZ);
-    passwd[MAX_PASSWORD_SZ-1] = '\0';
-
-    return passwd;
-}
-
-
-/* Wipe and Free password */
-static int ClearPassword(char* passwd)
-{
-    volatile char* p   = (volatile char*)passwd;
-    size_t         len = strlen(passwd);
-
-    while (len--)
-        *p++ = '\0';
-
-    free(passwd);
-
-    return 0;
-}
-
-
-/* load the key file name into our buffer  */
-void SetKeyFile(const char* fileName)
-{
-    FILE*  tmpFile;
-    size_t bytesRead;
-    int    ret;
-    char*  passwd;
-
-    if (CheckCtcSettings() != 1) {
-        XLOG(WOLFKM_LOG_ERROR, "CyaSSL math library mismatch in settings\n");
-        exit(EXIT_FAILURE);
-    }
-
-#ifdef USE_FAST_MATH
-    if (CheckFastMathSettings() != 1) {
-        XLOG(WOLFKM_LOG_ERROR, "CyaSSL fast math library mismatch\n");
-        exit(EXIT_FAILURE);
-    }
-#endif
-
-    if (fileName == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Key file name is null\n");
-        exit(EXIT_FAILURE);
-    }
-
-    tmpFile = fopen(fileName, "rb");
-    if (tmpFile == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Key file %s can't be opened for reading\n",
-                            fileName);
-        exit(EXIT_FAILURE);
-    }
-
-    bytesRead = fread(keyBuffer, 1, sizeof(keyBuffer), tmpFile);
-    fclose(tmpFile);
-
-    if (bytesRead == 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Key file %s can't be read\n", fileName);
-        exit(EXIT_FAILURE);
-    }
-
-    passwd = GetPassword();
-    ret = wolfSSL_KeyPemToDer(keyBuffer, bytesRead, keyBuffer,
-                           sizeof(keyBuffer), passwd);
-    ClearPassword(passwd);
-    if (ret <= 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't convert Key file from PEM to DER: %d\n",ret);
-        exit(EXIT_FAILURE);
-    }
-    keyBufferSz = ret;
-
-    XLOG(WOLFKM_LOG_INFO, "loaded key file %s\n", fileName);
-}
 
 
 /* Check for already running process using exclusive lock on pidfile.
@@ -1695,7 +1069,8 @@ FILE* GetPidFile(const char* pidFile, pid_t pid)
 /* try to add listeners on interface version
  * return count of listener interfaces added.
  */
-int AddListeners(int af_v, char* listenPort, struct event_base* mainBase)
+int AddListeners(int af_v, char* listenPort, struct event_base* mainBase,
+    svcInfo* svc)
 {
     int                     err;
     int                     addCount = 0;
@@ -1728,7 +1103,7 @@ int AddListeners(int af_v, char* listenPort, struct event_base* mainBase)
         GetAddrInfoString(current, addrStr, sizeof(addrStr));
         XLOG(WOLFKM_LOG_INFO, "Binding listener %s\n", addrStr);
 
-        ls->ev_listen = evconnlistener_new_bind(mainBase, AcceptCB, NULL,
+        ls->ev_listen = evconnlistener_new_bind(mainBase, AcceptCB, svc,
             (LEV_OPT_CLOSE_ON_FREE | LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE),
             -1, current->ai_addr, current->ai_addrlen);
         if (ls->ev_listen == NULL) {
