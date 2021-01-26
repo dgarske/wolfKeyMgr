@@ -29,6 +29,9 @@ extern "C" {
 #include "keymanager.h"
 
 #define WOLFKM_DEFAULT_CERT_PORT    "8118"
+#define WOLFKM_DEFAULT_KEY_PASSWORD "wolfssl"
+#define WOLFKM_DEFAULT_KEY          "./certs/test-key.pem"
+#define WOLFKM_DEFAULT_CERT         "./certs/test-cert.pem"
 
 enum CertServiceMisc {
     CERT_HEADER_SZ             =     4,        /* version (1), type(1), len(2) */
@@ -55,9 +58,14 @@ enum CertMessageTypes {
 };
 
 
-int wolfCertSvc_Init(svcInfo* svc, eventThread* thread);
+
+int wolfCertSvc_Init(struct event_base* mainBase, int poolSize);
+void wolfCertSvc_Cleanup(void);
+
+int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx);
+void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx);
+
 int wolfCertSvc_DoRequest(svcConn* conn);
-void wolfCertSvc_Free(svcInfo* svc, eventThread* thread);
 
 
 #ifdef __cplusplus

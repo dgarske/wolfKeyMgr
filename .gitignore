@@ -38,3 +38,4 @@ src/wolfkm
 libtool
 src/options.h
 settings.json
+wolfkeymgr

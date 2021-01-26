@@ -24,6 +24,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include "visibility.h"
 
 /* key manager errors */
 enum  {

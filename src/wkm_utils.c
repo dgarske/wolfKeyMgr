@@ -31,7 +31,6 @@ static FILE* logFile = NULL;
 static enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
 
 
-
 const char* wolfKeyMgr_GetError(int err)
 {
     switch (err) {

@@ -41,9 +41,6 @@
 
 /* string constants */
 #define WOLFKM_DEFAULT_LOG_NAME     NULL
-#define WOLFKM_DEFAULT_KEY_PASSWORD "wolfssl"
-#define WOLFKM_DEFAULT_KEY          "./certs/test-key.pem"
-#define WOLFKM_DEFAULT_CERT         "./certs/test-cert.pem"
 #define WOLFKM_DEFAULT_PID          "./cert.pid"
 
 

@@ -109,6 +109,27 @@ esac
 # Checks for library functions.
 LIB_SOCKET_NSL
 
+
+# Certificate Service
+AC_ARG_ENABLE([certsvc],
+    [AS_HELP_STRING([--enable-certsvc],[Enable the certificate service (default: enabled)])],
+    [ ENABLED_CERT_SERVICE=$enableval ],
+    [ ENABLED_CERT_SERVICE=yes ]
+    )
+
+if test "$ENABLED_CERT_SERVICE" = "yes"
+then
+    AM_CFLAGS="$AM_CFLAGS -DWOLFKM_ENABLE_CERT_SVC"
+fi
+
+
+
+# The following AM_CONDITIONAL statements set flags for use in the Makefiles.
+# Some of these affect build targets and objects, some trigger different
+# test scripts for make check.
+AM_CONDITIONAL([BUILD_CERT_SERVICE],[test "x$ENABLED_CERT_SERVICE" = "xyes"])
+
+
 # FINAL
 AC_CONFIG_FILES([Makefile src/options.h])
 
@@ -203,3 +224,5 @@ echo "   * C Compiler:                $CC_VERSION"
 echo "   * C Flags:                   $CFLAGS"
 echo "   * CPP Flags:                 $CPPFLAGS"
 echo "   * LIB Flags:                 $LIB"
+
+echo "   * Certificate Service        $ENABLED_CERT_SERVICE"

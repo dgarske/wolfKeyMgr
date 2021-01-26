@@ -29,6 +29,7 @@
 #include <wolfssl/test.h>
 
 #include "src/keymanager.h"
+#include "src/svc_cert.h"
 
 static pthread_t*  tids;          /* our threads */
 static int         poolSize = 0;  /* number of threads */

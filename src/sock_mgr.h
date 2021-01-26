@@ -34,6 +34,7 @@
 #include <event2/buffer.h>
 #include <event2/dns.h>
 
+#include "visibility.h"
 
 /* wolfssl headers */
 #include <wolfssl/options.h>
@@ -66,24 +67,23 @@ typedef struct svcInfo svcInfo;
 typedef struct eventThread eventThread;
 
 /* service connection */
-typedef int  (*svcRequestCb)(svcConn*);
-typedef int  (*initThreadCb)(svcInfo*, eventThread*);
-typedef void (*freeThreadCb)(svcInfo*, eventThread*);
+typedef int  (*svcRequestFunc)(svcConn*);
+typedef int  (*initThreadFunc)(svcInfo*, eventThread*);
+typedef void (*freeThreadFunc)(svcInfo*, eventThread*);
 
 struct svcInfo {
-    const char*   desc;
+    const char* desc;
 
-    initThreadCb  initCb;
-    svcRequestCb  requestCb;
-    freeThreadCb  freeCb;
-
-    /* TLS key */
-    byte   keyBuffer[ECC_BUFSIZE*4]; /* from file, private includes public */
-    word32 keyBufferSz;              /* size */
-
-    /* Subject for certs : TODO: Move to cert service */
-    char subjectStr[ASN_NAME_MAX*2]; /* from file, for matching request */
-    int  subjectStrLen;              /* length of above str for matching */
+    /* service callbacks */
+    initThreadFunc  initThreadCb;
+    svcRequestFunc  requestCb;
+    freeThreadFunc  freeThreadCb;
+    
+    /* TLS certificate / key - As DER/ASN.1*/
+     byte*      keyBuffer;
+    byte*       certBuffer;
+    word32      keyBufferSz;
+    word32      certBufferSz;
 };
 
 /* each connection item */
@@ -127,7 +127,7 @@ typedef struct {
 
 
 /* each thread in the pool has some unique data */
-struct eventThread{
+struct eventThread {
     pthread_t          tid;             /* this thread's ID */
     struct event_base* threadBase;      /* base handle for this thread */
     struct event*      notify;          /* listen event for notify pipe */
@@ -139,26 +139,29 @@ struct eventThread{
 };
 
 
-/* forward headers, see definitions in evt.c for more info on each */
-int  InitThreads(svcInfo* svc, int numThreads, const char* certName);
-int  MakeDaemon(int chDir);
-void SetMaxFiles(int max);
-void SetCore(void);
-void SignalCb(evutil_socket_t fd, short event, void* arg);
-int  SigIgnore(int sig);
-void ShowStats(void);
-FILE* GetPidFile(const char* pidFile, pid_t pid);
+/* Key Manager Functions */
+int  wolfKeyMgr_MakeDaemon(int chDir);
+void wolfKeyMgr_SetMaxFiles(int max);
+void wolfKeyMgr_SetCore(void);
+void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg);
+int  wolfKeyMgr_SigIgnore(int sig);
+void wolfKeyMgr_ShowStats(void);
+FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid);
+void wolfKeyMgr_SetTimeout(struct timeval);
+int wolfKeyMgr_GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz);
 
-int AddListeners(int af_v, char* listenPort, struct event_base* mainBase,
-    svcInfo* svc);
-void FreeListeners(void);
+int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct event_base* mainBase);
+int wolfKeyMgr_InitService(svcInfo* svc, int numThreads);
+void wolfKeyMgr_FreeListeners(void);
 
-void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
-              struct sockaddr* a, int slen, void* p);
-int DoSend(svcConn* conn);
-void SetTimeout(struct timeval);
+int wolfKeyMgr_DoSend(svcConn* conn);
 
-int GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz);
+int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
+int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, const char* password);
+int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType);
+
+
+
 
 #ifdef __cplusplus
 }

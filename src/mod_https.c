@@ -1,4 +1,4 @@
-/* svc_https.c
+/* mod_https.c
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,4 +19,4 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include "svc_https.h"
+#include "mod_https.h"

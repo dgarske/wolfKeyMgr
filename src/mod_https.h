@@ -1,4 +1,4 @@
-/* svc_https.h
+/* mod_https.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *

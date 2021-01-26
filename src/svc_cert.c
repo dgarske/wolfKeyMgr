@@ -21,11 +21,17 @@
 
 #include "keymanager.h"
 
+#ifdef WOLFKM_CERT_SERVICE
+
 typedef struct certSvcInfo {
     int     maxSigns;  /* max b4 re-init */
     int     signCount; /* per thread signing count */
     RNG     rng;       /* per thread rng */
     ecc_key eccKey;    /* per thread ecc key */
+
+    /* Subject for certs */
+    char subjectStr[ASN_NAME_MAX*2]; /* from file, for matching request */
+    int  subjectStrLen;              /* length of above str for matching */
 } certSvcInfo;
 
 /* verify request message */
@@ -39,54 +45,60 @@ typedef struct verifyReq {
 } verifyReq;
 
 
-int wolfCertSvc_Init(svcInfo* svc, eventThread* thread)
-{
-    int ret;
-    word32 idx;
-    certSvcInfo* certSvc;
+svcInfo certService = {
+    .desc = "Certificate",
 
-    certSvc = malloc(sizeof(*certSvc));
-    if (certSvc == NULL) {
+    /* Callbacks */
+    .requestCb = wolfCertSvc_DoRequest,
+    .initThreadCb = wolfCertSvc_WorkerInit,
+    .freeThreadCb = wolfCertSvc_WorkerFree,
+
+    /* TLS Certificate and Buffer */
+    .certBuffer = NULL,
+    .certBufferSz = 0,
+    .certBufferType = WOLFSSL_FILETYPE_PEM,
+    .keyBuffer = NULL,
+    .keyBufferSz = 0,
+    .keyBufferType = WOLFSSL_FILETYPE_PEM,
+};
+
+
+/* load our cert file subject (that's always us) into our buffer */
+static int SetCertSubject(svcInfo* svc, certSvcInfo* certSvc)
+{
+    WOLFSSL_X509_NAME* subject = NULL;
+    WOLFSSL_X509* x509 = wolfSSL_X509_load_certificate_buffer(svc->certBuffer, svc->certBufferSz, svc->certBufferType);
+    if (x509 == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "load X509 cert file %s failed\n", fileName);
         return MEMORY_E;
     }
-    memset(certSvc, 0, sizeof(*certSvc));
+    XLOG(WOLFKM_LOG_INFO, "loaded X509 cert file %s\n", fileName);
 
-    thread->svcCtx = certSvc;
-
-    /* do per thread rng, key init */
-    ret = wc_InitRng(&certSvc->rng);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "RNG Init failed %d\n", ret);
-        return ret;
+    subject = wolfSSL_X509_get_subject_name(x509);
+    if (subject == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "get subject name failed\n");
+        wolfSSL_X509_free(x509);
+        return MEMORY_E;
     }
 
-    wc_ecc_init(&certSvc->eccKey);
-    idx = 0;
-    ret = wc_EccPrivateKeyDecode(svc->keyBuffer, &idx, &certSvc->eccKey, svc->keyBufferSz);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "EccPrivateKeyDecode failed %d\n", ret);
-        wc_FreeRng(&certSvc->rng);
-        return ret;
+    certSvc->subjectStr[0] = '\0';
+    certSvc->subjectStr[sizeof(certSvc->subjectStr)-1] = '\0';
+    if (wolfSSL_X509_NAME_oneline(subject, certSvc->subjectStr, sizeof(certSvc->subjectStr)-1)
+                                                                      == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "get subject name oneline failed\n");
+        wolfSSL_X509_free(x509);
+        return WOLFKM_BAD_X509_GET_NAME;
     }
+    certSvc->subjectStrLen = strlen(certSvc->subjectStr);
+    XLOG(WOLFKM_LOG_INFO, "X509 subject %s\n", certSvc->subjectStr);
 
-    (void)svc;
+    wolfSSL_X509_free(x509);
+    /* subject doesn't need to be freed, points into x509 */
 
     return 0;
 }
 
-void wolfCertSvc_Free(svcInfo* svc, eventThread* thread)
-{
-    certSvcInfo* certSvc;
-    if (thread == NULL || thread->svcCtx == NULL)
-        return;
 
-    certSvc = (certSvcInfo*)thread->svcCtx;
-    wc_FreeRng(&certSvc->rng);
-    wc_ecc_free(&certSvc->eccKey);
-    free(certSvc);
-    thread->svcCtx = NULL;
-    (void)svc;
-}
 
 
 /* parse in verify response, 0 on success */
@@ -539,4 +551,115 @@ int wolfCertSvc_DoRequest(svcConn* conn)
     }
     XLOG(WOLFKM_LOG_INFO, "Sent Response\n");
     return 0;
+}
+
+/* Called for startup of each worker thread */
+int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
+{
+    int ret;
+    word32 idx;
+    certSvcInfo* certSvc;
+
+    certSvc = malloc(sizeof(*certSvc));
+    if (certSvc == NULL) {
+        return MEMORY_E;
+    }
+    memset(certSvc, 0, sizeof(*certSvc));
+
+    *svcCtx = certSvc;
+
+    /* do per thread rng, key init */
+    ret = wc_InitRng(&certSvc->rng);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "RNG Init failed %d\n", ret);
+        return ret;
+    }
+
+    wc_ecc_init(&certSvc->eccKey);
+    idx = 0;
+    /* TODO: Handle filetype PEM here */
+    ret = wc_EccPrivateKeyDecode(svc->keyBuffer, &idx, &certSvc->eccKey, 
+        svc->keyBufferSz);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "EccPrivateKeyDecode failed %d\n", ret);
+        wc_FreeRng(&certSvc->rng);
+        return ret;
+    }
+
+    /* setup subject for certificate service */
+    ret = SetCertSubject(svc, certSvc);
+
+    return ret;
+}
+
+void wolfCertSvc_WorkerFree(svcInfo* svc, void* certSvc)
+{
+    certSvcInfo* certSvc = (certSvcInfo*)certSvc;
+
+    if (thread == NULL || thread->svcCtx == NULL)
+        return;
+
+    wc_FreeRng(&certSvc->rng);
+    wc_ecc_free(&certSvc->eccKey);
+    free(certSvc);
+    thread->svcCtx = NULL;
+    (void)svc;
+}
+
+#endif /* WOLFKM_CERT_SERVICE */
+
+
+int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
+{
+#ifdef WOLFKM_CERT_SERVICE
+    int ret;
+    char* listenPort = WOLFKM_DEFAULT_CERT_PORT;
+
+    byte* keyBuffer = NULL;
+    word32 keyBufferSz = 0;
+
+    ret = SetKeyFile(svc, WOLFKM_DEFAULT_KEY, WOLFKM_DEFAULT_KEY_PASSWORD);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Can't load TLS key\n");
+        return ret;
+    }
+
+    ret = SetCertFile(svc, WOLFKM_DEFAULT_CERT);
+
+
+    /* make sure TLS certificate and key are set */
+    if (svc->keyBuffer == NULL) {
+
+        .
+    .keyFile = WOLFKM_DEFAULT_KEY,
+    .keyPassword = WOLFKM_DEFAULT_KEY_PASSWORD,
+    .certFile = WOLFKM_DEFAULT_CERT,
+
+    }
+
+
+
+
+    /* setup listening events, bind before .pid file creation */
+    ret =  wolfKeyMgr_AddListeners(&certService, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
+    ret += wolfKeyMgr_AddListeners(&certService, AF_INET, listenPort, mainBase);   /* should be first */
+    if (ret < 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one listener,"
+                            "already running?\n");
+        return NULL;
+    }
+    /* thread setup */
+    wolfKeyMgr_InitService(&certService, poolSize);
+
+    return 0;
+#else
+    return -1; /* TODO: Improve error code */
+#endif
+}
+
+void wolfCertSvc_Cleanup(void)
+{
+#ifdef WOLFKM_CERT_SERVICE
+
+#endif
 }

@@ -83,7 +83,7 @@ static inline void TcpNoDelay(int fd)
 
 
 /* Our own sigignore */
-int SigIgnore(int sig)
+int wolfKeyMgr_SigIgnore(int sig)
 {
     struct sigaction sa;
 
@@ -97,8 +97,32 @@ int SigIgnore(int sig)
 }
 
 
+int wolfKeyMgr_GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz)
+{
+    int ret = -1;
+    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+
+    if (buf) {
+        memset(buf, 0, bufSz);
+    }
+    if (addr) {
+        ret = getnameinfo(
+            (struct sockaddr*)addr->ai_addr, 
+            (socklen_t)addr->ai_addrlen, 
+            hbuf, sizeof(hbuf), 
+            sbuf, sizeof(sbuf),
+            (NI_NUMERICHOST | NI_NUMERICSERV));
+        if (ret == 0) {
+            snprintf(buf, bufSz, "%s:%s", hbuf, sbuf);
+        }
+    }
+
+    return ret;
+}
+
+
 /* Our signal handler callback */
-void SignalCb(evutil_socket_t fd, short event, void* arg)
+void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
 {
     signalArg* sigArg = (signalArg*)arg;
     int        sigId = event_get_signal(sigArg->ev);
@@ -191,7 +215,7 @@ static inline void DecrementCurrentConnections(void)
 
 
 /* Show our statistics, log them */
-void ShowStats(void)
+void wolfKeyMgr_ShowStats(void)
 {
     stats  local;
     double avgResponse = 0.0f;
@@ -424,8 +448,8 @@ static void WorkerExit(void* arg)
 {
     eventThread* me = (eventThread*)arg;
 
-    if (me->svc && me->svc->freeCb) {
-        me->svc->freeCb(me->svc, me);
+    if (me->svc && me->svc->freeThreadCb) {
+        me->svc->freeThreadCb(me->svc, me);
     }
 
     event_del(me->notify);
@@ -473,33 +497,6 @@ static void EventCb(struct bufferevent* bev, short what, void* ctx)
         return;
     }
 }
-
-
-
-/* return sent bytes or < 0 on error */
-int DoSend(svcConn* conn)
-{
-    int ret = -1;
-
-    if (usingTLS == 0) {
-        ret = evbuffer_add( bufferevent_get_output(conn->stream),
-                            conn->request, conn->requestSz);
-    } else if (conn->ssl) {
-        ret = wolfSSL_write(conn->ssl,
-                            conn->request, conn->requestSz);
-        if (ret < 0) {
-            int err = wolfSSL_get_error(conn->ssl, 0);
-            XLOG(WOLFKM_LOG_ERROR, "wolfSSL_write err = %s",
-                                 wolfSSL_ERR_reason_error_string(err));
-        }
-    } else {
-       XLOG(WOLFKM_LOG_ERROR, "DoSend() usingTLS but no SSL object");
-       ret = -1;
-    }
-
-    return ret;
-}
-
 
 
 /* return number of bytes read, 0 on wouldblock, < 0 on error */
@@ -638,7 +635,7 @@ static void ThreadEventProcess(int fd, short which, void* arg)
 
 
 /* set our timeout on connections */
-void SetTimeout(struct timeval to)
+void wolfKeyMgr_SetTimeout(struct timeval to)
 {
     readto = to;
 }
@@ -672,8 +669,8 @@ static void SetupThread(svcInfo* svc, eventThread* me)
 
     /* issue callback to service to init */
     me->svc = svc;
-    if (svc->initCb) {
-        svc->initCb(svc, me);
+    if (svc->initThreadCb) {
+        svc->initThreadCb(svc, me);
     }
 }
 
@@ -774,9 +771,10 @@ static int wolfsslSendCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
 
 
 /* setup ssl context */
-static int InitServerTLS(svcInfo* svc, const char* certName)
+static int InitServerTLS(svcInfo* svc)
 {
     int ret;
+
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
     if (sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context\n");
@@ -785,15 +783,17 @@ static int InitServerTLS(svcInfo* svc, const char* certName)
     wolfSSL_SetIORecv(sslCtx, wolfsslRecvCb);
     wolfSSL_SetIOSend(sslCtx, wolfsslSendCb);
 
-    ret = wolfSSL_CTX_use_certificate_file(sslCtx, certName, WOLFSSL_FILETYPE_PEM);
+
+    ret = wolfSSL_CTX_use_certificate_buffer(sslCtx, svc->certBuffer,
+        svc->certBufferSz, WOLFSSL_FILETYPE_ASN1);
     if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS cert into context\n");
         wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
         return ret;
     }
 
-    ret = wolfSSL_CTX_use_PrivateKey_buffer(sslCtx, 
-        svc->keyBuffer, svc->keyBufferSz, WOLFSSL_FILETYPE_ASN1);
+    ret = wolfSSL_CTX_use_PrivateKey_buffer(sslCtx, svc->keyBuffer, 
+        svc->keyBufferSz, WOLFSSL_FILETYPE_ASN1);
     if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS key into context\n");
         wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
@@ -802,9 +802,256 @@ static int InitServerTLS(svcInfo* svc, const char* certName)
     return 0;
 }
 
+/* dispatcher thread accept callback */
+static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
+              struct sockaddr* a, int slen, void* p)
+{
+    static int lastThread = -1;       /* last used thread ID */
+
+    int  currentId = (lastThread + 1) % threadPoolSize;    /* round robin */
+    char w = 'w';    /* send wakeup flag */
+
+    eventThread* thread = threads + currentId;
+    connItem*    item = ConnItemNew((svcInfo*)p);
+
+    if (item == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "Unable to process accept request, low memory\n");
+        close(fd);
+        return;
+    }
+
+    lastThread = currentId;
+
+    item->fd = fd;
+    assert(slen <= sizeof(item->peerAddr));
+    memcpy(item->peerAddr, a, slen);
+
+    TcpNoDelay(fd);
+
+    /* push connection item and notify thread */
+    ConnQueuePush(thread->connections, item);
+
+    if (write(thread->notifySend, &w, 1) != 1)
+        XLOG(WOLFKM_LOG_ERROR, "Write to thread notify send pipe failed\n");
+
+    XLOG(WOLFKM_LOG_INFO, "Accepted a connection, sent to thread %d\n", currentId);
+}
+
+
+/* make sure rlimt files is at least what user wants */
+void wolfKeyMgr_SetMaxFiles(int max)
+{
+    struct rlimit now;
+
+    if (getrlimit(RLIMIT_NOFILE, &now) == 0) {
+        if (now.rlim_cur < max)
+            now.rlim_cur = max;
+        if (now.rlim_max < now.rlim_cur)
+            now.rlim_max = now.rlim_cur;
+
+        if (setrlimit(RLIMIT_NOFILE, &now) != 0) {
+            XLOG(WOLFKM_LOG_ERROR, "Can't setrlimit max files\n");
+            exit(EX_OSERR);
+        }
+    } else {
+        XLOG(WOLFKM_LOG_ERROR, "Can't getrlimit max files\n");
+        exit(EX_OSERR);
+    }
+}
+
+
+/* make core max file */
+void wolfKeyMgr_SetCore(void)
+{
+    struct rlimit old, change;
+
+    if (getrlimit(RLIMIT_CORE, &old) == 0) {
+        /* infinity first */
+        change.rlim_cur = change.rlim_max = RLIM_INFINITY;
+        if (setrlimit(RLIMIT_CORE, &change) != 0) {
+            /* ok, just try old max */
+            change.rlim_cur = change.rlim_max = old.rlim_max;
+            if (setrlimit(RLIMIT_CORE, &change) != 0) {
+                XLOG(WOLFKM_LOG_ERROR, "Can't setrlimit core\n");
+                exit(EX_OSERR);
+            }
+        }
+    } else {
+        XLOG(WOLFKM_LOG_ERROR, "Can't getrlimit core\n");
+        exit(EX_OSERR);
+    }
+}
+
+
+/* see Advanced Programming in the Unix Environment, chapter 13 */
+int wolfKeyMgr_MakeDaemon(int chDir)
+{
+    int fd;
+
+    switch (fork()) {
+        case -1:
+            return -1;
+        case 0:                   /* child */
+            break;
+        default:
+            exit(EXIT_SUCCESS);   /* parent goes bye-bye */
+    }
+
+    if (setsid() == -1) {         /* become session leader */
+        XLOG(WOLFKM_LOG_ERROR, "setsid\n");
+        return -1;
+    }
+
+    if (chDir) {
+        if (chdir("/") != 0) {    /* change working directory */
+            XLOG(WOLFKM_LOG_ERROR, "chdir\n");
+            return -1;
+        }
+    }
+
+    umask(0);                     /* always successful */
+
+    fd = open("/dev/null", O_RDWR, 0);
+    if (fd == -1) {
+        XLOG(WOLFKM_LOG_ERROR, "open /dev/null\n");
+        return -1;
+    }
+
+    if (dup2(fd, STDIN_FILENO) < 0 || dup2(fd, STDOUT_FILENO) < 0 ||
+                                      dup2(fd, STDERR_FILENO) < 0) {
+        XLOG(WOLFKM_LOG_ERROR, "dup2 std filenos\n");
+        return -1;
+    }
+
+    if (close(fd) < 0) {
+        XLOG(WOLFKM_LOG_ERROR, "close\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+
+
+
+
+/* Check for already running process using exclusive lock on pidfile.
+ * Returns NULL if process is already running, otherwise writes pid to
+ * pidfile and returns FILE pointer to pidfile with an exclusive lock.
+ */
+FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid)
+{
+    FILE* f;
+    int   fd;
+
+    if (!pidFile) {
+        XLOG(WOLFKM_LOG_ERROR, "Missing pidfile path\n");
+        return NULL; /* Fail */
+    }
+
+    /* Open pidfile for writing.  If already exists, do not truncate,
+     * but otherwise create it. */
+    if ((f = fopen(pidFile, "r+")) == NULL) {
+        if (errno != ENOENT) {
+            XLOG(WOLFKM_LOG_ERROR, "fopen %s\n", strerror(errno));
+            return NULL; /* Fail */
+        }
+        if ((f = fopen(pidFile, "w")) == NULL) {
+            XLOG(WOLFKM_LOG_ERROR, "fopen %s\n", strerror(errno));
+            return NULL; /* Fail */
+        }
+    }
+
+    fd = fileno(f);
+    if (fd == -1) {
+        XLOG(WOLFKM_LOG_ERROR, "fileno %s\n", strerror(errno));
+        return NULL; /* Fail */
+    }
+
+    if (lockf(fd, F_TLOCK, 0) == -1) {
+        XLOG(WOLFKM_LOG_ERROR, "lockf %s\n", strerror(errno));
+        return NULL; /* Fail */
+    }
+
+    /* Truncate pidfile */
+    if (ftruncate(fd, 0) == -1) {
+        XLOG(WOLFKM_LOG_ERROR, "ftruncate %s\n", strerror(errno));
+        return NULL; /* Fail */
+    }
+
+    /* Write pid */
+    fprintf(f, "%ld\n", (long)pid);
+    if (fflush(f) == EOF) {
+        XLOG(WOLFKM_LOG_ERROR, "fflush %s\n", strerror(errno));
+        return NULL;
+    }
+
+    return f;
+}
+
+
+
+/* try to add listeners on interface version
+ * return count of listener interfaces added.
+ */
+int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct event_base* mainBase)
+{
+    int                     err;
+    int                     addCount = 0;
+    struct evutil_addrinfo  hints;
+    struct evutil_addrinfo* answer = NULL;
+    struct evutil_addrinfo* current = NULL;  /* list traversal */
+    char addrStr[100];
+
+    /* listening addr info */
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family   = af_v;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;         /* TCP */
+    hints.ai_flags    = EVUTIL_AI_PASSIVE;   /* any addr */
+
+    err = evutil_getaddrinfo(NULL, listenPort, &hints, &answer);
+    if (err < 0 || answer == NULL) {
+        XLOG(WOLFKM_LOG_WARN, "Failed to evutil_getaddrinfo for listen\n");
+        return -1;
+    }
+    current = answer;
+
+    while (current) {
+        listener* ls = (listener*)malloc(sizeof(listener));
+        if (ls == NULL) {
+            XLOG(WOLFKM_LOG_ERROR, "Failed to alloc listener\n");
+            exit(EXIT_FAILURE);
+        }
+
+        wolfKeyMgr_GetAddrInfoString(current, addrStr, sizeof(addrStr));
+        XLOG(WOLFKM_LOG_INFO, "Binding listener %s\n", addrStr);
+
+        ls->ev_listen = evconnlistener_new_bind(mainBase, AcceptCB, svc,
+            (LEV_OPT_CLOSE_ON_FREE | LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE),
+            -1, current->ai_addr, current->ai_addrlen);
+        if (ls->ev_listen == NULL) {
+            XLOG(WOLFKM_LOG_WARN, "Failed to bind listener: Error %d: %s\n", 
+                errno, strerror(errno));
+            free(ls);
+            ls = NULL;
+        }
+        current = current->ai_next;
+        
+        if (ls) {
+            addCount++;
+            evconnlistener_set_error_cb(ls->ev_listen, OurListenerError);
+            ls->next = listenerList;  /* prepend to list */
+            listenerList = ls;
+        }
+    }
+    evutil_freeaddrinfo(answer);
+
+    return addCount;
+}
 
 /* Initialize all worker threads */
-int InitThreads(svcInfo* svc, int numThreads, const char* certName)
+int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
 {
     int ret = 0, i;
     connItem*  item;
@@ -861,284 +1108,37 @@ int InitThreads(svcInfo* svc, int numThreads, const char* certName)
     usingTLS = 0;    /* build time only disable for now */
 #endif
     if (usingTLS)
-        ret = InitServerTLS(svc, certName);
+        ret = InitServerTLS(svc);
 
     return ret;
 }
 
-
-/* dispatcher thread accept callback */
-void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
-              struct sockaddr* a, int slen, void* p)
-{
-    static int lastThread = -1;       /* last used thread ID */
-
-    int  currentId = (lastThread + 1) % threadPoolSize;    /* round robin */
-    char w = 'w';    /* send wakeup flag */
-
-    eventThread* thread = threads + currentId;
-    connItem*    item = ConnItemNew((svcInfo*)p);
-
-    if (item == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Unable to process accept request, low memory\n");
-        close(fd);
-        return;
-    }
-
-    lastThread = currentId;
-
-    item->fd = fd;
-    assert(slen <= sizeof(item->peerAddr));
-    memcpy(item->peerAddr, a, slen);
-
-    TcpNoDelay(fd);
-
-    /* push connection item and notify thread */
-    ConnQueuePush(thread->connections, item);
-
-    if (write(thread->notifySend, &w, 1) != 1)
-        XLOG(WOLFKM_LOG_ERROR, "Write to thread notify send pipe failed\n");
-
-    XLOG(WOLFKM_LOG_INFO, "Accepted a connection, sent to thread %d\n", currentId);
-}
-
-
-/* make sure rlimt files is at least what user wants */
-void SetMaxFiles(int max)
-{
-    struct rlimit now;
-
-    if (getrlimit(RLIMIT_NOFILE, &now) == 0) {
-        if (now.rlim_cur < max)
-            now.rlim_cur = max;
-        if (now.rlim_max < now.rlim_cur)
-            now.rlim_max = now.rlim_cur;
-
-        if (setrlimit(RLIMIT_NOFILE, &now) != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "Can't setrlimit max files\n");
-            exit(EX_OSERR);
-        }
-    } else {
-        XLOG(WOLFKM_LOG_ERROR, "Can't getrlimit max files\n");
-        exit(EX_OSERR);
-    }
-}
-
-
-/* make core max file */
-void SetCore(void)
-{
-    struct rlimit old, change;
-
-    if (getrlimit(RLIMIT_CORE, &old) == 0) {
-        /* infinity first */
-        change.rlim_cur = change.rlim_max = RLIM_INFINITY;
-        if (setrlimit(RLIMIT_CORE, &change) != 0) {
-            /* ok, just try old max */
-            change.rlim_cur = change.rlim_max = old.rlim_max;
-            if (setrlimit(RLIMIT_CORE, &change) != 0) {
-                XLOG(WOLFKM_LOG_ERROR, "Can't setrlimit core\n");
-                exit(EX_OSERR);
-            }
-        }
-    } else {
-        XLOG(WOLFKM_LOG_ERROR, "Can't getrlimit core\n");
-        exit(EX_OSERR);
-    }
-}
-
-
-/* see Advanced Programming in the Unix Environment, chapter 13 */
-int MakeDaemon(int chDir)
-{
-    int fd;
-
-    switch (fork()) {
-        case -1:
-            return -1;
-        case 0:                   /* child */
-            break;
-        default:
-            exit(EXIT_SUCCESS);   /* parent goes bye-bye */
-    }
-
-    if (setsid() == -1) {         /* become session leader */
-        XLOG(WOLFKM_LOG_ERROR, "setsid\n");
-        return -1;
-    }
-
-    if (chDir) {
-        if (chdir("/") != 0) {    /* change working directory */
-            XLOG(WOLFKM_LOG_ERROR, "chdir\n");
-            return -1;
-        }
-    }
-
-    umask(0);                     /* always successful */
-
-    fd = open("/dev/null", O_RDWR, 0);
-    if (fd == -1) {
-        XLOG(WOLFKM_LOG_ERROR, "open /dev/null\n");
-        return -1;
-    }
-
-    if (dup2(fd, STDIN_FILENO) < 0 || dup2(fd, STDOUT_FILENO) < 0 ||
-                                      dup2(fd, STDERR_FILENO) < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "dup2 std filenos\n");
-        return -1;
-    }
-
-    if (close(fd) < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "close\n");
-        return -1;
-    }
-
-    return 0;
-}
-
-int GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz)
+/* return sent bytes or < 0 on error */
+int wolfKeyMgr_DoSend(svcConn* conn)
 {
     int ret = -1;
-    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
-    if (buf) {
-        memset(buf, 0, bufSz);
-    }
-    if (addr) {
-        ret = getnameinfo(
-            (struct sockaddr*)addr->ai_addr, 
-            (socklen_t)addr->ai_addrlen, 
-            hbuf, sizeof(hbuf), 
-            sbuf, sizeof(sbuf),
-            (NI_NUMERICHOST | NI_NUMERICSERV));
-        if (ret == 0) {
-            snprintf(buf, bufSz, "%s:%s", hbuf, sbuf);
+    if (usingTLS == 0) {
+        ret = evbuffer_add( bufferevent_get_output(conn->stream),
+                            conn->request, conn->requestSz);
+    } else if (conn->ssl) {
+        ret = wolfSSL_write(conn->ssl,
+                            conn->request, conn->requestSz);
+        if (ret < 0) {
+            int err = wolfSSL_get_error(conn->ssl, 0);
+            XLOG(WOLFKM_LOG_ERROR, "wolfSSL_write err = %s",
+                                 wolfSSL_ERR_reason_error_string(err));
         }
+    } else {
+       XLOG(WOLFKM_LOG_ERROR, "DoSend() usingTLS but no SSL object");
+       ret = -1;
     }
 
     return ret;
 }
 
-
-
-/* Check for already running process using exclusive lock on pidfile.
- * Returns NULL if process is already running, otherwise writes pid to
- * pidfile and returns FILE pointer to pidfile with an exclusive lock.
- */
-FILE* GetPidFile(const char* pidFile, pid_t pid)
-{
-    FILE* f;
-    int   fd;
-
-    if (!pidFile) {
-        XLOG(WOLFKM_LOG_ERROR, "Missing pidfile path\n");
-        return NULL; /* Fail */
-    }
-
-    /* Open pidfile for writing.  If already exists, do not truncate,
-     * but otherwise create it. */
-    if ((f = fopen(pidFile, "r+")) == NULL) {
-        if (errno != ENOENT) {
-            XLOG(WOLFKM_LOG_ERROR, "fopen %s\n", strerror(errno));
-            return NULL; /* Fail */
-        }
-        if ((f = fopen(pidFile, "w")) == NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "fopen %s\n", strerror(errno));
-            return NULL; /* Fail */
-        }
-    }
-
-    fd = fileno(f);
-    if (fd == -1) {
-        XLOG(WOLFKM_LOG_ERROR, "fileno %s\n", strerror(errno));
-        return NULL; /* Fail */
-    }
-
-    if (lockf(fd, F_TLOCK, 0) == -1) {
-        XLOG(WOLFKM_LOG_ERROR, "lockf %s\n", strerror(errno));
-        return NULL; /* Fail */
-    }
-
-    /* Truncate pidfile */
-    if (ftruncate(fd, 0) == -1) {
-        XLOG(WOLFKM_LOG_ERROR, "ftruncate %s\n", strerror(errno));
-        return NULL; /* Fail */
-    }
-
-    /* Write pid */
-    fprintf(f, "%ld\n", (long)pid);
-    if (fflush(f) == EOF) {
-        XLOG(WOLFKM_LOG_ERROR, "fflush %s\n", strerror(errno));
-        return NULL;
-    }
-
-    return f;
-}
-
-
-/* try to add listeners on interface version
- * return count of listener interfaces added.
- */
-int AddListeners(int af_v, char* listenPort, struct event_base* mainBase,
-    svcInfo* svc)
-{
-    int                     err;
-    int                     addCount = 0;
-    struct evutil_addrinfo  hints;
-    struct evutil_addrinfo* answer = NULL;
-    struct evutil_addrinfo* current = NULL;  /* list traversal */
-    char addrStr[100];
-
-    /* listening addr info */
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family   = af_v;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;         /* TCP */
-    hints.ai_flags    = EVUTIL_AI_PASSIVE;   /* any addr */
-
-    err = evutil_getaddrinfo(NULL, listenPort, &hints, &answer);
-    if (err < 0 || answer == NULL) {
-        XLOG(WOLFKM_LOG_WARN, "Failed to evutil_getaddrinfo for listen\n");
-        return -1;
-    }
-    current = answer;
-
-    while (current) {
-        listener* ls = (listener*)malloc(sizeof(listener));
-        if (ls == NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "Failed to alloc listener\n");
-            exit(EXIT_FAILURE);
-        }
-
-        GetAddrInfoString(current, addrStr, sizeof(addrStr));
-        XLOG(WOLFKM_LOG_INFO, "Binding listener %s\n", addrStr);
-
-        ls->ev_listen = evconnlistener_new_bind(mainBase, AcceptCB, svc,
-            (LEV_OPT_CLOSE_ON_FREE | LEV_OPT_CLOSE_ON_EXEC | LEV_OPT_REUSEABLE),
-            -1, current->ai_addr, current->ai_addrlen);
-        if (ls->ev_listen == NULL) {
-            XLOG(WOLFKM_LOG_WARN, "Failed to bind listener: Error %d: %s\n", 
-                errno, strerror(errno));
-            free(ls);
-            ls = NULL;
-        }
-        current = current->ai_next;
-        
-        if (ls) {
-            addCount++;
-            evconnlistener_set_error_cb(ls->ev_listen, OurListenerError);
-            ls->next = listenerList;  /* prepend to list */
-            listenerList = ls;
-        }
-    }
-    evutil_freeaddrinfo(answer);
-
-    return addCount;
-}
-
-
 /* release listener resources */
-void FreeListeners(void)
+void wolfKeyMgr_FreeListeners(void)
 {
     while (listenerList) {
         listener* next = listenerList->next;
@@ -1147,4 +1147,104 @@ void FreeListeners(void)
         free(listenerList);
         listenerList = next;
     }
+}
+
+
+int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
+{
+    FILE* tmpFile;
+    long fileSz;
+    size_t bytesRead = 0;
+
+    if (fileName == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "file name is null\n");
+        return -1; /* TODO: Improve error code */
+    }
+
+    tmpFile = fopen(fileName, "rb");
+    if (tmpFile == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "file %s can't be opened for reading\n",
+                            fileName);
+        return -1; /* TODO: Improve error code */
+    }
+
+    fseek(tmpFile, 0, SEEK_END);
+    fileSz = ftell(tmpFile);
+    rewind(tmpFile);
+    if (fileSz  > 0) {
+        *sz = (word32)fileSz;
+
+        if (buffer) {
+            *buffer = (byte*)malloc(fileSz+1);
+            if (*buffer == NULL) {
+                fclose(tmpFile);
+                return -1; /* TODO: Improve error code */
+            }
+        }
+    }
+
+    if (buffer && *sz > 0) {
+        bytesRead = fread(*buffer, 1, *sz, tmpFile);
+    }
+    fclose(tmpFile);
+
+    if (buffer && bytesRead == 0) {
+        XLOG(WOLFKM_LOG_ERROR, "file %s can't be read\n", fileName);
+        free(*buffer); *buffer = NULL;
+        return -1; /* TODO: Improve error code */
+    }
+
+    return 0;
+}
+
+/* load the key file name into our buffer  */
+int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, const char* password)
+{
+    int ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->keyBuffer, &svc->keyBufferSz);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_INFO, "error loading key file %s\n", fileName);
+        return ret;
+    }
+
+    ret = wc_KeyPemToDer(
+            svc->keyBuffer, svc->keyBufferSz, 
+            svc->keyBuffer, svc->keyBufferSz,
+            password);
+    if (ret <= 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Can't convert Key file %s from PEM to DER: %d\n",
+            fileName, ret);
+        free(svc->keyBuffer); svc->keyBuffer = NULL;
+        return -1; /* TODO: Improve error code */
+    }
+    svc->keyBufferSz = ret;
+
+    XLOG(WOLFKM_LOG_INFO, "loaded key file %s\n", fileName);
+    return 0;
+}
+
+int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType)
+{
+    int ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->certBuffer, &svc->certBufferSz);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_INFO, "error loading certificate file %s\n", fileName);
+        return ret;
+    }
+
+    if (fileType == WOLFSSL_FILETYPE_PEM) {
+        /* convert to DER */
+        ret = wc_CertPemToDer(
+            svc->certBuffer, svc->certBufferSz, 
+            svc->certBuffer, svc->certBufferSz,
+            fileType);
+        if (ret <= 0) {
+            XLOG(WOLFKM_LOG_ERROR, "Can't convert file %s from PEM to DER: %d\n", 
+                fileName, ret);
+            free(svc->keyBuffer); svc->keyBuffer = NULL;
+            return -1; /* TODO: Improve error code */
+        }
+        svc->certBufferSz = ret;
+    }
+
+    XLOG(WOLFKM_LOG_INFO, "loaded certificate file %s\n", fileName);
+    return 0;
 }
