@@ -33,7 +33,7 @@ dump.der
 diff
 
 # applications
-examples/client/client
+examples/cert_client/cert_client
 src/wolfkm
 libtool
 src/options.h

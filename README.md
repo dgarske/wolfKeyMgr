@@ -116,5 +116,5 @@ Note: A custom install location can be specified using: `./configure --prefix=/o
 
 ```
 $ ./src/wolfkeymgr
-$ ./examples/client/client
+$ ./examples/cert_client/cert_client
 ```

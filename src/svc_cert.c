@@ -56,10 +56,8 @@ svcInfo certService = {
     /* TLS Certificate and Buffer */
     .certBuffer = NULL,
     .certBufferSz = 0,
-    .certBufferType = WOLFSSL_FILETYPE_PEM,
     .keyBuffer = NULL,
     .keyBufferSz = 0,
-    .keyBufferType = WOLFSSL_FILETYPE_PEM,
 };
 
 
@@ -67,12 +65,13 @@ svcInfo certService = {
 static int SetCertSubject(svcInfo* svc, certSvcInfo* certSvc)
 {
     WOLFSSL_X509_NAME* subject = NULL;
-    WOLFSSL_X509* x509 = wolfSSL_X509_load_certificate_buffer(svc->certBuffer, svc->certBufferSz, svc->certBufferType);
+    WOLFSSL_X509* x509 = wolfSSL_X509_load_certificate_buffer(svc->certBuffer,
+        svc->certBufferSz, WOLFSSL_FILETYPE_ASN1);
     if (x509 == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "load X509 cert file %s failed\n", fileName);
+        XLOG(WOLFKM_LOG_ERROR, "load X509 cert buffer failed\n");
         return MEMORY_E;
     }
-    XLOG(WOLFKM_LOG_INFO, "loaded X509 cert file %s\n", fileName);
+    XLOG(WOLFKM_LOG_INFO, "loaded X509 cert buffer\n");
 
     subject = wolfSSL_X509_get_subject_name(x509);
     if (subject == NULL) {
@@ -83,8 +82,8 @@ static int SetCertSubject(svcInfo* svc, certSvcInfo* certSvc)
 
     certSvc->subjectStr[0] = '\0';
     certSvc->subjectStr[sizeof(certSvc->subjectStr)-1] = '\0';
-    if (wolfSSL_X509_NAME_oneline(subject, certSvc->subjectStr, sizeof(certSvc->subjectStr)-1)
-                                                                      == NULL) {
+    if (wolfSSL_X509_NAME_oneline(subject, certSvc->subjectStr, 
+            sizeof(certSvc->subjectStr)-1) == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "get subject name oneline failed\n");
         wolfSSL_X509_free(x509);
         return WOLFKM_BAD_X509_GET_NAME;
@@ -317,10 +316,11 @@ static int GenerateCert(svcConn* conn)
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "SignCert failed: %d\n", ret);
         return ret;
-    } else {
+    }
+    else {
         /* let's do sanity check on request issuer vs our subject */
         int  issuerStrLen;
-        char issuerStr[sizeof(conn->svc->subjectStr)];
+        char issuerStr[sizeof(certSvc->subjectStr)];
         WOLFSSL_X509_NAME* issuer;
         WOLFSSL_X509* x509 = wolfSSL_X509_d2i(NULL, request, ret);
         if (x509 == NULL) {
@@ -345,13 +345,13 @@ static int GenerateCert(svcConn* conn)
         }
 
         issuerStrLen = strlen(issuerStr);
-        if (issuerStrLen <= 0 || conn->svc->subjectStrLen <= 0) {
+        if (issuerStrLen <= 0 || certSvc->subjectStrLen <= 0) {
             XLOG(WOLFKM_LOG_ERROR, "X509 str lens bad\n");
             wolfSSL_X509_free(x509);
             return WOLFKM_BAD_X509_MATCH;
         }
-        if (memcmp(issuerStr, conn->svc->subjectStr, min(issuerStrLen, conn->svc->subjectStrLen))
-                                                                        != 0) {
+        if (memcmp(issuerStr, certSvc->subjectStr, min(issuerStrLen, 
+                certSvc->subjectStrLen)) != 0) {
             XLOG(WOLFKM_LOG_ERROR, "X509 memcmp match failed on request\n");
             wolfSSL_X509_free(x509);
             return WOLFKM_BAD_X509_MATCH;
@@ -543,7 +543,7 @@ int wolfCertSvc_DoRequest(svcConn* conn)
         /* success */
     }
 
-    ret = DoSend(conn);
+    ret = wolfKeyMgr_DoSend(conn);
     /* send it, response is now in request buffer */
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "DoSend failed: %d\n", ret);
@@ -592,18 +592,16 @@ int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
     return ret;
 }
 
-void wolfCertSvc_WorkerFree(svcInfo* svc, void* certSvc)
+void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx)
 {
-    certSvcInfo* certSvc = (certSvcInfo*)certSvc;
+    certSvcInfo* certSvc = (certSvcInfo*)svcCtx;
 
-    if (thread == NULL || thread->svcCtx == NULL)
+    if (svc == NULL || svcCtx == NULL)
         return;
 
     wc_FreeRng(&certSvc->rng);
     wc_ecc_free(&certSvc->eccKey);
     free(certSvc);
-    thread->svcCtx = NULL;
-    (void)svc;
 }
 
 #endif /* WOLFKM_CERT_SERVICE */
@@ -615,38 +613,26 @@ int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
     int ret;
     char* listenPort = WOLFKM_DEFAULT_CERT_PORT;
 
-    byte* keyBuffer = NULL;
-    word32 keyBufferSz = 0;
-
-    ret = SetKeyFile(svc, WOLFKM_DEFAULT_KEY, WOLFKM_DEFAULT_KEY_PASSWORD);
+    ret = wolfKeyMgr_LoadKeyFile(&certService, WOLFKM_DEFAULT_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_DEFAULT_KEY_PASSWORD);
     if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't load TLS key\n");
+        XLOG(WOLFKM_LOG_ERROR, "Error loading TLS key\n");
         return ret;
     }
 
-    ret = SetCertFile(svc, WOLFKM_DEFAULT_CERT);
-
-
-    /* make sure TLS certificate and key are set */
-    if (svc->keyBuffer == NULL) {
-
-        .
-    .keyFile = WOLFKM_DEFAULT_KEY,
-    .keyPassword = WOLFKM_DEFAULT_KEY_PASSWORD,
-    .certFile = WOLFKM_DEFAULT_CERT,
-
+    ret = wolfKeyMgr_LoadCertFile(&certService, WOLFKM_DEFAULT_CERT, WOLFSSL_FILETYPE_PEM);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Error loading TLS certificate\n");
+        return ret;
     }
-
-
-
 
     /* setup listening events, bind before .pid file creation */
     ret =  wolfKeyMgr_AddListeners(&certService, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
     ret += wolfKeyMgr_AddListeners(&certService, AF_INET, listenPort, mainBase);   /* should be first */
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one listener,"
-                            "already running?\n");
-        return NULL;
+                               "already running?\n");
+        wolfCertSvc_Cleanup();
+        return -1; /* TODO: Improve error code */
     }
     /* thread setup */
     wolfKeyMgr_InitService(&certService, poolSize);
@@ -660,6 +646,13 @@ int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
 void wolfCertSvc_Cleanup(void)
 {
 #ifdef WOLFKM_CERT_SERVICE
-
+    if (certService.keyBuffer) {
+        free(certService.keyBuffer);
+        certService.keyBuffer = NULL;
+    }
+    if (certService.certBuffer) {
+        free(certService.certBuffer);
+        certService.certBuffer = NULL;
+    }
 #endif
 }

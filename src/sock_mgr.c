@@ -447,9 +447,10 @@ static svcConn* ServiceConnNew(eventThread* me)
 static void WorkerExit(void* arg)
 {
     eventThread* me = (eventThread*)arg;
+    svcInfo* svc = me->svc;
 
-    if (me->svc && me->svc->freeThreadCb) {
-        me->svc->freeThreadCb(me->svc, me);
+    if (svc && svc->freeThreadCb) {
+        svc->freeThreadCb(svc, me->svcCtx);
     }
 
     event_del(me->notify);
@@ -670,7 +671,7 @@ static void SetupThread(svcInfo* svc, eventThread* me)
     /* issue callback to service to init */
     me->svc = svc;
     if (svc->initThreadCb) {
-        svc->initThreadCb(svc, me);
+        svc->initThreadCb(svc, &me->svcCtx);
     }
 }
 
@@ -1198,7 +1199,7 @@ int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
 }
 
 /* load the key file name into our buffer  */
-int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, const char* password)
+int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, const char* password)
 {
     int ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->keyBuffer, &svc->keyBufferSz);
     if (ret != 0) {
@@ -1206,10 +1207,12 @@ int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, const char* passw
         return ret;
     }
 
-    ret = wc_KeyPemToDer(
+    if (fileType == WOLFSSL_FILETYPE_PEM) {
+        ret = wc_KeyPemToDer(
             svc->keyBuffer, svc->keyBufferSz, 
             svc->keyBuffer, svc->keyBufferSz,
             password);
+    }
     if (ret <= 0) {
         XLOG(WOLFKM_LOG_ERROR, "Can't convert Key file %s from PEM to DER: %d\n",
             fileName, ret);
@@ -1235,7 +1238,7 @@ int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType)
         ret = wc_CertPemToDer(
             svc->certBuffer, svc->certBufferSz, 
             svc->certBuffer, svc->certBufferSz,
-            fileType);
+            CERT_TYPE);
         if (ret <= 0) {
             XLOG(WOLFKM_LOG_ERROR, "Can't convert file %s from PEM to DER: %d\n", 
                 fileName, ret);

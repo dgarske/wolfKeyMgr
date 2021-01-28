@@ -117,9 +117,9 @@ AC_ARG_ENABLE([certsvc],
     [ ENABLED_CERT_SERVICE=yes ]
     )
 
-if test "$ENABLED_CERT_SERVICE" = "yes"
+if test "x$ENABLED_CERT_SERVICE" = "xyes"
 then
-    AM_CFLAGS="$AM_CFLAGS -DWOLFKM_ENABLE_CERT_SVC"
+    CFLAGS="$CFLAGS -DWOLFKM_CERT_SERVICE"
 fi
 
 

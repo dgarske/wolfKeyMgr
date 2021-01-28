@@ -68,8 +68,8 @@ typedef struct eventThread eventThread;
 
 /* service connection */
 typedef int  (*svcRequestFunc)(svcConn*);
-typedef int  (*initThreadFunc)(svcInfo*, eventThread*);
-typedef void (*freeThreadFunc)(svcInfo*, eventThread*);
+typedef int  (*initThreadFunc)(svcInfo*, void**);
+typedef void (*freeThreadFunc)(svcInfo*, void*);
 
 struct svcInfo {
     const char* desc;
@@ -80,7 +80,7 @@ struct svcInfo {
     freeThreadFunc  freeThreadCb;
     
     /* TLS certificate / key - As DER/ASN.1*/
-     byte*      keyBuffer;
+    byte*       keyBuffer;
     byte*       certBuffer;
     word32      keyBufferSz;
     word32      certBufferSz;
@@ -157,7 +157,7 @@ void wolfKeyMgr_FreeListeners(void);
 int wolfKeyMgr_DoSend(svcConn* conn);
 
 int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
-int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, const char* password);
+int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, const char* password);
 int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType);
 
 
