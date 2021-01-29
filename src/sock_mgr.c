@@ -547,7 +547,6 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
     }
 
     ret = DoRead(bev, conn);
-
     if (ret == 0) {
         /* EWOULDBLOCK, ok */
         return;
@@ -560,6 +559,7 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
             ret = conn->svc->requestCb(conn);
             if (ret < 0) {
                 /* error */
+                XLOG(WOLFKM_LOG_ERROR, "Do request error %d\n", ret);
                 ServiceConnFree(conn);
                 conn = NULL;
             }
