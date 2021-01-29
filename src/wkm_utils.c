@@ -21,8 +21,6 @@
 
 #include "wkm_utils.h"
 
-#include <stdlib.h>
-#include <stdarg.h>
 #include <time.h>
 #include <sys/time.h>
 
@@ -157,6 +155,57 @@ double wolfKeyMgr_GetCurrentTime(void)
     gettimeofday(&tv, 0);
 
     return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+}
+
+char* wolfKeyMgr_UriEncode(const byte *s, char *enc)
+{
+    for (; *s; s++){
+        if (*s == '*' || *s == '-' || *s == '.' || *s == '_') {
+            char a = (char)(*s >> 4), b = (char)(*s & 0xff);
+            *enc++ = '%';
+            *enc++ = (a < 10) ? '0' + a : 'A' + a - 10;
+            *enc++ = (b < 10) ? '0' + b : 'A' + b - 10;
+        }
+        else if (*s == ' ')
+            *enc++ = '+';
+        else
+            *enc++ = *s;
+    }
+    return enc;
+}
+
+static int hex_to_char(char a, byte* out)
+{
+    if (a >= '0' && a <= '9')
+        a -= '0';
+    else if (a >= 'A' && a <= 'F')
+        a -= 'A' - 10;
+    else if (a >= 'a' && a <= 'f')
+        a -= 'a' - 'A' - 10;
+    else
+        return 0;
+    *out = (byte)a;
+    return 1;
+}
+
+byte* wolfKeyMgr_UriDecode(const char *s, byte *dec)
+{
+    byte a, b;
+    for (; *s; s++){
+        if (*s == '%' && 
+                hex_to_char((char)s[1], &a) && 
+                hex_to_char((char)s[2], &b)) {
+            *dec++ = (a << 4 | b);
+            s+=2;
+        }
+        else if (*s == '+') {
+            *dec++ = ' ';
+        }
+        else {
+            *dec++ = *s;
+        }
+    }
+    return dec;
 }
 
 

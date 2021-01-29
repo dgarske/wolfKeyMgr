@@ -26,6 +26,31 @@
 extern "C" {
 #endif
 
+#include "wkm_types.h"
+
+/* HTTP Types */
+typedef enum HttpMethods {
+    HTTP_METHOD_UNKNOWN,
+    HTTP_METHOD_OPTIONS,
+    HTTP_METHOD_GET,
+    HTTP_METHOD_HEAD,
+    HTTP_METHOD_POST,
+    HTTP_METHOD_PUT,
+    HTTP_METHOD_DELETE,
+    HTTP_METHOD_TRACE,
+    HTTP_METHOD_CONNECT,
+} HttpMethods;
+
+typedef struct HttpReq {
+    HttpMethods method;
+    byte*  uri;
+    word32 uriLen;
+    char*  version;
+} HttpReq;
+
+
+int wolfKeyMgr_HttpParse(HttpReq* req, byte* buf, word32 sz);
+
 
 
 #ifdef __cplusplus

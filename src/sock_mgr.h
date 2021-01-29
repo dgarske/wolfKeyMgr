@@ -97,8 +97,8 @@ struct connItem {
 struct svcConn {
     struct bufferevent* stream;     /* buffered stream */
     WOLFSSL*            ssl;        /* ssl object */
-    unsigned int        requestSz;  /* bytes in request buffer */
-    unsigned char       request[MAX_REQUEST_SIZE]; /* full input request */
+    word32              requestSz;  /* bytes in request buffer */
+    byte                request[MAX_REQUEST_SIZE]; /* full input request */
     svcInfo*            svc;
     void*               svcCtx;
     double              start;      /* response processing time start */

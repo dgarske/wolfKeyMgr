@@ -7,7 +7,7 @@ AC_PREREQ(2.59)
 
 AC_INIT([wolfKeyManager],[0.1],[http://www.wolfssl.com])
 AC_CONFIG_AUX_DIR(config)
-AC_CONFIG_HEADER(src/config.h)
+AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_MACRO_DIR(m4)
 
 AM_INIT_AUTOMAKE(subdir-objects foreign)

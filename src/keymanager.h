@@ -23,12 +23,12 @@
 #define KEYMANAGER_H
 
 /* Key Manager Headers */
-#include "config.h"
-#include "visibility.h"
+#include "wkm_types.h"
 #include "sock_mgr.h"
 #include "wkm_utils.h"
 #include "svc_cert.h"
 #include "svc_etsi.h"
+
 
 /* wolfssl headers */
 #include <wolfssl/options.h>
