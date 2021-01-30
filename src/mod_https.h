@@ -29,7 +29,7 @@ extern "C" {
 #include "wkm_types.h"
 
 /* HTTP Types */
-typedef enum HttpMethods {
+typedef enum HttpMethod {
     HTTP_METHOD_UNKNOWN,
     HTTP_METHOD_OPTIONS,
     HTTP_METHOD_GET,
@@ -39,17 +39,82 @@ typedef enum HttpMethods {
     HTTP_METHOD_DELETE,
     HTTP_METHOD_TRACE,
     HTTP_METHOD_CONNECT,
-} HttpMethods;
+} HttpMethod;
+
+typedef enum HttpHeaderType {
+    HTTP_HDR_UNKNOWN,
+    HTTP_HDR_ACCEPT,
+    HTTP_HDR_ACCEPT_CHARSET,
+    HTTP_HDR_ACCEPT_ENCODING,
+    HTTP_HDR_ACCEPT_LANGUAGE,
+    HTTP_HDR_ACCEPT_RANGES,
+    HTTP_HDR_AGE,
+    HTTP_HDR_ALLOW,
+    HTTP_HDR_AUTHORIZATION,
+    HTTP_HDR_CACHE_CONTROL,
+    HTTP_HDR_COOKIE,
+    HTTP_HDR_CONNECTION,
+    HTTP_HDR_CONTENT_ENCODING,
+    HTTP_HDR_CONTENT_LANGUAGE,
+    HTTP_HDR_CONTENT_LENGTH,
+    HTTP_HDR_CONTENT_LOCATION,
+    HTTP_HDR_CONTENT_MD5,
+    HTTP_HDR_CONTENT_RANGE,
+    HTTP_HDR_CONTENT_TYPE,
+    HTTP_HDR_DATE,
+    HTTP_HDR_ETAG,
+    HTTP_HDR_EXPECT,
+    HTTP_HDR_EXPIRES,
+    HTTP_HDR_FROM,
+    HTTP_HDR_HOST,
+    HTTP_HDR_IF_MATCH,
+    HTTP_HDR_IF_MODIFIED_SINCE,
+    HTTP_HDR_IF_NONE_MATCH,
+    HTTP_HDR_IF_RANGE,
+    HTTP_HDR_IF_UNMODIFIED_SINCE,
+    HTTP_HDR_LAST_MODIFIED,
+    HTTP_HDR_LOCATION,
+    HTTP_HDR_MAX_FORWARDS,
+    HTTP_HDR_PRAGMA,
+    HTTP_HDR_PROXY_AUTHENTICATE,
+    HTTP_HDR_PROXY_AUTHORIZATION,
+    HTTP_HDR_RANGE,
+    HTTP_HDR_REFERER,
+    HTTP_HDR_RETRY_AFTER,
+    HTTP_HDR_TE,
+    HTTP_HDR_TRAILER,
+    HTTP_HDR_TRANSFER_ENCODING,
+    HTTP_HDR_UPGRADE,
+    HTTP_HDR_UPGRADE_INSECURE_REQUESTS,
+    HTTP_HDR_USER_AGENT,
+    HTTP_HDR_VARY,
+    HTTP_HDR_VIA,
+    HTTP_HDR_WARNING,
+    HTTP_HDR_WWW_AUTHENTICATE,
+    HTTP_HDR_MAX_ITEMS,
+} HttpHeaderType;
+
+typedef enum HttpErrorCodes {
+    HTTP_ERROR_EXPECTED_CRLF = -1000,
+
+} HttpErrorCodes;
+
+typedef struct HttpHeaders {
+    HttpHeaderType type;
+    char*          buffer;
+    word32         length;
+} HttpHeaders;
 
 typedef struct HttpReq {
-    HttpMethods method;
-    byte*  uri;
-    word32 uriLen;
-    char*  version;
+    HttpMethod  method;
+    char*       uri;
+    word32      uriLen;
+    char*       version;
+    HttpHeaders headers[HTTP_HDR_MAX_ITEMS];
 } HttpReq;
 
 
-int wolfKeyMgr_HttpParse(HttpReq* req, byte* buf, word32 sz);
+int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz);
 
 
 

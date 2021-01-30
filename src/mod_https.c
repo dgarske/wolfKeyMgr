@@ -28,38 +28,52 @@
  * GET /index.html HTTP/1.0\r\n\r\n
  */
 
-static const char kHttpServerMsg[] =
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Connection: close\r\n"
-    "Content-Length: 141\r\n"
-    "\r\n"
-    "<html>\r\n"
-    "<head>\r\n"
-    "<title>Welcome to wolfSSL!</title>\r\n"
-    "</head>\r\n"
-    "<body>\r\n"
-    "<p>wolfSSL has successfully performed handshake!</p>\r\n"
-    "</body>\r\n"
-    "</html>\r\n";
-
-
+static const char* kGET = "GET";
+static const char* kCrlf = "\r\n";
 
 /* Parse incoming request into `HttpReq` struct */
-int wolfKeyMgr_HttpParse(HttpReq* req, byte* buf, unsigned int sz)
+int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
 {
     int ret = 0;
+    char* req = buf, *endline, *last;
+    word32 len = sz;
+    word32 itemSz;
 
-    /* Method */
-    if (memcmp(buf, "GET", 3) == 0) {
-        /* URI */
-
-        /* 414 Request-URI Too Long */
-
-        /* Headers */
-
+    if (req == NULL)  {
+        return BAD_FUNC_ARGS;
     }
 
-    (void)kHttpServerMsg;
+    /* Method */
+    if (strncmp(req, kGET, strlen(kGET)) == 0) {
+        req->method = HTTP_METHOD_GET;
+        itemSz = strlen(kGET) + 1; /* include space */
+        req += itemSz; len -= itemSz;
+        endline = strnstr(buf, kCrlf, len); /* Find end of line */
+        if (endline == NULL) {
+            return HTTP_ERROR_EXPECTED_CRLF;
+        }
+        *endline = '\0'; /* null terminate string */
+
+        /* HTTP Header Version */
+        /* locate last space */
+        last = strrchr(req, ' ');
+        if (last) {
+            req->version = last + 1;
+            *last = '\0';
+        }
+        /* Set URI */
+        req->uri = req;
+        req = endline+2;
+        len = (word32)req - buf;
+
+        /* Parse headers */
+        endline = strnstr(req, kCrlf, len); /* Find end of line */
+        while (endline) {
+            /* TODO: parse the header elements */
+            
+            endline = strnstr(buf, kCrlf, len); /* Find end of line */
+        }
+    }
+
     return ret;
 }
