@@ -45,7 +45,7 @@ typedef struct verifyReq {
 } verifyReq;
 
 
-svcInfo certService = {
+static svcInfo certService = {
     .desc = "Certificate",
 
     /* Callbacks */
@@ -69,7 +69,7 @@ static int SetCertSubject(svcInfo* svc, certSvcInfo* certSvc)
         svc->certBufferSz, WOLFSSL_FILETYPE_ASN1);
     if (x509 == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "load X509 cert buffer failed\n");
-        return MEMORY_E;
+        return WOLFKM_BAD_MEMORY;
     }
     XLOG(WOLFKM_LOG_INFO, "loaded X509 cert buffer\n");
 
@@ -77,7 +77,7 @@ static int SetCertSubject(svcInfo* svc, certSvcInfo* certSvc)
     if (subject == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "get subject name failed\n");
         wolfSSL_X509_free(x509);
-        return MEMORY_E;
+        return WOLFKM_BAD_MEMORY;
     }
 
     certSvc->subjectStr[0] = '\0';
@@ -511,7 +511,7 @@ int wolfCertSvc_DoRequest(svcConn* conn)
         return WOLFKM_BAD_ARGS;
     }
 
-    XLOG(WOLFKM_LOG_INFO, "Got Request\n");
+    XLOG(WOLFKM_LOG_INFO, "Got Cert Request\n");
 
     /* verify input, let error fall down to send error */
     ret = VerifyHeader(conn, &type);
@@ -535,7 +535,7 @@ int wolfCertSvc_DoRequest(svcConn* conn)
         ret = GenerateError(conn, ret);
         if (ret < 0) {
             XLOG(WOLFKM_LOG_ERROR, "GenerateError failed: %d, closing\n", ret);
-            return -1; /* TODO: add error code */
+            return WOLFKM_BAD_ARGS;
         }
         XLOG(WOLFKM_LOG_INFO, "Generated Error response: %d\n", ret);
     }
@@ -543,13 +543,13 @@ int wolfCertSvc_DoRequest(svcConn* conn)
         /* success */
     }
 
-    ret = wolfKeyMgr_DoSend(conn);
+    ret = wolfKeyMgr_DoSend(conn, conn->request, conn->requestSz);
     /* send it, response is now in request buffer */
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoSend failed: %d\n", ret);
-        return -1; /* TODO: add error code */
+        XLOG(WOLFKM_LOG_ERROR, "Certificate DoSend failed: %d\n", ret);
+        return WOLFKM_BAD_SEND;
     }
-    XLOG(WOLFKM_LOG_INFO, "Sent Response\n");
+    XLOG(WOLFKM_LOG_INFO, "Sent Cert Response\n");
     return 0;
 }
 
@@ -562,7 +562,7 @@ int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
 
     certSvc = malloc(sizeof(*certSvc));
     if (certSvc == NULL) {
-        return MEMORY_E;
+        return WOLFKM_BAD_MEMORY;
     }
     memset(certSvc, 0, sizeof(*certSvc));
 
@@ -577,7 +577,6 @@ int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
 
     wc_ecc_init(&certSvc->eccKey);
     idx = 0;
-    /* TODO: Handle filetype PEM here */
     ret = wc_EccPrivateKeyDecode(svc->keyBuffer, &idx, &certSvc->eccKey, 
         svc->keyBufferSz);
     if (ret != 0) {
@@ -611,15 +610,15 @@ int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
 {
 #ifdef WOLFKM_CERT_SERVICE
     int ret;
-    char* listenPort = WOLFKM_DEFAULT_CERT_PORT;
+    char* listenPort = WOLFKM_CERTSVC_PORT;
 
-    ret = wolfKeyMgr_LoadKeyFile(&certService, WOLFKM_DEFAULT_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_DEFAULT_KEY_PASSWORD);
+    ret = wolfKeyMgr_LoadKeyFile(&certService, WOLFKM_CERTSVC_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_CERTSVC_KEY_PASSWORD);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading TLS key\n");
         return ret;
     }
 
-    ret = wolfKeyMgr_LoadCertFile(&certService, WOLFKM_DEFAULT_CERT, WOLFSSL_FILETYPE_PEM);
+    ret = wolfKeyMgr_LoadCertFile(&certService, WOLFKM_CERTSVC_CERT, WOLFSSL_FILETYPE_PEM);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading TLS certificate\n");
         return ret;
@@ -632,14 +631,14 @@ int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one listener,"
                                "already running?\n");
         wolfCertSvc_Cleanup();
-        return -1; /* TODO: Improve error code */
+        return WOLFKM_BAD_LISTENER;
     }
     /* thread setup */
     wolfKeyMgr_InitService(&certService, poolSize);
 
     return 0;
 #else
-    return -1; /* TODO: Improve error code */
+    return WOLFKM_NOT_COMPILED_IN;
 #endif
 }
 

@@ -28,10 +28,10 @@ extern "C" {
 
 #include "keymanager.h"
 
-#define WOLFKM_DEFAULT_CERT_PORT    "8118"
-#define WOLFKM_DEFAULT_KEY_PASSWORD "wolfssl"
-#define WOLFKM_DEFAULT_KEY          "./certs/test-key.pem"
-#define WOLFKM_DEFAULT_CERT         "./certs/test-cert.pem"
+#define WOLFKM_CERTSVC_PORT         "8118"
+#define WOLFKM_CERTSVC_KEY_PASSWORD "wolfssl"
+#define WOLFKM_CERTSVC_KEY          "./certs/test-key.pem"
+#define WOLFKM_CERTSVC_CERT         "./certs/test-cert.pem"
 
 enum CertServiceMisc {
     CERT_HEADER_SZ             =     4,        /* version (1), type(1), len(2) */

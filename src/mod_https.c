@@ -35,19 +35,19 @@ static const char* kCrlf = "\r\n";
 int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
 {
     int ret = 0;
-    char* req = buf, *endline, *last;
+    char* sec = buf, *endline, *last;
     word32 len = sz;
     word32 itemSz;
 
     if (req == NULL)  {
-        return BAD_FUNC_ARGS;
+        return WOLFKM_BAD_ARGS;
     }
 
     /* Method */
-    if (strncmp(req, kGET, strlen(kGET)) == 0) {
+    if (strncmp(sec, kGET, strlen(kGET)) == 0) {
         req->method = HTTP_METHOD_GET;
         itemSz = strlen(kGET) + 1; /* include space */
-        req += itemSz; len -= itemSz;
+        sec += itemSz; len -= itemSz;
         endline = strnstr(buf, kCrlf, len); /* Find end of line */
         if (endline == NULL) {
             return HTTP_ERROR_EXPECTED_CRLF;
@@ -56,18 +56,18 @@ int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
 
         /* HTTP Header Version */
         /* locate last space */
-        last = strrchr(req, ' ');
+        last = strrchr(sec, ' ');
         if (last) {
             req->version = last + 1;
             *last = '\0';
         }
         /* Set URI */
-        req->uri = req;
-        req = endline+2;
-        len = (word32)req - buf;
+        req->uri = sec;
+        sec = endline+2;
+        len = (word32)sec - (word32)buf;
 
         /* Parse headers */
-        endline = strnstr(req, kCrlf, len); /* Find end of line */
+        endline = strnstr(sec, kCrlf, len); /* Find end of line */
         while (endline) {
             /* TODO: parse the header elements */
             

@@ -779,7 +779,7 @@ static int InitServerTLS(svcInfo* svc)
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
     if (sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context\n");
-        return MEMORY_E;
+        return WOLFKM_BAD_MEMORY;
     }
     wolfSSL_SetIORecv(sslCtx, wolfsslRecvCb);
     wolfSSL_SetIOSend(sslCtx, wolfsslSendCb);
@@ -808,12 +808,15 @@ static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
               struct sockaddr* a, int slen, void* p)
 {
     static int lastThread = -1;       /* last used thread ID */
+    svcInfo* svc = (svcInfo*)p;
 
-    int  currentId = (lastThread + 1) % threadPoolSize;    /* round robin */
-    char w = 'w';    /* send wakeup flag */
+    /* TODO: Move the thread info into svcInfo */
+
+    int  currentId = (lastThread + 1) % threadPoolSize; /* round robin */
+    char w = 'w'; /* send wakeup flag */
 
     eventThread* thread = threads + currentId;
-    connItem*    item = ConnItemNew((svcInfo*)p);
+    connItem*    item = ConnItemNew(svc);
 
     if (item == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to process accept request, low memory\n");
@@ -1067,7 +1070,7 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
     threads = calloc(numThreads, sizeof(eventThread));
     if (threads == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't allocate thread pool\n");
-        return MEMORY_E;
+        return WOLFKM_BAD_MEMORY;
     }
 
     /* pre allocate pool memory */
@@ -1115,22 +1118,22 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
 }
 
 /* return sent bytes or < 0 on error */
-int wolfKeyMgr_DoSend(svcConn* conn)
+int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz)
 {
     int ret = -1;
 
     if (usingTLS == 0) {
-        ret = evbuffer_add( bufferevent_get_output(conn->stream),
-                            conn->request, conn->requestSz);
-    } else if (conn->ssl) {
-        ret = wolfSSL_write(conn->ssl,
-                            conn->request, conn->requestSz);
+        ret = evbuffer_add( bufferevent_get_output(conn->stream), resp, respSz);
+    }
+    else if (conn->ssl) {
+        ret = wolfSSL_write(conn->ssl, resp, respSz);
         if (ret < 0) {
             int err = wolfSSL_get_error(conn->ssl, 0);
             XLOG(WOLFKM_LOG_ERROR, "wolfSSL_write err = %s",
                                  wolfSSL_ERR_reason_error_string(err));
         }
-    } else {
+    }
+    else {
        XLOG(WOLFKM_LOG_ERROR, "DoSend() usingTLS but no SSL object");
        ret = -1;
     }
@@ -1159,14 +1162,14 @@ int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
 
     if (fileName == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "file name is null\n");
-        return -1; /* TODO: Improve error code */
+        return WOLFKM_BAD_ARGS;
     }
 
     tmpFile = fopen(fileName, "rb");
     if (tmpFile == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "file %s can't be opened for reading\n",
                             fileName);
-        return -1; /* TODO: Improve error code */
+        return WOLFKM_BAD_FILE;
     }
 
     fseek(tmpFile, 0, SEEK_END);
@@ -1179,7 +1182,7 @@ int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
             *buffer = (byte*)malloc(fileSz+1);
             if (*buffer == NULL) {
                 fclose(tmpFile);
-                return -1; /* TODO: Improve error code */
+                return WOLFKM_BAD_MEMORY;
             }
         }
     }
@@ -1192,7 +1195,7 @@ int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
     if (buffer && bytesRead == 0) {
         XLOG(WOLFKM_LOG_ERROR, "file %s can't be read\n", fileName);
         free(*buffer); *buffer = NULL;
-        return -1; /* TODO: Improve error code */
+        return WOLFKM_BAD_FILE;
     }
 
     return 0;
@@ -1217,7 +1220,7 @@ int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, con
         XLOG(WOLFKM_LOG_ERROR, "Can't convert Key file %s from PEM to DER: %d\n",
             fileName, ret);
         free(svc->keyBuffer); svc->keyBuffer = NULL;
-        return -1; /* TODO: Improve error code */
+        return WOLFKM_BAD_KEY;
     }
     svc->keyBufferSz = ret;
 
@@ -1243,7 +1246,7 @@ int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType)
             XLOG(WOLFKM_LOG_ERROR, "Can't convert file %s from PEM to DER: %d\n", 
                 fileName, ret);
             free(svc->keyBuffer); svc->keyBuffer = NULL;
-            return -1; /* TODO: Improve error code */
+            return WOLFKM_BAD_CERT;
         }
         svc->certBufferSz = ret;
     }

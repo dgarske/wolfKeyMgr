@@ -154,7 +154,7 @@ int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct eve
 int wolfKeyMgr_InitService(svcInfo* svc, int numThreads);
 void wolfKeyMgr_FreeListeners(void);
 
-int wolfKeyMgr_DoSend(svcConn* conn);
+int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz);
 
 int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
 int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, const char* password);

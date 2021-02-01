@@ -165,6 +165,8 @@ int main(int argc, char** argv)
 
     /********** Certificate Service **********/
     wolfCertSvc_Init(mainBase, poolSize);
+    /********** ETSI Service **********/
+    wolfEtsiSvc_Init(mainBase, poolSize);
 
     /* SIGINT handler */
     signalEvent = event_new(mainBase, SIGINT, EV_SIGNAL|EV_PERSIST, 
@@ -194,6 +196,7 @@ exit:
     wolfKeyMgr_FreeListeners();
 
     wolfCertSvc_Cleanup();
+    wolfEtsiSvc_Cleanup();
     if (signalEvent) event_del(signalEvent);
     if (mainBase) event_base_free(mainBase);
     wolfSSL_Cleanup();

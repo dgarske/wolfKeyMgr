@@ -112,7 +112,7 @@ LIB_SOCKET_NSL
 
 # Certificate Service
 AC_ARG_ENABLE([certsvc],
-    [AS_HELP_STRING([--enable-certsvc],[Enable the certificate service (default: enabled)])],
+    [AS_HELP_STRING([--enable-certsvc],[Enable the Certificate service (default: enabled)])],
     [ ENABLED_CERT_SERVICE=$enableval ],
     [ ENABLED_CERT_SERVICE=yes ]
     )
@@ -120,6 +120,18 @@ AC_ARG_ENABLE([certsvc],
 if test "x$ENABLED_CERT_SERVICE" = "xyes"
 then
     CFLAGS="$CFLAGS -DWOLFKM_CERT_SERVICE"
+fi
+
+# ETSI Service
+AC_ARG_ENABLE([etsisvc],
+    [AS_HELP_STRING([--enable-etsisvc],[Enable the ETSI key service (default: enabled)])],
+    [ ENABLED_ETSI_SERVICE=$enableval ],
+    [ ENABLED_ETSI_SERVICE=yes ]
+    )
+
+if test "x$ENABLED_ETSI_SERVICE" = "xyes"
+then
+    CFLAGS="$CFLAGS -DWOLFKM_ETSI_SERVICE"
 fi
 
 

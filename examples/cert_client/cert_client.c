@@ -116,8 +116,8 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
     byte     answer = 0;
 
     WOLFSSL_EVP_PKEY* public = NULL;
-    WOLFSSL_X509*    x509 = wolfSSL_X509_load_certificate_file(WOLFKM_DEFAULT_CERT,
-                                                              SSL_FILETYPE_PEM);
+    WOLFSSL_X509*    x509 = wolfSSL_X509_load_certificate_file(
+            WOLFKM_CERTSVC_CERT, WOLFSSL_FILETYPE_PEM);
     /* write header */
     tmp[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
     tmp[CERT_HEADER_TYPE_OFFSET]    = VERIFY_REQUEST;
@@ -126,13 +126,13 @@ static int DoVerifyRequest(const void* msg, word32 msgSz, byte* signature,
 
     if (x509 == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to convert cert %s to x509\n",
-                                                    WOLFKM_DEFAULT_CERT);
+                                                    WOLFKM_CERTSVC_CERT);
         return -1;
     }
     public = wolfSSL_X509_get_pubkey(x509);
     if (public == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to get pub key from  %s\n",
-                                                         WOLFKM_DEFAULT_CERT);
+                                                         WOLFKM_CERTSVC_CERT);
         return -1;
     }
 
@@ -336,17 +336,17 @@ static int DoOurVerify(const void* msg, word32 msgSz, byte* signature,
     byte             hash[SHA256_DIGEST_SIZE];
     ecc_key          verifyKey;
     WOLFSSL_EVP_PKEY* public = NULL;
-    WOLFSSL_X509*     x509 = wolfSSL_X509_load_certificate_file(WOLFKM_DEFAULT_CERT,
+    WOLFSSL_X509*     x509 = wolfSSL_X509_load_certificate_file(WOLFKM_CERTSVC_CERT,
                                                               SSL_FILETYPE_PEM);
     if (x509 == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to convert cert %s to x509\n",
-                                                    WOLFKM_DEFAULT_CERT);
+                                                    WOLFKM_CERTSVC_CERT);
         return -1;
     }
     public = wolfSSL_X509_get_pubkey(x509);
     if (public == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to get pub key from  %s\n",
-                                                         WOLFKM_DEFAULT_CERT);
+                                                         WOLFKM_CERTSVC_CERT);
         return -1;
     }
 
@@ -355,7 +355,7 @@ static int DoOurVerify(const void* msg, word32 msgSz, byte* signature,
                              &verifyKey);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to import ecc key from  %s\n",
-                                                            WOLFKM_DEFAULT_CERT);
+                                                            WOLFKM_CERTSVC_CERT);
         return -1;
     }
 
@@ -515,7 +515,7 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     strncpy(reqCert.subject.commonName, "todd user", CTC_NAME_SIZE);
     strncpy(reqCert.subject.email, "todd@user.com", CTC_NAME_SIZE);
 
-    ret = wc_SetIssuer(&reqCert, WOLFKM_DEFAULT_CERT);
+    ret = wc_SetIssuer(&reqCert, WOLFKM_CERTSVC_CERT);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_INFO, "SetIssuer failed: %d\n", ret);
         wc_ecc_free(&reqKey);
@@ -614,7 +614,7 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
         XLOG(WOLFKM_LOG_ERROR, "wolfSSL_CertManagerNew failed\n");
         exit(EXIT_FAILURE);
     }
-    ret = wolfSSL_CertManagerLoadCA(cm, WOLFKM_DEFAULT_CERT, NULL);
+    ret = wolfSSL_CertManagerLoadCA(cm, WOLFKM_CERTSVC_CERT, NULL);
     if (ret != SSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "wolfSSL_CertManagerLoadCA failed: %d\n", ret);
         exit(EXIT_FAILURE);
@@ -673,10 +673,10 @@ static int InitClientTLS(void)
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
     if (sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context");
-        return MEMORY_E;
+        return WOLFKM_BAD_MEMORY;
     }
 
-    ret = wolfSSL_CTX_load_verify_locations(sslCtx, WOLFKM_DEFAULT_CERT, NULL);
+    ret = wolfSSL_CTX_load_verify_locations(sslCtx, WOLFKM_CERTSVC_CERT, NULL);
     if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS CA cert into context. Error: %s (%d)\n", 
             wolfSSL_ERR_reason_error_string(ret), ret);
@@ -695,7 +695,7 @@ static void Usage(void)
     printf("-s          Do signature request instead of cert request\n");
     printf("-e          Error mode, force error response\n");
     printf("-h <str>    Host to connect to, default %s\n", WOLFKM_DEFAULT_HOST);
-    printf("-p <num>    Port to connect to, default %s\n", WOLFKM_DEFAULT_CERT_PORT);
+    printf("-p <num>    Port to connect to, default %s\n", WOLFKM_CERTSVC_PORT);
     printf("-t <num>    Thread pool size (stress test), default  %d\n", 0);
     printf("-l <num>    Log Level, default %d\n", WOLFKM_DEFAULT_LOG_LEVEL);
     printf("-r <num>    Requests per thread, default %d\n",
@@ -718,7 +718,7 @@ int main(int argc, char** argv)
     WOLFSSL*    ssl = NULL;
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
 
-    port       = atoi(WOLFKM_DEFAULT_CERT_PORT);
+    port       = atoi(WOLFKM_CERTSVC_PORT);
 
 #ifdef DISABLE_SSL
     usingTLS = 0;    /* can only disable at build time */

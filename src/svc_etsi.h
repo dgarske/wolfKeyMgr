@@ -26,7 +26,18 @@
 extern "C" {
 #endif
 
+#define WOLFKM_ETSISVC_PORT         "8119"
+#define WOLFKM_ETSISVC_KEY_PASSWORD "wolfssl"
+#define WOLFKM_ETSISVC_KEY          "./certs/test-key.pem"
+#define WOLFKM_ETSISVC_CERT         "./certs/test-cert.pem"
 
+
+int wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize);
+void wolfEtsiSvc_Cleanup(void);
+
+int wolfEtsiSvc_WorkerInit(svcInfo* svc, void** svcCtx);
+int wolfEtsiSvc_DoRequest(svcConn* conn);
+void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcCtx);
 
 #ifdef __cplusplus
 }
