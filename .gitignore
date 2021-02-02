@@ -34,6 +34,7 @@ diff
 
 # applications
 examples/cert_client/cert_client
+examples/etsi_client/etsi_client
 src/wolfkm
 libtool
 src/options.h

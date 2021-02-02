@@ -286,10 +286,8 @@ static void ConnQueueInit(connQueue* cq)
 static void ConnItemFree(connItem* item)
 {
     pthread_mutex_lock(&itemLock);
-
-        item->next = freeConnItems;
-        freeConnItems = item;
-
+    item->next = freeConnItems;
+    freeConnItems = item;
     pthread_mutex_unlock(&itemLock);
 }
 
@@ -300,10 +298,8 @@ static connItem* ConnItemNew(svcInfo* svc)
     connItem* item;
 
     pthread_mutex_lock(&itemLock);
-
-        if ( (item = freeConnItems) )
-            freeConnItems = item->next;
-
+    if ( (item = freeConnItems) )
+        freeConnItems = item->next;
     pthread_mutex_unlock(&itemLock);
 
     if (item == NULL) {
@@ -318,14 +314,13 @@ static connItem* ConnItemNew(svcInfo* svc)
                 item[i].next = &item[i+1];
 
             pthread_mutex_lock(&itemLock);
-
-                item[WOLFKM_CONN_ITEMS-1].next = freeConnItems;
-                freeConnItems = &item[1];
-
+            item[WOLFKM_CONN_ITEMS-1].next = freeConnItems;
+            freeConnItems = &item[1];
             pthread_mutex_unlock(&itemLock);
         }
-        else
+        else {
             XLOG(WOLFKM_LOG_ERROR, "ConnItemNew pool malloc error\n");
+        }
     }
 
     if (item) {

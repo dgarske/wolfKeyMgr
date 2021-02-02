@@ -1,4 +1,4 @@
-/* cert_client.h
+/* etsi_client.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,8 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef CERT_CLIENT_H
-#define CERT_CLIENT_H
+#ifndef ETSI_CLIENT_H
+#define ETSI_CLIENT_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,4 +37,4 @@ extern "C" {
 }
 #endif
 
-#endif /* CERT_CLIENT_H */
+#endif /* ETSI_CLIENT_H */

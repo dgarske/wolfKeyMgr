@@ -43,6 +43,7 @@ enum  {
     WOLFKM_BAD_CERT          = -1005,
     WOLFKM_BAD_SEND          = -1006,
     WOLFKM_BAD_LISTENER      = -1007,
+    WOLFKM_NOT_COMPILED_IN   = -1008,
     WOLFKM_BAD_HEADER_SZ     = -1100,
     WOLFKM_BAD_VERSION       = -1101,
     WOLFKM_BAD_REQUEST_TYPE  = -1102,
