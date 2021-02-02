@@ -48,7 +48,7 @@ int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
         req->method = HTTP_METHOD_GET;
         itemSz = strlen(kGET) + 1; /* include space */
         sec += itemSz; len -= itemSz;
-        endline = strnstr(buf, kCrlf, len); /* Find end of line */
+        endline = strnstr(sec, kCrlf, len); /* Find end of line */
         if (endline == NULL) {
             return HTTP_ERROR_EXPECTED_CRLF;
         }

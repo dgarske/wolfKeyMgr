@@ -221,9 +221,7 @@ void wolfKeyMgr_ShowStats(void)
     double avgResponse = 0.0f;
 
     pthread_mutex_lock(&globalStats.lock);
-
-        local = globalStats;
-
+    local = globalStats;
     pthread_mutex_unlock(&globalStats.lock);
 
     /* adjust max conncurrent since now per thread */
