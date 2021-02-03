@@ -61,6 +61,70 @@ static const char kHttpServerMsg[] =
     "</html>\r\n";
 
 
+static int wolfEtsiSvc_GenerateKey(int pkType)
+{
+    int ret;
+    ecc_key eccKey;
+    WC_RNG rng;
+    byte eccPubKeyBuf[ECC_BUFSIZE], eccPrivKeyBuf[ECC_BUFSIZE];
+    word32 eccPubKeyLen, eccPrivKeyLen;
+
+    /* Init */
+    wc_InitRng(&rng);
+
+    /* Generate key */
+    wc_ecc_init(&eccKey);
+    ret = wc_ecc_make_key_ex(&rng, 32, &eccKey, ECC_CURVE_DEF);
+    if(ret != 0) {
+        printf("ECC Make Key Failed! %d\n", ret);
+    }
+
+    /* Display public key data */
+    eccPubKeyLen = ECC_BUFSIZE;
+    ret = wc_ecc_export_x963(&eccKey, eccPubKeyBuf, &eccPubKeyLen);
+    if (ret != 0) {
+        printf("ECC public key x963 export failed! %d\n", ret);
+        ret = EXIT_FAILURE;
+        goto exit;
+    }
+    printf("ECC Public Key: Len %d\n", eccPubKeyLen);
+    hexdump(eccPubKeyBuf, eccPubKeyLen, 16);
+
+    /* Display private key data */
+    eccPrivKeyLen = ECC_BUFSIZE;
+    ret = wc_ecc_export_private_only(&eccKey, eccPrivKeyBuf, &eccPrivKeyLen);
+    if (ret != 0) {
+        printf("ECC private key export failed! %d\n", ret);
+        ret = EXIT_FAILURE;
+        goto exit;
+    }
+    printf("ECC Private Key: Len %d\n", eccPrivKeyLen);
+    hexdump(eccPrivKeyBuf, eccPrivKeyLen, 16);
+
+    wc_ecc_free(&eccKey);
+    wc_FreeRng(&rng);
+
+    return ret;
+}
+
+static int wolfEtsiSvc_AsymPackageA(void)
+{
+    /* Version 2 (int 1) */
+    
+    /* privateKeyAlgorithm shall be set to the key pair algorithm identifier */
+    /* DHE - { 1 2 840 10046 2 1 } */
+    parameter encoding: DomainParameters
+    private key encoding: INTEGER
+    public key encoding: INTEGER
+
+    /* ECDHE - { 1 3 132 1 12 } */
+    parameter encoding: ECParameters
+    private key encoding: ECPrivateKey
+    public key encoding: ECPoint
+
+}
+
+
 /* the key request handler */
 int wolfEtsiSvc_DoRequest(svcConn* conn)
 {

@@ -86,10 +86,10 @@ $ sudo make install
 2. Install wolfssl version 3.4.2+
 
 ```sh
-$ ./configure --enable-certservice --enable-des3
+$ ./configure --enable-certservice --enable-des3 CFLAGS="-DWOLFSSL_DH_EXTRA"
 $ make
 $ make check   # (optional, but highly recommended)
-    $ sudo make install
+$ sudo make install
 ```
 
 3. Building on *nix from git repository
