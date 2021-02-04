@@ -332,12 +332,12 @@ static int DoOurVerify(const void* msg, word32 msgSz, byte* signature,
 {
     int              ret  = -1;
     int              stat = -1;
-    Sha256           sha256;
-    byte             hash[SHA256_DIGEST_SIZE];
+    wc_Sha256        sha256;
+    byte             hash[WC_SHA256_DIGEST_SIZE];
     ecc_key          verifyKey;
     WOLFSSL_EVP_PKEY* public = NULL;
     WOLFSSL_X509*     x509 = wolfSSL_X509_load_certificate_file(WOLFKM_CERTSVC_CERT,
-                                                              SSL_FILETYPE_PEM);
+                                                              WOLFSSL_FILETYPE_PEM);
     if (x509 == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Unable to convert cert %s to x509\n",
                                                     WOLFKM_CERTSVC_CERT);
@@ -476,12 +476,13 @@ static int DoCertRequest(char* savePem, char* dumpFile, SOCKET_T sockfd,
     int     ret;
     int     pemSz;
     Cert    reqCert;
-    RNG     rng;
+    WC_RNG  rng;
     ecc_key reqKey;
     byte    tmp[4096];
     byte*   request = tmp;  /* use to build header in front */
     byte    pem[4096];
     int     requestSz = 0;
+    
     int     sent = 0;
     FILE*   pemFile = NULL;
     WOLFSSL_CERT_MANAGER* cm;

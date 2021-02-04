@@ -26,7 +26,7 @@
 typedef struct certSvcInfo {
     int     maxSigns;  /* max b4 re-init */
     int     signCount; /* per thread signing count */
-    RNG     rng;       /* per thread rng */
+    WC_RNG  rng;       /* per thread rng */
     ecc_key eccKey;    /* per thread ecc key */
 
     /* Subject for certs */
@@ -163,10 +163,10 @@ static int ParseVerifyRequest(byte* request, int requestSz, verifyReq* vr)
 static int GenerateVerify(svcConn* conn)
 {
     int    ret;
-    Sha256 sha256;
+    wc_Sha256 sha256;
     int    stat   = 0;
     word32 outlen = 1;
-    byte   hash[SHA256_DIGEST_SIZE];
+    byte   hash[WC_SHA256_DIGEST_SIZE];
     verifyReq vr;
     ecc_key verifyKey;
 
@@ -250,8 +250,8 @@ static int GenerateSign(svcConn* conn)
 {
     int    ret;
     word32 outlen = sizeof(conn->request);
-    Sha256 sha256;
-    byte   hash[SHA256_DIGEST_SIZE];
+    wc_Sha256 sha256;
+    byte   hash[WC_SHA256_DIGEST_SIZE];
 
     /* we put response into request buffer since we already have it */
     byte* request   = conn->request;

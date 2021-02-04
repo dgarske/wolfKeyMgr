@@ -101,6 +101,7 @@ static int wolfEtsiSvc_GenerateKey(int pkType)
     printf("ECC Private Key: Len %d\n", eccPrivKeyLen);
     hexdump(eccPrivKeyBuf, eccPrivKeyLen, 16);
 
+exit:
     wc_ecc_free(&eccKey);
     wc_FreeRng(&rng);
 
@@ -112,15 +113,17 @@ static int wolfEtsiSvc_AsymPackageA(void)
     /* Version 2 (int 1) */
     
     /* privateKeyAlgorithm shall be set to the key pair algorithm identifier */
-    /* DHE - { 1 2 840 10046 2 1 } */
+    /* DHE - { 1 2 840 10046 2 1 }
     parameter encoding: DomainParameters
     private key encoding: INTEGER
     public key encoding: INTEGER
+    */
 
-    /* ECDHE - { 1 3 132 1 12 } */
+    /* ECDHE - { 1 3 132 1 12 }
     parameter encoding: ECParameters
     private key encoding: ECPrivateKey
     public key encoding: ECPoint
+    */
 
 }
 
