@@ -606,7 +606,7 @@ void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx)
 #endif /* WOLFKM_CERT_SERVICE */
 
 
-int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
+svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
 {
 #ifdef WOLFKM_CERT_SERVICE
     int ret;
@@ -615,13 +615,13 @@ int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
     ret = wolfKeyMgr_LoadKeyFile(&certService, WOLFKM_CERTSVC_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_CERTSVC_KEY_PASSWORD);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading TLS key\n");
-        return ret;
+        return NULL;
     }
 
     ret = wolfKeyMgr_LoadCertFile(&certService, WOLFKM_CERTSVC_CERT, WOLFSSL_FILETYPE_PEM);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading TLS certificate\n");
-        return ret;
+        return NULL;
     }
 
     /* setup listening events, bind before .pid file creation */
@@ -631,14 +631,14 @@ int wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one listener,"
                                "already running?\n");
         wolfCertSvc_Cleanup();
-        return WOLFKM_BAD_LISTENER;
+        return NULL;
     }
     /* thread setup */
     wolfKeyMgr_InitService(&certService, poolSize);
 
-    return 0;
+    return &certService;
 #else
-    return WOLFKM_NOT_COMPILED_IN;
+    return NULL;
 #endif
 }
 

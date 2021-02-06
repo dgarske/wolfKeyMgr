@@ -43,6 +43,7 @@ static svcInfo etsiService = {
 
 typedef struct etsiSvcInfo {
     HttpReq req;
+    WC_RNG  rng;
 } etsiSvcInfo;
 
 static const char kHttpServerMsg[] =
@@ -61,20 +62,17 @@ static const char kHttpServerMsg[] =
     "</html>\r\n";
 
 
-static int wolfEtsiSvc_GenerateKey(int pkType)
+static int wolfEtsiSvc_GenerateEccKey(etsiSvcInfo* etsiSvc, 
+    byte* out, word32* outSz)
 {
     int ret;
     ecc_key eccKey;
-    WC_RNG rng;
     byte eccPubKeyBuf[ECC_BUFSIZE], eccPrivKeyBuf[ECC_BUFSIZE];
     word32 eccPubKeyLen, eccPrivKeyLen;
 
-    /* Init */
-    wc_InitRng(&rng);
-
     /* Generate key */
     wc_ecc_init(&eccKey);
-    ret = wc_ecc_make_key_ex(&rng, 32, &eccKey, ECC_CURVE_DEF);
+    ret = wc_ecc_make_key_ex(&etsiSvc->rng, 32, &eccKey, ECC_CURVE_DEF);
     if(ret != 0) {
         printf("ECC Make Key Failed! %d\n", ret);
     }
@@ -88,7 +86,7 @@ static int wolfEtsiSvc_GenerateKey(int pkType)
         goto exit;
     }
     printf("ECC Public Key: Len %d\n", eccPubKeyLen);
-    hexdump(eccPubKeyBuf, eccPubKeyLen, 16);
+    WOLFSSL_BUFFER(eccPubKeyBuf, eccPubKeyLen);
 
     /* Display private key data */
     eccPrivKeyLen = ECC_BUFSIZE;
@@ -99,17 +97,20 @@ static int wolfEtsiSvc_GenerateKey(int pkType)
         goto exit;
     }
     printf("ECC Private Key: Len %d\n", eccPrivKeyLen);
-    hexdump(eccPrivKeyBuf, eccPrivKeyLen, 16);
+    WOLFSSL_BUFFER(eccPrivKeyBuf, eccPrivKeyLen);
 
 exit:
     wc_ecc_free(&eccKey);
-    wc_FreeRng(&rng);
-
     return ret;
 }
 
-static int wolfEtsiSvc_AsymPackageA(void)
+static int wolfEtsiSvc_GetAsymPackage(svcConn* conn, etsiSvcInfo* etsiSvc)
 {
+    int ret;
+
+    conn->requestSz = sizeof(conn->request);
+    ret = wolfEtsiSvc_GenerateEccKey(etsiSvc, (byte*)conn->request, &conn->requestSz);
+
     /* Version 2 (int 1) */
     
     /* privateKeyAlgorithm shall be set to the key pair algorithm identifier */
@@ -125,6 +126,7 @@ static int wolfEtsiSvc_AsymPackageA(void)
     public key encoding: ECPoint
     */
 
+   return ret;
 }
 
 
@@ -142,16 +144,22 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
     XLOG(WOLFKM_LOG_INFO, "Got ETSI Request\n");
 
     ret = wolfKeyMgr_HttpParse(&etsiSvc->req, (char*)conn->request, conn->requestSz);
-
-
-    /* Send Response */
-    ret = wolfKeyMgr_DoSend(conn, (byte*)kHttpServerMsg, strlen(kHttpServerMsg));
-    /* send it, response is now in request buffer */
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
-        return WOLFKM_BAD_SEND;
+        return WOLFKM_BAD_REQUEST_TYPE;
     }
-    XLOG(WOLFKM_LOG_INFO, "Sent ETSI Response\n");
+    
+    /* Send Response */
+    ret = wolfEtsiSvc_GetAsymPackage(conn, etsiSvc);
+    if (ret == 0) {
+        ret = wolfKeyMgr_DoSend(conn, (byte*)kHttpServerMsg, strlen(kHttpServerMsg));
+        /* send it, response is now in request buffer */
+        if (ret < 0) {
+            XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
+            return WOLFKM_BAD_SEND;
+        }
+        XLOG(WOLFKM_LOG_INFO, "Sent ETSI Response\n");
+    }
     return 0;
 }
 
@@ -165,6 +173,9 @@ int wolfEtsiSvc_WorkerInit(svcInfo* svc, void** svcCtx)
     }
     memset(etsiSvc, 0, sizeof(*etsiSvc));
 
+    /* Init RNG for each worker */
+    wc_InitRng(&etsiSvc->rng);
+
     *svcCtx = etsiSvc;
 
     return ret;
@@ -177,13 +188,15 @@ void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcCtx)
     if (svc == NULL || svcCtx == NULL)
         return;
 
+    wc_FreeRng(&etsiSvc->rng);
+
     free(etsiSvc);
 }
 
 #endif /* WOLFKM_ETSI_SERVICE */
 
 
-int wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
+svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
 {
 #ifdef WOLFKM_ETSI_SERVICE
     int ret;
@@ -192,13 +205,13 @@ int wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
     ret = wolfKeyMgr_LoadKeyFile(&etsiService, WOLFKM_ETSISVC_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_ETSISVC_KEY_PASSWORD);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS key\n");
-        return ret;
+        return NULL;
     }
 
     ret = wolfKeyMgr_LoadCertFile(&etsiService, WOLFKM_ETSISVC_CERT, WOLFSSL_FILETYPE_PEM);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS certificate\n");
-        return ret;
+        return NULL;
     }
 
     /* setup listening events, bind before .pid file creation */
@@ -208,14 +221,14 @@ int wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one ETSI listener,"
                                "already running?\n");
         wolfEtsiSvc_Cleanup();
-        return WOLFKM_BAD_LISTENER;
+        return NULL;
     }
     /* thread setup */
     wolfKeyMgr_InitService(&etsiService, poolSize);
 
-    return 0;
+    return &etsiService;
 #else
-    return WOLFKM_NOT_COMPILED_IN;
+    return NULL;
 #endif
 }
 

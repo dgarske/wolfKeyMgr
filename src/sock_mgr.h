@@ -51,14 +51,9 @@ extern "C" {
 /* program constants */
 #define MAX_SOCKADDR_SZ   32
 #define MAX_REQUEST_SIZE (16*1024)
+#define MAX_SERVICES      3
 
 /* program types */
-
-/* signal processing holder */
-typedef struct {
-    struct event_base* base;       /* base event that setup signal handler */
-    struct event*      ev;         /* actual signal event */
-} signalArg;
 
 /* forward declarations */
 typedef struct connItem connItem;
@@ -71,6 +66,18 @@ typedef int  (*svcRequestFunc)(svcConn*);
 typedef int  (*initThreadFunc)(svcInfo*, void**);
 typedef void (*freeThreadFunc)(svcInfo*, void*);
 
+/* overall statistics */
+typedef struct {
+    pthread_mutex_t lock;                   /* stats lock, only global uses */
+    uint64_t        totalConnections;       /* total connections ever */
+    uint64_t        completedRequests;      /* completed requests ever */
+    uint32_t        timeouts;               /* total requests that timed out */
+    uint32_t        currentConnections;     /* current active connections */
+    uint32_t        maxConcurrent;          /* max concurrent connections */
+    time_t          began;                  /* time we started */
+    double          responseTime;           /* total response time */
+} stats;
+
 struct svcInfo {
     const char* desc;
 
@@ -80,11 +87,31 @@ struct svcInfo {
     freeThreadFunc  freeThreadCb;
     
     /* TLS certificate / key - As DER/ASN.1*/
+    int         noTLS;
     byte*       keyBuffer;
     byte*       certBuffer;
     word32      keyBufferSz;
     word32      certBufferSz;
+
+    /* internal members */
+    struct timeval  readto;         /* our event timeout */
+    int             initCount;      /* number of worker threads done setting up */
+    pthread_mutex_t initLock;       /* for initCount */
+    pthread_cond_t  initCond;       /* for initCount */
+    eventThread*    threads;        /* worker thread pool */
+    int             threadPoolSize; /* our reference here */
+    connItem*       freeConnItems;  /* free connection item list */
+    pthread_mutex_t itemLock;       /* for freeItems */
+    stats           globalStats;    /* global (all threads) total stats */
+    WOLFSSL_CTX*    sslCtx;         /* ssl context factory */
 };
+
+/* signal processing holder */
+typedef struct {
+    struct event_base* base;       /* base event that setup signal handler */
+    struct event*      ev;         /* actual signal event */
+    svcInfo*           svc[MAX_SERVICES];
+} signalArg;
 
 /* each connection item */
 struct connItem {
@@ -102,6 +129,7 @@ struct svcConn {
     svcInfo*            svc;
     void*               svcCtx;
     double              start;      /* response processing time start */
+    eventThread*        me;
     svcConn*            next;       /* for free list */
 };
 
@@ -111,20 +139,6 @@ typedef struct {
     connItem*       tail;     /* tail of queue */
     pthread_mutex_t lock;     /* queue lock */
 } connQueue;
-
-
-/* overall statistics */
-typedef struct {
-    pthread_mutex_t lock;                   /* stats lock, only global uses */
-    uint64_t        totalConnections;       /* total connections ever */
-    uint64_t        completedRequests;      /* completed requests ever */
-    uint32_t        timeouts;               /* total requests that timed out */
-    uint32_t        currentConnections;     /* current active connections */
-    uint32_t        maxConcurrent;          /* max concurrent connections */
-    time_t          began;                  /* time we started */
-    double          responseTime;           /* total response time */
-} stats;
-
 
 /* each thread in the pool has some unique data */
 struct eventThread {
@@ -136,6 +150,7 @@ struct eventThread {
     int                notifySend;      /* sending  end of notification pipe */
     svcInfo*           svc;
     void*              svcCtx;
+    svcConn*           freeSvcConns;    /* per thread conn list */
 };
 
 
@@ -145,9 +160,9 @@ void wolfKeyMgr_SetMaxFiles(int max);
 void wolfKeyMgr_SetCore(void);
 void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg);
 int  wolfKeyMgr_SigIgnore(int sig);
-void wolfKeyMgr_ShowStats(void);
+void wolfKeyMgr_ShowStats(svcInfo* svc);
 FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid);
-void wolfKeyMgr_SetTimeout(struct timeval);
+void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to);
 int wolfKeyMgr_GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz);
 
 int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct event_base* mainBase);

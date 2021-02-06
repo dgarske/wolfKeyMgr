@@ -59,7 +59,7 @@ enum CertMessageTypes {
 
 
 
-int wolfCertSvc_Init(struct event_base* mainBase, int poolSize);
+svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize);
 void wolfCertSvc_Cleanup(void);
 
 int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx);

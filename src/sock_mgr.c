@@ -39,36 +39,17 @@
 
 #include "keymanager.h"
 
-/* file locals */
-static struct timeval readto;     /* our event timeout */
-static int initCount = 0;         /* number of worker threads done setting up */
-static pthread_mutex_t initLock;  /* for initCount */
-static pthread_cond_t  initCond;  /* for initCount */
-
-static eventThread* threads;         /* worker thread pool */
-static int          threadPoolSize;  /* our reference here */
-
-static connItem*       freeConnItems = NULL;    /* free connection item list */
-static pthread_mutex_t itemLock;                /* for freeItems */
-
-static __thread stats threadStats;    /* per thread stats, doesn't use lock */
-static stats globalStats;             /* global (all threads) total stats */
-
-static WOLFSSL_CTX* sslCtx;             /* ssl context factory */
-static int usingTLS = 1;                /* ssl is on by default */
-
-static __thread svcConn* freeSvcConns = NULL;  /* per thread conn list */
+/* per thread stats, doesn't use lock */
+static __thread stats threadStats;
 
 
 /* listener list */
 typedef struct listener listener;
 struct listener {
-    struct evconnlistener* ev_listen;   /* event listener */
-    listener* next;                     /* next on list */
+    struct evconnlistener* ev_listen; /* event listener */
+    listener* next;                   /* next on list */
 };
-
-static listener* listenerList = NULL;  /* main list of listeners */
-
+static listener* listenerList = NULL; /* main list of listeners */
 
 
 /* turn on TCP NODELAY for socket */
@@ -120,6 +101,33 @@ int wolfKeyMgr_GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t
     return ret;
 }
 
+void wolfKeyMgr_ServiceCleanup(svcInfo* svc)
+{
+    char c = 'c';   /* cancel */
+    int i;
+    if (svc == NULL)
+        return;
+
+    /* cancel each thread */
+    XLOG(WOLFKM_LOG_INFO, "Sending cancel to threads\n");
+    for (i = 0; i < svc->threadPoolSize; i++)
+        if (write(svc->threads[i].notifySend, &c, 1) != 1) {
+            XLOG(WOLFKM_LOG_ERROR, "Write to cancel thread notify failed\n");
+            return;
+        }
+
+    /* join each thread */
+    XLOG(WOLFKM_LOG_INFO, "Joining threads\n");
+    for (i = 0; i < svc->threadPoolSize; i++) {
+        int ret = pthread_join(svc->threads[i].tid, NULL);
+
+        XLOG(WOLFKM_LOG_DEBUG, "Join ret = %d\n", ret);
+    }
+
+    /* free custom resources */
+    wolfSSL_CTX_free(svc->sslCtx);
+}
+
 
 /* Our signal handler callback */
 void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
@@ -127,7 +135,6 @@ void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
     signalArg* sigArg = (signalArg*)arg;
     int        sigId = event_get_signal(sigArg->ev);
     int        i;
-    char       c = 'c';   /* cancel */
 
     if (sigId == SIGINT)
         XLOG(WOLFKM_LOG_INFO, "SIGINT handled.\n");
@@ -141,24 +148,9 @@ void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
     XLOG(WOLFKM_LOG_INFO, "Ending main thread loop\n");
     event_base_loopexit(sigArg->base, NULL);
 
-    /* cancel each thread */
-    XLOG(WOLFKM_LOG_INFO, "Sending cancel to threads\n");
-    for (i = 0; i < threadPoolSize; i++)
-        if (write(threads[i].notifySend, &c, 1) != 1) {
-            XLOG(WOLFKM_LOG_ERROR, "Write to cancel thread notify failed\n");
-            return;
-        }
-
-    /* join each thread */
-    XLOG(WOLFKM_LOG_INFO, "Joining threads\n");
-    for (i = 0; i < threadPoolSize; i++) {
-        int ret = pthread_join(threads[i].tid, NULL);
-
-        XLOG(WOLFKM_LOG_DEBUG, "Join ret = %d\n", ret);
+    for (i=0; i< MAX_SERVICES; i++) {
+        wolfKeyMgr_ServiceCleanup(sigArg->svc[i]);
     }
-
-    /* free custom resources */
-    wolfSSL_CTX_free(sslCtx);
 }
 
 /* Initialize all stats to zero, pre allocs may increment some counters */
@@ -176,7 +168,7 @@ static void InitStats(stats* myStats)
 
 
 /* Add to current per thread connection stats, handle max too */
-static inline void IncrementCurrentConnections(void)
+static inline void IncrementCurrentConnections(svcConn* conn)
 {
     threadStats.currentConnections++;
     if (threadStats.currentConnections > threadStats.maxConcurrent)
@@ -185,10 +177,10 @@ static inline void IncrementCurrentConnections(void)
 
 
 /* Add to total per thread connection stats */
-static inline void IncrementTotalConnections(void)
+static inline void IncrementTotalConnections(svcConn* conn)
 {
     threadStats.totalConnections++;
-    IncrementCurrentConnections();
+    IncrementCurrentConnections(conn);
 }
 
 
@@ -201,34 +193,37 @@ static inline void IncrementCompleted(svcConn* conn)
 
 
 /* Add to total per thread timeout stats */
-static inline void IncrementTimeouts(void)
+static inline void IncrementTimeouts(svcConn* conn)
 {
     threadStats.timeouts++;
 }
 
 
 /* Decrement current per thread connection stats */
-static inline void DecrementCurrentConnections(void)
+static inline void DecrementCurrentConnections(svcConn* conn)
 {
     threadStats.currentConnections--;
 }
 
 
 /* Show our statistics, log them */
-void wolfKeyMgr_ShowStats(void)
+void wolfKeyMgr_ShowStats(svcInfo* svc)
 {
     stats  local;
     double avgResponse = 0.0f;
 
-    pthread_mutex_lock(&globalStats.lock);
-    local = globalStats;
-    pthread_mutex_unlock(&globalStats.lock);
+    if (svc == NULL)
+        return;
+
+    pthread_mutex_lock(&svc->globalStats.lock);
+    local = svc->globalStats;
+    pthread_mutex_unlock(&svc->globalStats.lock);
 
     /* adjust max conncurrent since now per thread */
-    if (local.maxConcurrent < threadPoolSize)
+    if (local.maxConcurrent < svc->threadPoolSize)
         local.maxConcurrent = local.maxConcurrent ? 1 : 0;
     else 
-        local.maxConcurrent -= threadPoolSize - 1;
+        local.maxConcurrent -= svc->threadPoolSize - 1;
 
     if (local.responseTime > 0.0f && local.completedRequests > 0) {
         avgResponse = local.responseTime / local.completedRequests;
@@ -283,10 +278,10 @@ static void ConnQueueInit(connQueue* cq)
 /* put connection item back onto the free connection item list */
 static void ConnItemFree(connItem* item)
 {
-    pthread_mutex_lock(&itemLock);
-    item->next = freeConnItems;
-    freeConnItems = item;
-    pthread_mutex_unlock(&itemLock);
+    pthread_mutex_lock(&item->svc->itemLock);
+    item->next = item->svc->freeConnItems;
+    item->svc->freeConnItems = item;
+    pthread_mutex_unlock(&item->svc->itemLock);
 }
 
 
@@ -295,10 +290,10 @@ static connItem* ConnItemNew(svcInfo* svc)
 {
     connItem* item;
 
-    pthread_mutex_lock(&itemLock);
-    if ( (item = freeConnItems) )
-        freeConnItems = item->next;
-    pthread_mutex_unlock(&itemLock);
+    pthread_mutex_lock(&svc->itemLock);
+    if ( (item = svc->freeConnItems) )
+        svc->freeConnItems = item->next;
+    pthread_mutex_unlock(&svc->itemLock);
 
     if (item == NULL) {
         /* free list empty, add more items to the free list pool */
@@ -311,10 +306,10 @@ static connItem* ConnItemNew(svcInfo* svc)
             for (i = 1; i < WOLFKM_CONN_ITEMS; i++)
                 item[i].next = &item[i+1];
 
-            pthread_mutex_lock(&itemLock);
-            item[WOLFKM_CONN_ITEMS-1].next = freeConnItems;
-            freeConnItems = &item[1];
-            pthread_mutex_unlock(&itemLock);
+            pthread_mutex_lock(&svc->itemLock);
+            item[WOLFKM_CONN_ITEMS-1].next = svc->freeConnItems;
+            svc->freeConnItems = &item[1];
+            pthread_mutex_unlock(&svc->itemLock);
         }
         else {
             XLOG(WOLFKM_LOG_ERROR, "ConnItemNew pool malloc error\n");
@@ -374,7 +369,7 @@ static void ServiceConnFree(svcConn* conn)
         return;
 
     XLOG(WOLFKM_LOG_DEBUG, "Freeing Service Connection\n");
-    DecrementCurrentConnections();
+    DecrementCurrentConnections(conn);
 
     /* release per connection resources */
     if (conn->stream) {
@@ -388,8 +383,8 @@ static void ServiceConnFree(svcConn* conn)
     }
 
     /* push to fee list */
-    conn->next    = freeSvcConns;
-    freeSvcConns = conn;
+    conn->next    = conn->me->freeSvcConns;
+    conn->me->freeSvcConns = conn;
 }
 
 
@@ -399,8 +394,8 @@ static svcConn* ServiceConnNew(eventThread* me)
     svcInfo* svc = me->svc;
     svcConn* conn;
 
-    if ( (conn = freeSvcConns) )
-        freeSvcConns = conn->next;
+    if ( (conn = me->freeSvcConns) )
+        me->freeSvcConns = conn->next;
 
     if (conn == NULL) {
         /* free list empty, add more items to the free list pool */
@@ -413,8 +408,8 @@ static svcConn* ServiceConnNew(eventThread* me)
             for (i = 1; i < WOLFKM_CONN_ITEMS; i++)
                 conn[i].next = &conn[i+1];
 
-            conn[WOLFKM_CONN_ITEMS-1].next = freeSvcConns;
-            freeSvcConns = &conn[1];
+            conn[WOLFKM_CONN_ITEMS-1].next = me->freeSvcConns;
+            me->freeSvcConns = &conn[1];
         }
         else
             XLOG(WOLFKM_LOG_ERROR, "ServiceConnNew pool malloc error\n");
@@ -429,7 +424,8 @@ static svcConn* ServiceConnNew(eventThread* me)
         conn->requestSz = 0;
         conn->svc       = svc;
         conn->svcCtx    = me->svcCtx;
-        IncrementTotalConnections();
+        conn->me        = me;
+        IncrementTotalConnections(conn);
     }
 
     return conn;
@@ -452,16 +448,16 @@ static void WorkerExit(void* arg)
     XLOG(WOLFKM_LOG_INFO, "Worker thread exiting, tid = %ld\n",
                         (long)pthread_self());
     /* put per thread stats into global stats*/
-    pthread_mutex_lock(&globalStats.lock);
+    pthread_mutex_lock(&svc->globalStats.lock);
 
-    globalStats.totalConnections   += threadStats.totalConnections;
-    globalStats.completedRequests  += threadStats.completedRequests;
-    globalStats.timeouts           += threadStats.timeouts;
-    globalStats.currentConnections += threadStats.currentConnections;
-    globalStats.maxConcurrent      += threadStats.maxConcurrent;
-    globalStats.responseTime       += threadStats.responseTime;
+    svc->globalStats.totalConnections   += threadStats.totalConnections;
+    svc->globalStats.completedRequests  += threadStats.completedRequests;
+    svc->globalStats.timeouts           += threadStats.timeouts;
+    svc->globalStats.currentConnections += threadStats.currentConnections;
+    svc->globalStats.maxConcurrent      += threadStats.maxConcurrent;
+    svc->globalStats.responseTime       += threadStats.responseTime;
 
-    pthread_mutex_unlock(&globalStats.lock);
+    pthread_mutex_unlock(&svc->globalStats.lock);
 
     pthread_exit(NULL);
 }
@@ -475,7 +471,7 @@ static void EventCb(struct bufferevent* bev, short what, void* ctx)
     if (what & BEV_EVENT_TIMEOUT) {
         XLOG(WOLFKM_LOG_INFO, "Got timeout on connection, closing\n");
         ServiceConnFree(ctx);
-        IncrementTimeouts();
+        IncrementTimeouts(ctx);
         return;
     }
 
@@ -498,7 +494,7 @@ static int DoRead(struct bufferevent* bev, svcConn* conn)
 {
     int ret = 0;
 
-    if (usingTLS == 0) {
+    if (conn->svc->noTLS) {
         ret = evbuffer_remove(bufferevent_get_input(bev),
                               conn->request + conn->requestSz,
                               sizeof(conn->request) - conn->requestSz);
@@ -610,8 +606,8 @@ static void ThreadEventProcess(int fd, short which, void* arg)
             close(clientFd);  /* normally ServiceConnFree would close fd by stream
                                  but since stream is NULL, force it */
             return;
-        } else if (usingTLS) {
-            conn->ssl = wolfSSL_new(sslCtx);
+        } else if (!conn->svc->noTLS) {
+            conn->ssl = wolfSSL_new(conn->svc->sslCtx);
             if (conn->ssl == NULL) {
                 XLOG(WOLFKM_LOG_ERROR, "wolfSSL_New() failed\n");
                 ServiceConnFree(conn);
@@ -622,16 +618,17 @@ static void ThreadEventProcess(int fd, short which, void* arg)
         }
 
         bufferevent_setcb(conn->stream, ReadCb, NULL, EventCb, conn);
-        bufferevent_set_timeouts(conn->stream, &readto, NULL);
+        bufferevent_set_timeouts(conn->stream, &conn->svc->readto, NULL);
         bufferevent_enable(conn->stream, EV_READ|EV_WRITE);
     }
 }
 
 
 /* set our timeout on connections */
-void wolfKeyMgr_SetTimeout(struct timeval to)
+void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to)
 {
-    readto = to;
+    if (svc)
+        svc->readto = to;
 }
 
 
@@ -670,13 +667,13 @@ static void SetupThread(svcInfo* svc, eventThread* me)
 
 
 /* Signal Thread setup done and running */
-static void SignalSetup(void)
+static void SignalSetup(svcConn* conn)
 {
     /* signal ready */
-    pthread_mutex_lock(&initLock);
-        initCount++;
-        pthread_cond_signal(&initCond);
-    pthread_mutex_unlock(&initLock);
+    pthread_mutex_lock(&conn->svc->initLock);
+        conn->svc->initCount++;
+        pthread_cond_signal(&conn->svc->initCond);
+    pthread_mutex_unlock(&conn->svc->initLock);
 }
 
 
@@ -692,7 +689,7 @@ static void* WorkerEvent(void* arg)
 
     /* tell creator we're ready */
     me->tid = pthread_self();
-    SignalSetup();
+    SignalSetup(conn);
 
     /* start thread's loop */
     event_base_loop(me->threadBase, 0);
@@ -769,28 +766,28 @@ static int InitServerTLS(svcInfo* svc)
 {
     int ret;
 
-    sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
-    if (sslCtx == NULL) {
+    svc->sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
+    if (svc->sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context\n");
         return WOLFKM_BAD_MEMORY;
     }
-    wolfSSL_SetIORecv(sslCtx, wolfsslRecvCb);
-    wolfSSL_SetIOSend(sslCtx, wolfsslSendCb);
+    wolfSSL_SetIORecv(svc->sslCtx, wolfsslRecvCb);
+    wolfSSL_SetIOSend(svc->sslCtx, wolfsslSendCb);
 
 
-    ret = wolfSSL_CTX_use_certificate_buffer(sslCtx, svc->certBuffer,
+    ret = wolfSSL_CTX_use_certificate_buffer(svc->sslCtx, svc->certBuffer,
         svc->certBufferSz, WOLFSSL_FILETYPE_ASN1);
     if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS cert into context\n");
-        wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
+        wolfSSL_CTX_free(svc->sslCtx); svc->sslCtx = NULL;
         return ret;
     }
 
-    ret = wolfSSL_CTX_use_PrivateKey_buffer(sslCtx, svc->keyBuffer, 
+    ret = wolfSSL_CTX_use_PrivateKey_buffer(svc->sslCtx, svc->keyBuffer, 
         svc->keyBufferSz, WOLFSSL_FILETYPE_ASN1);
     if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "Can't load TLS key into context\n");
-        wolfSSL_CTX_free(sslCtx); sslCtx = NULL;
+        wolfSSL_CTX_free(svc->sslCtx); svc->sslCtx = NULL;
         return ret;
     }
     return 0;
@@ -805,10 +802,10 @@ static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
 
     /* TODO: Move the thread info into svcInfo */
 
-    int  currentId = (lastThread + 1) % threadPoolSize; /* round robin */
+    int  currentId = (lastThread + 1) % svc->threadPoolSize; /* round robin */
     char w = 'w'; /* send wakeup flag */
 
-    eventThread* thread = threads + currentId;
+    eventThread* thread = svc->threads + currentId;
     connItem*    item = ConnItemNew(svc);
 
     if (item == NULL) {
@@ -1054,14 +1051,14 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
     connItem*  item;
 
     /* pthread inits */
-    pthread_mutex_init(&initLock, NULL);
-    pthread_cond_init(&initCond, NULL);
-    pthread_mutex_init(&itemLock, NULL);
-    pthread_mutex_init(&globalStats.lock, NULL);
+    pthread_mutex_init(&svc->initLock, NULL);
+    pthread_cond_init(&svc->initCond, NULL);
+    pthread_mutex_init(&svc->itemLock, NULL);
+    pthread_mutex_init(&svc->globalStats.lock, NULL);
 
     /* get thread memory */
-    threads = calloc(numThreads, sizeof(eventThread));
-    if (threads == NULL) {
+    svc->threads = calloc(numThreads, sizeof(eventThread));
+    if (svc->threads == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't allocate thread pool\n");
         return WOLFKM_BAD_MEMORY;
     }
@@ -1069,13 +1066,13 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
     /* pre allocate pool memory */
     item = ConnItemNew(svc);
     ConnItemFree(item);
-    InitStats(&globalStats);   /* items above for pre alloc shouldn't count */
+    InitStats(&svc->globalStats);   /* items above for pre alloc shouldn't count */
 
     /* when we began */
-    globalStats.began = time(NULL);
+    svc->globalStats.began = time(NULL);
 
     /* save copies */
-    threadPoolSize = numThreads;
+    svc->threadPoolSize = numThreads;
 
     /* setup each thread */
     for (i = 0; i < numThreads; i++) {
@@ -1085,26 +1082,26 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
             return -1; /* TOOD: Add return code */
         }
 
-        threads[i].notifyRecv = fds[0];
-        threads[i].notifySend = fds[1];
-        SetupThread(svc, &threads[i]);
+        svc->threads[i].notifyRecv = fds[0];
+        svc->threads[i].notifySend = fds[1];
+        SetupThread(svc, &svc->threads[i]);
     }
 
     /* start threads */
     for (i = 0; i < numThreads; i++)
-        MakeWorker(WorkerEvent, &threads[i]);  /* event monitor */
+        MakeWorker(WorkerEvent, &svc->threads[i]);  /* event monitor */
 
     /* wait until each is ready */
-    pthread_mutex_lock(&initLock);
-        while (initCount < numThreads)
-            pthread_cond_wait(&initCond, &initLock);
-    pthread_mutex_unlock(&initLock);
+    pthread_mutex_lock(&svc->initLock);
+        while (svc->initCount < numThreads)
+            pthread_cond_wait(&svc->initCond, &svc->initLock);
+    pthread_mutex_unlock(&svc->initLock);
 
     /* setup ssl ctx */
 #ifdef DISABLE_SSL
-    usingTLS = 0;    /* build time only disable for now */
+    svc->noTLS = 1;    /* build time only disable for now */
 #endif
-    if (usingTLS)
+    if (!svc->noTLS)
         ret = InitServerTLS(svc);
 
     return ret;
@@ -1115,7 +1112,7 @@ int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz)
 {
     int ret = -1;
 
-    if (usingTLS == 0) {
+    if (conn->svc->noTLS) {
         ret = evbuffer_add( bufferevent_get_output(conn->stream), resp, respSz);
     }
     else if (conn->ssl) {

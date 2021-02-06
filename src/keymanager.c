@@ -58,6 +58,8 @@ int main(int argc, char** argv)
     struct event_base*      mainBase = NULL;    /* main thread's base  */
     signalArg               sigArg;
     FILE*                   pidF = 0;
+    svcInfo* certSvc = NULL;
+    svcInfo* etsiSvc = NULL;
 
     ourTimeout.tv_sec  = WOLFKM_DEFAULT_TIMEOUT;
     ourTimeout.tv_usec = 0;
@@ -158,21 +160,29 @@ int main(int argc, char** argv)
         XLOG(WOLFKM_LOG_ERROR, "Failed to get pidfile (already running?)\n");
         ret = EXIT_FAILURE; goto exit;
     }
-    
-    /* max files and timeout */
+
+    /* max files */
     wolfKeyMgr_SetMaxFiles(maxFiles);
-    wolfKeyMgr_SetTimeout(ourTimeout);
 
     /********** Certificate Service **********/
-    wolfCertSvc_Init(mainBase, poolSize);
+    certSvc = wolfCertSvc_Init(mainBase, poolSize);
+    if (certSvc) {
+        wolfKeyMgr_SetTimeout(certSvc, ourTimeout);
+    }
     /********** ETSI Service **********/
-    wolfEtsiSvc_Init(mainBase, poolSize);
+    etsiSvc = wolfEtsiSvc_Init(mainBase, poolSize);
+    if (etsiSvc) {
+        wolfKeyMgr_SetTimeout(etsiSvc, ourTimeout);
+    }
 
     /* SIGINT handler */
     signalEvent = event_new(mainBase, SIGINT, EV_SIGNAL|EV_PERSIST, 
         wolfKeyMgr_SignalCb, &sigArg);
+    memset(&sigArg, 0, sizeof(sigArg));
     sigArg.ev   = signalEvent;
     sigArg.base = mainBase;
+    sigArg.svc[0] = certSvc;
+    sigArg.svc[1] = etsiSvc;
     if (event_add(signalEvent, NULL) == -1) {
         XLOG(WOLFKM_LOG_ERROR, "Can't add event for signal\n");
         ret = EXIT_FAILURE; goto exit;
@@ -184,7 +194,8 @@ int main(int argc, char** argv)
     /* we're done with loop */
     ret = EXIT_SUCCESS;
     XLOG(WOLFKM_LOG_INFO, "Done with main thread dispatching\n");
-    wolfKeyMgr_ShowStats();
+    wolfKeyMgr_ShowStats(certSvc);
+    wolfKeyMgr_ShowStats(etsiSvc);
 
 exit:
     /* Cleanup pid file */
