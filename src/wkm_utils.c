@@ -146,6 +146,53 @@ void wolfKeyMgr_Log(enum log_level_t level, const char* fmt, ...)
         timeStr, wolfKeyMgr_GetLogLevel(level), msgStr);
 }
 
+/* generic API's for loading a file buffer */
+int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
+{
+    FILE* tmpFile;
+    long fileSz;
+    size_t bytesRead = 0;
+
+    if (fileName == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "file name is null\n");
+        return WOLFKM_BAD_ARGS;
+    }
+
+    tmpFile = fopen(fileName, "rb");
+    if (tmpFile == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "file %s can't be opened for reading\n",
+                            fileName);
+        return WOLFKM_BAD_FILE;
+    }
+
+    fseek(tmpFile, 0, SEEK_END);
+    fileSz = ftell(tmpFile);
+    rewind(tmpFile);
+    if (fileSz  > 0) {
+        *sz = (word32)fileSz;
+
+        if (buffer) {
+            *buffer = (byte*)malloc(fileSz+1);
+            if (*buffer == NULL) {
+                fclose(tmpFile);
+                return WOLFKM_BAD_MEMORY;
+            }
+        }
+    }
+
+    if (buffer && *sz > 0) {
+        bytesRead = fread(*buffer, 1, *sz, tmpFile);
+    }
+    fclose(tmpFile);
+
+    if (buffer && bytesRead == 0) {
+        XLOG(WOLFKM_LOG_ERROR, "file %s can't be read\n", fileName);
+        free(*buffer); *buffer = NULL;
+        return WOLFKM_BAD_FILE;
+    }
+
+    return 0;
+}
 
 /* return time in seconds with precision */
 double wolfKeyMgr_GetCurrentTime(void)

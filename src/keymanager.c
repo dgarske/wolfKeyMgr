@@ -29,7 +29,7 @@ static void Usage(void)
 {
     printf("%s\n", PACKAGE_STRING);
     printf("-?          Help, print this usage\n");
-    printf("-c          Core file max, don't chdir / in daemon mode\n");
+    printf("-c          Don't chdir / in daemon mode\n");
     printf("-d          Daemon mode, run in background\n");
     printf("-f <str>    Pid File name, default %s\n", WOLFKM_DEFAULT_PID);
     printf("-l <str>    Log file name, default %s\n",
@@ -125,16 +125,16 @@ int main(int argc, char** argv)
 
     /* start log */
     wolfKeyMgr_SetLogFile(logName, daemon, logLevel);
-    XLOG(WOLFKM_LOG_INFO, "Starting\n");
+    XLOG(WOLFKM_LOG_INFO, "Starting Key Manager\n");
 
     if (CheckCtcSettings() != 1) {
-        XLOG(WOLFKM_LOG_ERROR, "CyaSSL math library mismatch in settings\n");
+        XLOG(WOLFKM_LOG_ERROR, "wolfSSL math library mismatch in settings\n");
         exit(EXIT_FAILURE);
     }
 
 #ifdef USE_FAST_MATH
     if (CheckFastMathSettings() != 1) {
-        XLOG(WOLFKM_LOG_ERROR, "CyaSSL fast math library mismatch\n");
+        XLOG(WOLFKM_LOG_ERROR, "wolfSSL fast math library mismatch\n");
         exit(EXIT_FAILURE);
     }
 #endif
@@ -176,7 +176,7 @@ int main(int argc, char** argv)
     }
 
     /* SIGINT handler */
-    signalEvent = event_new(mainBase, SIGINT, EV_SIGNAL|EV_PERSIST, 
+    signalEvent = event_new(mainBase, SIGINT, (EV_SIGNAL | EV_PERSIST), 
         wolfKeyMgr_SignalCb, &sigArg);
     memset(&sigArg, 0, sizeof(sigArg));
     sigArg.ev   = signalEvent;
@@ -211,6 +211,8 @@ exit:
     if (signalEvent) event_del(signalEvent);
     if (mainBase) event_base_free(mainBase);
     wolfSSL_Cleanup();
+
+    XLOG(WOLFKM_LOG_INFO, "Exit Key Manager (ret %d)\n", ret);
 
     exit(ret);
 }

@@ -110,7 +110,7 @@ static int DoErrorMode(void)
 
 /* ETSI Asymmetric Key Request */
 static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, 
-    char* savePem, char* dumpFile)
+    char* saveResp, char* dumpFile)
 {
     int     ret;
     int     requestSz = 0;
@@ -150,7 +150,7 @@ static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl,
     /* TODO: Process asymmetric key package response */
     XLOG(WOLFKM_LOG_INFO, "Got response sz = %d\n", requestSz);
     (void)dumpFile;
-    (void)savePem;
+    (void)saveResp;
 
 
     return 0;
@@ -188,9 +188,9 @@ static void* DoRequests(void* arg)
 static int InitClientTLS(void)
 {
     int ret;
-    sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+    sslCtx = wolfSSL_CTX_new(wolfTLSv1_3_client_method());
     if (sslCtx == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context");
+        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.3 context");
         return WOLFKM_BAD_MEMORY;
     }
 
@@ -218,7 +218,7 @@ static void Usage(void)
     printf("-r <num>    Requests per thread, default %d\n",
                                                           WOLFKM_DEFAULT_REQUESTS);
     printf("-d <file>   Dump raw binary etsi request fo <file>\n");
-    printf("-f <file>   <file> to store etsi response in PEM\n");
+    printf("-f <file>   <file> to store etsi response\n");
 }
 
 
@@ -226,8 +226,8 @@ int main(int argc, char** argv)
 {
     int         ch, i;
     int         ret;
-    char*       dumpFile = NULL;        /* dump raw request etsi */
-    char*       savePem  = NULL;        /* dump PEM response etsi */
+    char*       dumpFile = NULL;        /* dump request etsi */
+    char*       saveResp  = NULL;        /* dump response etsi */
     int         requests = WOLFKM_DEFAULT_REQUESTS;
     int         errorMode = 0;
     SOCKET_T    sockfd;
@@ -253,7 +253,7 @@ int main(int argc, char** argv)
                 dumpFile = optarg;
                 break;
             case 'f' :
-                savePem = optarg;
+                saveResp = optarg;
                 break;
             case 'p' :
                 port = atoi(optarg);
@@ -300,7 +300,7 @@ int main(int argc, char** argv)
     XLOG(WOLFKM_LOG_INFO, "Connected to etsi service\n");
 
     /* Do a etsi test and save the pem */
-    ret = DoKeyRequest(sockfd, ssl, savePem, dumpFile);
+    ret = DoKeyRequest(sockfd, ssl, saveResp, dumpFile);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
         exit(EXIT_FAILURE);

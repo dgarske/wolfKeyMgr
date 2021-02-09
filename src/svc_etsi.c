@@ -109,7 +109,8 @@ static int wolfEtsiSvc_GetAsymPackage(svcConn* conn, etsiSvcInfo* etsiSvc)
     int ret;
 
     conn->requestSz = sizeof(conn->request);
-    ret = wolfEtsiSvc_GenerateEccKey(etsiSvc, (byte*)conn->request, &conn->requestSz);
+    ret = wolfEtsiSvc_GenerateEccKey(etsiSvc, (byte*)conn->request,
+        &conn->requestSz);
 
     /* Version 2 (int 1) */
     
@@ -143,7 +144,8 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
 
     XLOG(WOLFKM_LOG_INFO, "Got ETSI Request\n");
 
-    ret = wolfKeyMgr_HttpParse(&etsiSvc->req, (char*)conn->request, conn->requestSz);
+    ret = wolfKeyMgr_HttpParse(&etsiSvc->req, (char*)conn->request,
+        conn->requestSz);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
         return WOLFKM_BAD_REQUEST_TYPE;
@@ -152,7 +154,8 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
     /* Send Response */
     ret = wolfEtsiSvc_GetAsymPackage(conn, etsiSvc);
     if (ret == 0) {
-        ret = wolfKeyMgr_DoSend(conn, (byte*)kHttpServerMsg, strlen(kHttpServerMsg));
+        ret = wolfKeyMgr_DoSend(conn, (byte*)kHttpServerMsg,
+            strlen(kHttpServerMsg));
         /* send it, response is now in request buffer */
         if (ret < 0) {
             XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
@@ -202,13 +205,15 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
     int ret;
     char* listenPort = WOLFKM_ETSISVC_PORT;
 
-    ret = wolfKeyMgr_LoadKeyFile(&etsiService, WOLFKM_ETSISVC_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_ETSISVC_KEY_PASSWORD);
+    ret = wolfKeyMgr_LoadKeyFile(&etsiService, WOLFKM_ETSISVC_KEY, 
+        WOLFSSL_FILETYPE_PEM, WOLFKM_ETSISVC_KEY_PASSWORD);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS key\n");
         return NULL;
     }
 
-    ret = wolfKeyMgr_LoadCertFile(&etsiService, WOLFKM_ETSISVC_CERT, WOLFSSL_FILETYPE_PEM);
+    ret = wolfKeyMgr_LoadCertFile(&etsiService, WOLFKM_ETSISVC_CERT, 
+        WOLFSSL_FILETYPE_PEM);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS certificate\n");
         return NULL;
@@ -224,7 +229,8 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
         return NULL;
     }
     /* thread setup */
-    wolfKeyMgr_InitService(&etsiService, poolSize);
+    wolfKeyMgr_ServiceInit(&etsiService, poolSize);
+        /* cleanup handled in sigint handler and wolfKeyMgr_ServiceCleanup */
 
     return &etsiService;
 #else

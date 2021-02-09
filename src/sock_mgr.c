@@ -51,7 +51,11 @@ struct listener {
 };
 static listener* listenerList = NULL; /* main list of listeners */
 
+/* commands for worker threads */
+static char kCancel = 'c'; /* cancel */
+static char kWake   = 'w'; /* send wakeup flag */
 
+/* --- INLINE LOCAL FUNCTIONS --- */
 /* turn on TCP NODELAY for socket */
 static inline void TcpNoDelay(int fd)
 {
@@ -60,97 +64,6 @@ static inline void TcpNoDelay(int fd)
     if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (void*)&flags, sizeof(flags))
                    < 0)
         XLOG(WOLFKM_LOG_INFO, "setsockopt TCP_NODELAY failed\n");
-}
-
-
-/* Our own sigignore */
-int wolfKeyMgr_SigIgnore(int sig)
-{
-    struct sigaction sa;
-
-    sa.sa_handler = SIG_IGN;
-    sa.sa_flags = 0;
-
-    if (sigemptyset(&sa.sa_mask) == -1 || sigaction(sig, &sa, 0) == -1)
-        return -1;
-
-    return 0;
-}
-
-
-int wolfKeyMgr_GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz)
-{
-    int ret = -1;
-    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-
-    if (buf) {
-        memset(buf, 0, bufSz);
-    }
-    if (addr) {
-        ret = getnameinfo(
-            (struct sockaddr*)addr->ai_addr, 
-            (socklen_t)addr->ai_addrlen, 
-            hbuf, sizeof(hbuf), 
-            sbuf, sizeof(sbuf),
-            (NI_NUMERICHOST | NI_NUMERICSERV));
-        if (ret == 0) {
-            snprintf(buf, bufSz, "%s:%s", hbuf, sbuf);
-        }
-    }
-
-    return ret;
-}
-
-void wolfKeyMgr_ServiceCleanup(svcInfo* svc)
-{
-    char c = 'c';   /* cancel */
-    int i;
-    if (svc == NULL)
-        return;
-
-    /* cancel each thread */
-    XLOG(WOLFKM_LOG_INFO, "Sending cancel to threads\n");
-    for (i = 0; i < svc->threadPoolSize; i++)
-        if (write(svc->threads[i].notifySend, &c, 1) != 1) {
-            XLOG(WOLFKM_LOG_ERROR, "Write to cancel thread notify failed\n");
-            return;
-        }
-
-    /* join each thread */
-    XLOG(WOLFKM_LOG_INFO, "Joining threads\n");
-    for (i = 0; i < svc->threadPoolSize; i++) {
-        int ret = pthread_join(svc->threads[i].tid, NULL);
-
-        XLOG(WOLFKM_LOG_DEBUG, "Join ret = %d\n", ret);
-    }
-
-    /* free custom resources */
-    wolfSSL_CTX_free(svc->sslCtx);
-}
-
-
-/* Our signal handler callback */
-void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
-{
-    signalArg* sigArg = (signalArg*)arg;
-    int        sigId = event_get_signal(sigArg->ev);
-    int        i;
-
-    if (sigId == SIGINT)
-        XLOG(WOLFKM_LOG_INFO, "SIGINT handled.\n");
-    else if (sigId == SIGTERM)
-        XLOG(WOLFKM_LOG_INFO, "SIGTERM handled.\n");
-    else {
-        XLOG(WOLFKM_LOG_INFO, "Got unknown signal %d\n", sigId);
-    }
-
-    /* end main loop */
-    XLOG(WOLFKM_LOG_INFO, "Ending main thread loop\n");
-    event_base_loopexit(sigArg->base, NULL);
-
-    for (i=0; i< MAX_SERVICES; i++) {
-        wolfKeyMgr_ServiceCleanup(sigArg->svc[i]);
-    }
 }
 
 /* Initialize all stats to zero, pre allocs may increment some counters */
@@ -165,7 +78,6 @@ static void InitStats(stats* myStats)
     myStats->began              = 0;
     myStats->responseTime       = 0.0f;
 }
-
 
 /* Add to current per thread connection stats, handle max too */
 static inline void IncrementCurrentConnections(svcConn* conn)
@@ -206,48 +118,30 @@ static inline void DecrementCurrentConnections(svcConn* conn)
 }
 
 
-/* Show our statistics, log them */
-void wolfKeyMgr_ShowStats(svcInfo* svc)
+/* --- LOCAL FUNCTIONS --- */
+/* Get string version of libevent address info */
+static int GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz)
 {
-    stats  local;
-    double avgResponse = 0.0f;
+    int ret = -1;
+    char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 
-    if (svc == NULL)
-        return;
-
-    pthread_mutex_lock(&svc->globalStats.lock);
-    local = svc->globalStats;
-    pthread_mutex_unlock(&svc->globalStats.lock);
-
-    /* adjust max conncurrent since now per thread */
-    if (local.maxConcurrent < svc->threadPoolSize)
-        local.maxConcurrent = local.maxConcurrent ? 1 : 0;
-    else 
-        local.maxConcurrent -= svc->threadPoolSize - 1;
-
-    if (local.responseTime > 0.0f && local.completedRequests > 0) {
-        avgResponse = local.responseTime / local.completedRequests;
-        avgResponse *= 1000;  /* convert to ms */
+    if (buf) {
+        memset(buf, 0, bufSz);
+    }
+    if (addr) {
+        ret = getnameinfo(
+            (struct sockaddr*)addr->ai_addr, 
+            (socklen_t)addr->ai_addrlen, 
+            hbuf, sizeof(hbuf), 
+            sbuf, sizeof(sbuf),
+            (NI_NUMERICHOST | NI_NUMERICSERV));
+        if (ret == 0) {
+            snprintf(buf, bufSz, "%s:%s", hbuf, sbuf);
+        }
     }
 
-    /* always show stats */
-    XLOG(WOLFKM_LOG_ERROR, "Current stats:\n"
-             "total   connections  = %19llu\n"
-             "completed            = %19llu\n"
-             "timeouts             = %19u\n"
-             "current connections  = %19u\n"
-             "max     concurrent   = %19u\n"
-             "uptime  in seconds   = %19lu\n"
-             "average response(ms) = %19.3f\n",
-             (unsigned long long)local.totalConnections,
-             (unsigned long long)local.completedRequests,
-             local.timeouts,
-             local.currentConnections,
-             local.maxConcurrent,
-             time(NULL) - local.began,
-             avgResponse);
+    return ret;
 }
-
 
 /* our listener error call back to use our logging */
 static void OurListenerError(struct evconnlistener* listener, void* ptr)
@@ -264,7 +158,6 @@ static void OurListenerError(struct evconnlistener* listener, void* ptr)
         usleep(WOLFKM_BACKOFF_TIME);
     }
 }
-
 
 /* Initialize the connection queue */
 static void ConnQueueInit(connQueue* cq)
@@ -283,7 +176,6 @@ static void ConnItemFree(connItem* item)
     item->svc->freeConnItems = item;
     pthread_mutex_unlock(&item->svc->itemLock);
 }
-
 
 /* Get a new connection item */
 static connItem* ConnItemNew(svcInfo* svc)
@@ -325,7 +217,6 @@ static connItem* ConnItemNew(svcInfo* svc)
     return item;
 }
 
-
 /* push an item onto the connection queue */
 static void ConnQueuePush(connQueue* cq, connItem* item)
 {
@@ -333,15 +224,14 @@ static void ConnQueuePush(connQueue* cq, connItem* item)
 
     pthread_mutex_lock(&cq->lock);
 
-        if (cq->tail == NULL)  /* empty ? */
-            cq->head = item;
-        else
-            cq->tail->next = item;
-        cq->tail = item;      /*  add to the end either way */
+    if (cq->tail == NULL)  /* empty ? */
+        cq->head = item;
+    else
+        cq->tail->next = item;
+    cq->tail = item;      /*  add to the end either way */
 
     pthread_mutex_unlock(&cq->lock);
 }
-
 
 /* pop an item off the connection queue */
 static connItem* ConnQueuePop(connQueue* cq)
@@ -350,11 +240,11 @@ static connItem* ConnQueuePop(connQueue* cq)
 
     pthread_mutex_lock(&cq->lock);
 
-        if ( (item = cq->head) ) {
-            cq->head = item->next;
-            if (cq->head == NULL)   /* are we now empty */
-                cq->tail = NULL;
-        }
+    if ( (item = cq->head) ) {
+        cq->head = item->next;
+        if (cq->head == NULL)   /* are we now empty */
+            cq->tail = NULL;
+    }
 
     pthread_mutex_unlock(&cq->lock);
 
@@ -575,14 +465,16 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
    wakeup pipe */
 static void ThreadEventProcess(int fd, short which, void* arg)
 {
-    char         buffer[1];
+    char         buffer[1]; /* at least size of kCancel and kWake */
     eventThread* me = (eventThread*)arg;
     connItem*    item;
 
-    if (read(fd, buffer, 1) != 1)
+    if (read(fd, buffer, sizeof(buffer)) != sizeof(buffer)) {
         XLOG(WOLFKM_LOG_ERROR, "thread notify receive read error\n");
-    else if (buffer[0] == 'c') {   /* on exit get sent 'c' for cancel,  */
-        WorkerExit(me);            /* usually 'w' for wakeup */
+    }
+    /* on exit get sent 'c' for cancel, usually get 'w' for wakeup */
+    else if (memcmp(buffer, &kCancel, sizeof(kCancel)) == 0) {
+        WorkerExit(me);
         return;
     }
 
@@ -600,14 +492,15 @@ static void ThreadEventProcess(int fd, short which, void* arg)
             return;
         }
         conn->stream = bufferevent_socket_new(me->threadBase, clientFd,
-                                 BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
+                             (BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS));
         if (conn->stream == NULL) {
             XLOG(WOLFKM_LOG_ERROR, "bufferevent_socket_new() failed\n");
             ServiceConnFree(conn);
-            close(clientFd);  /* normally ServiceConnFree would close fd by stream
-                                 but since stream is NULL, force it */
+            close(clientFd); /* normally ServiceConnFree would close fd by stream
+                                but since stream is NULL, force it */
             return;
-        } else if (!conn->svc->noTLS) {
+        }
+        else if (!conn->svc->noTLS) {
             conn->ssl = wolfSSL_new(conn->svc->sslCtx);
             if (conn->ssl == NULL) {
                 XLOG(WOLFKM_LOG_ERROR, "wolfSSL_New() failed\n");
@@ -620,18 +513,9 @@ static void ThreadEventProcess(int fd, short which, void* arg)
 
         bufferevent_setcb(conn->stream, ReadCb, NULL, EventCb, conn);
         bufferevent_set_timeouts(conn->stream, &conn->svc->readto, NULL);
-        bufferevent_enable(conn->stream, EV_READ|EV_WRITE);
+        bufferevent_enable(conn->stream, (EV_READ | EV_WRITE));
     }
 }
-
-
-/* set our timeout on connections */
-void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to)
-{
-    if (svc)
-        svc->readto = to;
-}
-
 
 /* Individual thread setup */
 static void SetupThread(svcInfo* svc, eventThread* me)
@@ -645,7 +529,7 @@ static void SetupThread(svcInfo* svc, eventThread* me)
 
     /* notify event pipe */
     me->notify = event_new(me->threadBase, me->notifyRecv,
-                           EV_READ | EV_PERSIST, ThreadEventProcess, me);
+                           (EV_READ | EV_PERSIST), ThreadEventProcess, me);
     if (event_add(me->notify, NULL) == -1) {
         XLOG(WOLFKM_LOG_ERROR, "Can't add event for monitor pipe\n");
         exit(EXIT_FAILURE);
@@ -672,8 +556,8 @@ static void SignalSetup(svcConn* conn)
 {
     /* signal ready */
     pthread_mutex_lock(&conn->svc->initLock);
-        conn->svc->initCount++;
-        pthread_cond_signal(&conn->svc->initCond);
+    conn->svc->initCount++;
+    pthread_cond_signal(&conn->svc->initCond);
     pthread_mutex_unlock(&conn->svc->initLock);
 }
 
@@ -731,8 +615,10 @@ static int wolfsslRecvCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     if (ret == 0) {
         return WOLFSSL_CBIO_ERR_WANT_READ;  /* ok, wouldblock */
     }
-    else if (ret < 0)
-        XLOG(WOLFKM_LOG_ERROR, "wolfssl ReceiveCb error\n");
+    else if (ret < 0) {
+        XLOG(WOLFKM_LOG_ERROR, "wolfssl ReceiveCb error %d\n", ret);
+        ret = WOLFSSL_CBIO_ERR_GENERAL;
+    }
 
     return ret;
 }
@@ -755,8 +641,10 @@ static int wolfsslSendCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     if (ret == 0) {
         return sz;
     }
-    else if (ret < 0)
-        XLOG(WOLFKM_LOG_ERROR, "wolfssl SendCb error\n");
+    else if (ret < 0) {
+        XLOG(WOLFKM_LOG_ERROR, "wolfssl SendCb error %d\n", ret);
+        ret = WOLFSSL_CBIO_ERR_GENERAL;
+    }
 
     return ret;
 }
@@ -767,14 +655,13 @@ static int InitServerTLS(svcInfo* svc)
 {
     int ret;
 
-    svc->sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
+    svc->sslCtx = wolfSSL_CTX_new(wolfTLSv1_3_server_method());
     if (svc->sslCtx == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context\n");
+        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.3 context\n");
         return WOLFKM_BAD_MEMORY;
     }
     wolfSSL_SetIORecv(svc->sslCtx, wolfsslRecvCb);
     wolfSSL_SetIOSend(svc->sslCtx, wolfsslSendCb);
-
 
     ret = wolfSSL_CTX_use_certificate_buffer(svc->sslCtx, svc->certBuffer,
         svc->certBufferSz, WOLFSSL_FILETYPE_ASN1);
@@ -798,14 +685,9 @@ static int InitServerTLS(svcInfo* svc)
 static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
               struct sockaddr* a, int slen, void* p)
 {
-    static int lastThread = -1;       /* last used thread ID */
     svcInfo* svc = (svcInfo*)p;
-
-    /* TODO: Move the thread info into svcInfo */
-
-    int  currentId = (lastThread + 1) % svc->threadPoolSize; /* round robin */
-    char w = 'w'; /* send wakeup flag */
-
+    static int lastThread = -1;       /* last used thread ID */
+    int currentId = (lastThread + 1) % svc->threadPoolSize; /* round robin */
     eventThread* thread = svc->threads + currentId;
     connItem*    item = ConnItemNew(svc);
 
@@ -826,10 +708,101 @@ static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
     /* push connection item and notify thread */
     ConnQueuePush(thread->connections, item);
 
-    if (write(thread->notifySend, &w, 1) != 1)
+    if (write(thread->notifySend, &kWake, sizeof(kWake)) != sizeof(kWake)) {
         XLOG(WOLFKM_LOG_ERROR, "Write to thread notify send pipe failed\n");
+    }
+    XLOG(WOLFKM_LOG_INFO, "Accepted a connection, sent to thread %d\n",
+        currentId);
+}
 
-    XLOG(WOLFKM_LOG_INFO, "Accepted a connection, sent to thread %d\n", currentId);
+
+/* --- PUBLIC FUNCTIONS --- */
+/* Clear action on supplied sig event */
+int wolfKeyMgr_SigIgnore(int sig)
+{
+    struct sigaction sa;
+
+    sa.sa_handler = SIG_IGN;
+    sa.sa_flags = 0;
+
+    if (sigemptyset(&sa.sa_mask) == -1 || sigaction(sig, &sa, 0) == -1)
+        return -1;
+
+    return 0;
+}
+
+/* Our signal handler callback */
+void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
+{
+    signalArg* sigArg = (signalArg*)arg;
+    int        sigId = event_get_signal(sigArg->ev);
+    int        i;
+
+    if (sigId == SIGINT)
+        XLOG(WOLFKM_LOG_INFO, "SIGINT handled.\n");
+    else if (sigId == SIGTERM)
+        XLOG(WOLFKM_LOG_INFO, "SIGTERM handled.\n");
+    else {
+        XLOG(WOLFKM_LOG_INFO, "Got unknown signal %d\n", sigId);
+    }
+
+    /* end main loop */
+    XLOG(WOLFKM_LOG_INFO, "Ending main thread loop\n");
+    event_base_loopexit(sigArg->base, NULL);
+
+    for (i=0; i< MAX_SERVICES; i++) {
+        wolfKeyMgr_ServiceCleanup(sigArg->svc[i]);
+    }
+}
+
+/* Show our statistics */
+void wolfKeyMgr_ShowStats(svcInfo* svc)
+{
+    stats  local;
+    double avgResponse = 0.0f;
+
+    if (svc == NULL)
+        return;
+
+    pthread_mutex_lock(&svc->globalStats.lock);
+    local = svc->globalStats;
+    pthread_mutex_unlock(&svc->globalStats.lock);
+
+    /* adjust max conncurrent since now per thread */
+    if (local.maxConcurrent < svc->threadPoolSize)
+        local.maxConcurrent = local.maxConcurrent ? 1 : 0;
+    else 
+        local.maxConcurrent -= svc->threadPoolSize - 1;
+
+    if (local.responseTime > 0.0f && local.completedRequests > 0) {
+        avgResponse = local.responseTime / local.completedRequests;
+        avgResponse *= 1000; /* convert to ms */
+    }
+
+    /* always show stats */
+    XLOG(WOLFKM_LOG_ERROR, "Current stats:\n"
+             "total   connections  = %19llu\n"
+             "completed            = %19llu\n"
+             "timeouts             = %19u\n"
+             "current connections  = %19u\n"
+             "max     concurrent   = %19u\n"
+             "uptime  in seconds   = %19lu\n"
+             "average response(ms) = %19.3f\n",
+             (unsigned long long)local.totalConnections,
+             (unsigned long long)local.completedRequests,
+             local.timeouts,
+             local.currentConnections,
+             local.maxConcurrent,
+             time(NULL) - local.began,
+             avgResponse);
+}
+
+
+/* set our timeout on connections */
+void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to)
+{
+    if (svc)
+        svc->readto = to;
 }
 
 
@@ -848,14 +821,15 @@ void wolfKeyMgr_SetMaxFiles(int max)
             XLOG(WOLFKM_LOG_ERROR, "Can't setrlimit max files\n");
             exit(EX_OSERR);
         }
-    } else {
+    }
+    else {
         XLOG(WOLFKM_LOG_ERROR, "Can't getrlimit max files\n");
         exit(EX_OSERR);
     }
 }
 
 
-/* make core max file */
+/* Set core max file */
 void wolfKeyMgr_SetCore(void)
 {
     struct rlimit old, change;
@@ -877,7 +851,7 @@ void wolfKeyMgr_SetCore(void)
     }
 }
 
-
+/* Start process as dameon */
 /* see Advanced Programming in the Unix Environment, chapter 13 */
 int wolfKeyMgr_MakeDaemon(int chDir)
 {
@@ -897,6 +871,7 @@ int wolfKeyMgr_MakeDaemon(int chDir)
         return -1;
     }
 
+    /* optionally change working directory */
     if (chDir) {
         if (chdir("/") != 0) {    /* change working directory */
             XLOG(WOLFKM_LOG_ERROR, "chdir\n");
@@ -925,10 +900,6 @@ int wolfKeyMgr_MakeDaemon(int chDir)
 
     return 0;
 }
-
-
-
-
 
 /* Check for already running process using exclusive lock on pidfile.
  * Returns NULL if process is already running, otherwise writes pid to
@@ -984,12 +955,11 @@ FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid)
     return f;
 }
 
-
-
 /* try to add listeners on interface version
  * return count of listener interfaces added.
  */
-int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct event_base* mainBase)
+int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort,
+    struct event_base* mainBase)
 {
     int                     err;
     int                     addCount = 0;
@@ -1019,7 +989,7 @@ int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct eve
             exit(EXIT_FAILURE);
         }
 
-        wolfKeyMgr_GetAddrInfoString(current, addrStr, sizeof(addrStr));
+        GetAddrInfoString(current, addrStr, sizeof(addrStr));
         XLOG(WOLFKM_LOG_INFO, "Binding listener %s\n", addrStr);
 
         ls->ev_listen = evconnlistener_new_bind(mainBase, AcceptCB, svc,
@@ -1046,9 +1016,10 @@ int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct eve
 }
 
 /* Initialize all worker threads */
-int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
+int wolfKeyMgr_ServiceInit(svcInfo* svc, int numThreads)
 {
     int ret = 0, i;
+    int fds[2];
     connItem*  item;
 
     /* pthread inits */
@@ -1067,20 +1038,17 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
     /* pre allocate pool memory */
     item = ConnItemNew(svc);
     ConnItemFree(item);
-    InitStats(&svc->globalStats);   /* items above for pre alloc shouldn't count */
+    InitStats(&svc->globalStats); /* items above for pre alloc shouldn't count */
 
-    /* when we began */
+    /* set the start time and pool size */
     svc->globalStats.began = time(NULL);
-
-    /* save copies */
     svc->threadPoolSize = numThreads;
 
     /* setup each thread */
     for (i = 0; i < numThreads; i++) {
-        int fds[2];
         if (pipe(fds)) {
-            XLOG(WOLFKM_LOG_ERROR, "Can't make notify pipe\n");
-            return -1; /* TOOD: Add return code */
+            XLOG(WOLFKM_LOG_ERROR, "Can't make notify pipe %s\n", strerror(errno));
+            return WOLFKM_BAD_FILE;
         }
 
         svc->threads[i].notifyRecv = fds[0];
@@ -1089,23 +1057,56 @@ int wolfKeyMgr_InitService(svcInfo* svc, int numThreads)
     }
 
     /* start threads */
-    for (i = 0; i < numThreads; i++)
-        MakeWorker(WorkerEvent, &svc->threads[i]);  /* event monitor */
+    for (i = 0; i < numThreads; i++) {
+        MakeWorker(WorkerEvent, &svc->threads[i]); /* event monitor */
+    }
 
     /* wait until each is ready */
     pthread_mutex_lock(&svc->initLock);
-        while (svc->initCount < numThreads)
-            pthread_cond_wait(&svc->initCond, &svc->initLock);
+    while (svc->initCount < numThreads) {
+        pthread_cond_wait(&svc->initCond, &svc->initLock);
+    }
     pthread_mutex_unlock(&svc->initLock);
 
     /* setup ssl ctx */
 #ifdef DISABLE_SSL
     svc->noTLS = 1;    /* build time only disable for now */
 #endif
-    if (!svc->noTLS)
+    if (!svc->noTLS) {
         ret = InitServerTLS(svc);
+    }
 
     return ret;
+}
+
+void wolfKeyMgr_ServiceCleanup(svcInfo* svc)
+{
+    int i, ret;
+
+    if (svc == NULL)
+        return;
+
+    /* cancel each thread */
+    XLOG(WOLFKM_LOG_INFO, "Sending cancel to threads\n");
+    for (i = 0; i < svc->threadPoolSize; i++) {
+        if (write(svc->threads[i].notifySend, &kCancel, 
+                sizeof(kCancel)) != sizeof(kCancel)) {
+            XLOG(WOLFKM_LOG_ERROR, "Write to cancel thread notify failed\n");
+            return;
+        }
+    }
+
+    /* join each thread */
+    XLOG(WOLFKM_LOG_INFO, "Joining threads\n");
+    for (i = 0; i < svc->threadPoolSize; i++) {
+        ret = pthread_join(svc->threads[i].tid, NULL);
+
+        XLOG(WOLFKM_LOG_DEBUG, "Join ret = %d\n", ret);
+    }
+
+    /* free custom resources */
+    wolfSSL_CTX_free(svc->sslCtx);
+    svc->sslCtx = NULL;
 }
 
 /* return sent bytes or < 0 on error */
@@ -1144,58 +1145,13 @@ void wolfKeyMgr_FreeListeners(void)
     }
 }
 
-
-int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
-{
-    FILE* tmpFile;
-    long fileSz;
-    size_t bytesRead = 0;
-
-    if (fileName == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "file name is null\n");
-        return WOLFKM_BAD_ARGS;
-    }
-
-    tmpFile = fopen(fileName, "rb");
-    if (tmpFile == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "file %s can't be opened for reading\n",
-                            fileName);
-        return WOLFKM_BAD_FILE;
-    }
-
-    fseek(tmpFile, 0, SEEK_END);
-    fileSz = ftell(tmpFile);
-    rewind(tmpFile);
-    if (fileSz  > 0) {
-        *sz = (word32)fileSz;
-
-        if (buffer) {
-            *buffer = (byte*)malloc(fileSz+1);
-            if (*buffer == NULL) {
-                fclose(tmpFile);
-                return WOLFKM_BAD_MEMORY;
-            }
-        }
-    }
-
-    if (buffer && *sz > 0) {
-        bytesRead = fread(*buffer, 1, *sz, tmpFile);
-    }
-    fclose(tmpFile);
-
-    if (buffer && bytesRead == 0) {
-        XLOG(WOLFKM_LOG_ERROR, "file %s can't be read\n", fileName);
-        free(*buffer); *buffer = NULL;
-        return WOLFKM_BAD_FILE;
-    }
-
-    return 0;
-}
-
 /* load the key file name into our buffer  */
-int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, const char* password)
+int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType,
+    const char* password)
 {
-    int ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->keyBuffer, &svc->keyBufferSz);
+    int ret;
+
+    ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->keyBuffer, &svc->keyBufferSz);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_INFO, "error loading key file %s\n", fileName);
         return ret;
@@ -1219,9 +1175,12 @@ int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, con
     return 0;
 }
 
+/* load the certificate file into our buffer */
 int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType)
 {
-    int ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->certBuffer, &svc->certBufferSz);
+    int ret;
+    
+    ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->certBuffer, &svc->certBufferSz);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_INFO, "error loading certificate file %s\n", fileName);
         return ret;

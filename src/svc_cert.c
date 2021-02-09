@@ -23,6 +23,10 @@
 
 #ifdef WOLFKM_CERT_SERVICE
 
+/* default max signs before re-init */
+/* 1,600,000 max / 32 (seed) / 10 (our safety) */
+#define CERTSVC_MAX_SIGNS 5000 
+
 typedef struct certSvcInfo {
     int     maxSigns;  /* max b4 re-init */
     int     signCount; /* per thread signing count */
@@ -96,8 +100,6 @@ static int SetCertSubject(svcInfo* svc, certSvcInfo* certSvc)
 
     return 0;
 }
-
-
 
 
 /* parse in verify response, 0 on success */
@@ -231,7 +233,7 @@ static int IncrementSignCounter(svcConn* conn)
     certSvc->signCount++;
     if (certSvc->signCount > certSvc->maxSigns) {
         XLOG(WOLFKM_LOG_INFO, "Sign cout over threshold, rng re-init: %d\n",
-                                                                    certSvc->signCount);
+                                                            certSvc->signCount);
         wc_FreeRng(&certSvc->rng);
         ret = wc_InitRng(&certSvc->rng);
         if (ret < 0) {
@@ -281,7 +283,7 @@ static int GenerateSign(svcConn* conn)
         XLOG(WOLFKM_LOG_ERROR, "Sign failed: %d\n", ret);
         return ret;
     }
-    c16toa((unsigned short)outlen, hdrSz);  /* size in header */
+    c16toa((unsigned short)outlen, hdrSz); /* size in header */
     conn->requestSz = outlen + CERT_HEADER_SZ;
 
     return 0;
@@ -312,7 +314,7 @@ static int GenerateCert(svcConn* conn)
         return ret;
     }
     ret = wc_SignCert(requestSz, CTC_SHA256wECDSA, request,
-                      sizeof(conn->request), NULL, &certSvc->eccKey, &certSvc->rng);
+                sizeof(conn->request), NULL, &certSvc->eccKey, &certSvc->rng);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "SignCert failed: %d\n", ret);
         return ret;
@@ -394,7 +396,7 @@ static int GenerateError(svcConn* conn, int err)
     tmp[0]                     = '\0';
     tmp[WOLFSSL_MAX_ERROR_SZ-1] = '\0';
 
-    if (err < WOLFKM_ERROR_BEGIN)   /* WOLFKM_ERROR uses lower errors than CyaSSL */
+    if (err < WOLFKM_ERROR_BEGIN) /* WOLFKM_ERROR uses lower errors than wolfSSL */
         errStr = (char*)wolfKeyMgr_GetError(err); 
     else
         wolfSSL_ERR_error_string(err, errStr);
@@ -565,6 +567,7 @@ int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
         return WOLFKM_BAD_MEMORY;
     }
     memset(certSvc, 0, sizeof(*certSvc));
+    certSvc->maxSigns = CERTSVC_MAX_SIGNS;
 
     *svcCtx = certSvc;
 
@@ -612,13 +615,15 @@ svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
     int ret;
     char* listenPort = WOLFKM_CERTSVC_PORT;
 
-    ret = wolfKeyMgr_LoadKeyFile(&certService, WOLFKM_CERTSVC_KEY, WOLFSSL_FILETYPE_PEM, WOLFKM_CERTSVC_KEY_PASSWORD);
+    ret = wolfKeyMgr_LoadKeyFile(&certService, WOLFKM_CERTSVC_KEY, 
+        WOLFSSL_FILETYPE_PEM, WOLFKM_CERTSVC_KEY_PASSWORD);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading TLS key\n");
         return NULL;
     }
 
-    ret = wolfKeyMgr_LoadCertFile(&certService, WOLFKM_CERTSVC_CERT, WOLFSSL_FILETYPE_PEM);
+    ret = wolfKeyMgr_LoadCertFile(&certService, WOLFKM_CERTSVC_CERT, 
+        WOLFSSL_FILETYPE_PEM);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading TLS certificate\n");
         return NULL;
@@ -634,7 +639,8 @@ svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
         return NULL;
     }
     /* thread setup */
-    wolfKeyMgr_InitService(&certService, poolSize);
+    wolfKeyMgr_ServiceInit(&certService, poolSize);
+        /* cleanup handled in sigint handler and wolfKeyMgr_ServiceCleanup */
 
     return &certService;
 #else

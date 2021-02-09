@@ -671,9 +671,9 @@ static void* DoRequests(void* arg)
 static int InitClientTLS(void)
 {
     int ret;
-    sslCtx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+    sslCtx = wolfSSL_CTX_new(wolfTLSv1_3_client_method());
     if (sslCtx == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.2 context");
+        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.3 context");
         return WOLFKM_BAD_MEMORY;
     }
 

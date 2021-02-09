@@ -35,6 +35,7 @@ char* wolfKeyMgr_UriEncode(const byte *s, char *enc);
 byte* wolfKeyMgr_UriDecode(const char *s, byte *dec);
 double wolfKeyMgr_GetCurrentTime(void);
 
+int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
 
 /* misc functions */
 void c16toa(unsigned short, unsigned char*);

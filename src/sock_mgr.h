@@ -51,7 +51,7 @@ extern "C" {
 /* program constants */
 #define MAX_SOCKADDR_SZ   32
 #define MAX_REQUEST_SIZE (16*1024)
-#define MAX_SERVICES      3
+#define MAX_SERVICES      2
 
 /* program types */
 
@@ -154,6 +154,13 @@ struct eventThread {
 };
 
 
+typedef struct KeyManager {
+    struct event_base* mainBase;
+    FILE*              pidF;
+} KeyManager_t;
+
+
+
 /* Key Manager Functions */
 int  wolfKeyMgr_MakeDaemon(int chDir);
 void wolfKeyMgr_SetMaxFiles(int max);
@@ -163,18 +170,16 @@ int  wolfKeyMgr_SigIgnore(int sig);
 void wolfKeyMgr_ShowStats(svcInfo* svc);
 FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid);
 void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to);
-int wolfKeyMgr_GetAddrInfoString(struct evutil_addrinfo* addr, char* buf, size_t bufSz);
 
 int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct event_base* mainBase);
-int wolfKeyMgr_InitService(svcInfo* svc, int numThreads);
+int wolfKeyMgr_ServiceInit(svcInfo* svc, int numThreads);
+void wolfKeyMgr_ServiceCleanup(svcInfo* svc);
 void wolfKeyMgr_FreeListeners(void);
 
 int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz);
 
-int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
 int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, const char* password);
 int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType);
-
 
 
 
