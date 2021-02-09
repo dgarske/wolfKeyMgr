@@ -545,6 +545,7 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
 
         /* handle request with callback */
         if (conn->svc && conn->svc->requestCb) {
+            conn->start = wolfKeyMgr_GetCurrentTime();
             ret = conn->svc->requestCb(conn);
             if (ret < 0) {
                 /* error */

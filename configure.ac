@@ -10,6 +10,10 @@ AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_MACRO_DIR(m4)
 
+# The following sets CFLAGS to empty if unset on command line.  We do not
+# want the default "-g -O2" that AC_PROG_CC sets automatically.
+: ${CFLAGS=""}
+
 AM_INIT_AUTOMAKE(subdir-objects foreign)
 
 # Install path
@@ -82,7 +86,9 @@ WOLFKM_LIBRARY_VERSION=1:0:0
 AC_SUBST([WOLFKM_LIBRARY_VERSION])
 
 # compiler options
-CFLAGS="$CFLAGS -Wall -g -O2"
+CFLAGS="$CFLAGS -Wall"
+CFLAGS_DEBUG="-g"
+CFLAGS_OPTIMIZE="-O2"
 
 # Checks for typedefs, structures, and compiler characteristics.
 if test "$ac_cv_sizeof_long" = "8"; then
@@ -97,6 +103,12 @@ fi
 # pthread flags
 CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
 LIBS="$LIBS $PTHREAD_LIBS"
+
+# DEBUG
+AX_DEBUG
+AS_IF([test "$ax_enable_debug" = "yes"],
+      [CFLAGS="$CFLAGS_OPTIMIZE -DNDEBUG $CFLAGS"],
+      [CFLAGS="$CFLAGS_DEBUG $CFLAGS"])
 
 
 # system depedent stuff
