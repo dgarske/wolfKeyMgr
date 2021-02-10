@@ -24,7 +24,7 @@
 
 #ifdef WOLFKM_ETSI_SERVICE
 
-//#define DEBUG_ETSI
+#define DEBUG_ETSI
 
 /* shared context for worker threads (read only) */
 typedef struct etsiServiceCtx {
@@ -179,7 +179,7 @@ void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcCtx)
 
 
 
-svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
+svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize, word32 timeoutSec)
 {
 #ifdef WOLFKM_ETSI_SERVICE
     int ret;
@@ -200,17 +200,21 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
     }
 
     /* setup listening events, bind before .pid file creation */
-    ret =  wolfKeyMgr_AddListeners(&etsiService, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
-    ret += wolfKeyMgr_AddListeners(&etsiService, AF_INET, listenPort, mainBase);   /* should be first */
+    ret = wolfKeyMgr_AddListeners(&etsiService, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
+    if (ret < 0)
+        ret = wolfKeyMgr_AddListeners(&etsiService, AF_INET, listenPort, mainBase);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one ETSI listener,"
                                "already running?\n");
-        wolfEtsiSvc_Cleanup();
+        wolfEtsiSvc_Cleanup(&etsiService);
         return NULL;
     }
     /* thread setup */
     wolfKeyMgr_ServiceInit(&etsiService, poolSize);
         /* cleanup handled in sigint handler and wolfKeyMgr_ServiceCleanup */
+
+    //wolfKeyMgr_SetTimeout(&etsiService, timeoutSec);
+    (void)timeoutSec;
 
     return &etsiService;
 #else
@@ -218,8 +222,10 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)
 #endif
 }
 
-void wolfEtsiSvc_Cleanup(void)
+void wolfEtsiSvc_Cleanup(svcInfo* svc)
 {
+    if (svc == NULL)
+        return;
 #ifdef WOLFKM_ETSI_SERVICE
     if (etsiService.keyBuffer) {
         free(etsiService.keyBuffer);

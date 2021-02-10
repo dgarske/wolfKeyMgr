@@ -124,9 +124,9 @@ LIB_SOCKET_NSL
 
 # Certificate Service
 AC_ARG_ENABLE([certsvc],
-    [AS_HELP_STRING([--enable-certsvc],[Enable the Certificate service (default: enabled)])],
+    [AS_HELP_STRING([--enable-certsvc],[Enable the Certificate service (default: disabled)])],
     [ ENABLED_CERT_SERVICE=$enableval ],
-    [ ENABLED_CERT_SERVICE=yes ]
+    [ ENABLED_CERT_SERVICE=no ]
     )
 
 if test "x$ENABLED_CERT_SERVICE" = "xyes"

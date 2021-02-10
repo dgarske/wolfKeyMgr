@@ -172,7 +172,7 @@ void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg);
 int  wolfKeyMgr_SigIgnore(int sig);
 void wolfKeyMgr_ShowStats(svcInfo* svc);
 FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid);
-void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to);
+void wolfKeyMgr_SetTimeout(svcInfo* svc, word32 timeoutSec);
 
 int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort, struct event_base* mainBase);
 int wolfKeyMgr_ServiceInit(svcInfo* svc, int numThreads);

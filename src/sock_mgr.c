@@ -799,10 +799,12 @@ void wolfKeyMgr_ShowStats(svcInfo* svc)
 
 
 /* set our timeout on connections */
-void wolfKeyMgr_SetTimeout(svcInfo* svc, struct timeval to)
+void wolfKeyMgr_SetTimeout(svcInfo* svc, word32 timeoutSec)
 {
-    if (svc)
-        svc->readto = to;
+    if (svc) {
+        svc->readto.tv_sec  = timeoutSec;
+        svc->readto.tv_usec = 0;
+    }
 }
 
 

@@ -53,16 +53,13 @@ int main(int argc, char** argv)
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
     char*  logName    = WOLFKM_DEFAULT_LOG_NAME;
     char*  pidName    = WOLFKM_DEFAULT_PID;
-    struct timeval          ourTimeout;
     struct event*           signalEvent = NULL; /* signal event handle */
     struct event_base*      mainBase = NULL;    /* main thread's base  */
     signalArg               sigArg;
     FILE*                   pidF = 0;
     svcInfo* certSvc = NULL;
     svcInfo* etsiSvc = NULL;
-
-    ourTimeout.tv_sec  = WOLFKM_DEFAULT_TIMEOUT;
-    ourTimeout.tv_usec = 0;
+    word32 timeoutSec  = WOLFKM_DEFAULT_TIMEOUT;
 
     /* argument processing */
     while ((ch = getopt(argc, argv, "?dcns:t:m:l:f:v:")) != -1) {
@@ -77,12 +74,15 @@ int main(int argc, char** argv)
                 core = 1;
                 break;
             case 's' :
-                ourTimeout.tv_sec = atoi(optarg);
-                if (ourTimeout.tv_sec < 0) {
+            {
+                int sec = atoi(optarg);
+                if (sec < 0) {
                     perror("timeout positive values only accepted");
                     exit(EX_USAGE);
                 }
+                timeoutSec = (word32)sec;
                 break;
+            }
             case 't' :
                 poolSize = atoi(optarg);
                 break;
@@ -155,25 +155,20 @@ int main(int argc, char** argv)
         ret = EX_OSERR; goto exit;
     }
 
+    /* setup pid */
     pidF = wolfKeyMgr_GetPidFile(pidName, getpid());
     if (pidF == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to get pidfile (already running?)\n");
         ret = EXIT_FAILURE; goto exit;
     }
 
-    /* max files */
+    /* set max files */
     wolfKeyMgr_SetMaxFiles(maxFiles);
 
     /********** Certificate Service **********/
-    certSvc = wolfCertSvc_Init(mainBase, poolSize);
-    if (certSvc) {
-        wolfKeyMgr_SetTimeout(certSvc, ourTimeout);
-    }
+    certSvc = wolfCertSvc_Init(mainBase, poolSize, timeoutSec);
     /********** ETSI Service **********/
-    etsiSvc = wolfEtsiSvc_Init(mainBase, poolSize);
-    if (etsiSvc) {
-        wolfKeyMgr_SetTimeout(etsiSvc, ourTimeout);
-    }
+    etsiSvc = wolfEtsiSvc_Init(mainBase, poolSize, timeoutSec);
 
     /* SIGINT handler */
     signalEvent = event_new(mainBase, SIGINT, (EV_SIGNAL | EV_PERSIST), 
@@ -206,8 +201,8 @@ exit:
 
     wolfKeyMgr_FreeListeners();
 
-    wolfCertSvc_Cleanup();
-    wolfEtsiSvc_Cleanup();
+    wolfCertSvc_Cleanup(certSvc);
+    wolfEtsiSvc_Cleanup(etsiSvc);
     if (signalEvent) event_del(signalEvent);
     if (mainBase) event_base_free(mainBase);
     wolfSSL_Cleanup();

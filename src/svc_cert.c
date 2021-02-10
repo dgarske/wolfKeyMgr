@@ -609,7 +609,7 @@ void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx)
 #endif /* WOLFKM_CERT_SERVICE */
 
 
-svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
+svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize, word32 timeoutSec)
 {
 #ifdef WOLFKM_CERT_SERVICE
     int ret;
@@ -635,12 +635,14 @@ svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one listener,"
                                "already running?\n");
-        wolfCertSvc_Cleanup();
+        wolfCertSvc_Cleanup(&certService);
         return NULL;
     }
     /* thread setup */
     wolfKeyMgr_ServiceInit(&certService, poolSize);
         /* cleanup handled in sigint handler and wolfKeyMgr_ServiceCleanup */
+
+    wolfKeyMgr_SetTimeout(&certService, timeoutSec);
 
     return &certService;
 #else
@@ -648,8 +650,10 @@ svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize)
 #endif
 }
 
-void wolfCertSvc_Cleanup(void)
+void wolfCertSvc_Cleanup(svcInfo* svc)
 {
+    if (svc == NULL)
+        return;
 #ifdef WOLFKM_CERT_SERVICE
     if (certService.keyBuffer) {
         free(certService.keyBuffer);

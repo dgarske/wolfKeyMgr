@@ -179,21 +179,26 @@ static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, int usePush, char* saveRe
     return 0;
 }
 
+typedef struct WorkThreadInfo {
+    int requests;
+    int usePush;
+    char* saveResp;
+} WorkThreadInfo;
 
 /* Do requests per thread, persistent connection */
 static void* DoRequests(void* arg)
 {
     int i;
     int ret = -1;
-    int requests = *(int*)arg;
+    WorkThreadInfo* info = (WorkThreadInfo*)arg;
     WOLFSSL* ssl = NULL;
 
     SOCKET_T sockfd;
     tcp_connect(&sockfd, host, port, 0, 0, NULL);
     ssl = NewSSL(sockfd);
 
-    for (i = 0; i < requests; i++) {
-        ret = DoKeyRequest(sockfd, ssl, 0, NULL);
+    for (i = 0; i < info->requests; i++) {
+        ret = DoKeyRequest(sockfd, ssl, info->usePush, info->saveResp);
         if (ret != 0) {
             XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
             exit(EXIT_FAILURE);
@@ -256,6 +261,7 @@ int main(int argc, char** argv)
     SOCKET_T    sockfd;
     WOLFSSL*    ssl = NULL;
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
+    WorkThreadInfo info;
 
     port       = atoi(WOLFKM_ETSISVC_PORT);
 
@@ -318,23 +324,25 @@ int main(int argc, char** argv)
         }
     }
 
-    tcp_connect(&sockfd, host, port, 0, 0, NULL);
-    ssl = NewSSL(sockfd);
-    XLOG(WOLFKM_LOG_INFO, "Connected to etsi service\n");
+    if (poolSize == 0) {
+        tcp_connect(&sockfd, host, port, 0, 0, NULL);
+        ssl = NewSSL(sockfd);
+        XLOG(WOLFKM_LOG_INFO, "Connected to etsi service\n");
+        
+        /* Do a etsi test */
+        ret = DoKeyRequest(sockfd, ssl, usePush, saveResp);
+        if (ret != 0) {
+            XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
+            exit(EXIT_FAILURE);
+        }
+        XLOG(WOLFKM_LOG_INFO, "First ETSI test worked!\n");
 
-    /* Do a etsi test and save the pem */
-    ret = DoKeyRequest(sockfd, ssl, usePush, saveResp);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
-        exit(EXIT_FAILURE);
+        CloseSocket(sockfd);
+        wolfSSL_free(ssl);
     }
-    XLOG(WOLFKM_LOG_INFO, "First ETSI test worked!\n");
+    else {
+        /* stress testing with a thread pool */
 
-    CloseSocket(sockfd);
-    wolfSSL_free(ssl);
-
-    /* are we stress testing with a thread pool ? */
-    if (poolSize) {
         /* thread id holder */
         tids = calloc(poolSize, sizeof(pthread_t));
         if (tids == NULL) {
@@ -342,9 +350,14 @@ int main(int argc, char** argv)
             exit(EXIT_FAILURE);
         }
 
+        /* setup worker thread info */
+        info.requests = requests;
+        info.usePush = usePush;
+        info.saveResp = saveResp;
+
         /* create workers */
         for (i = 0; i < poolSize; i++) {
-            if (pthread_create(&tids[i], NULL, DoRequests, &requests) != 0){
+            if (pthread_create(&tids[i], NULL, DoRequests, &info) != 0){
                 XLOG(WOLFKM_LOG_ERROR, "pthread_create failed");
                 exit(EXIT_FAILURE);
             }

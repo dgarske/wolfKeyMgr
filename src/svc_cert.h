@@ -59,8 +59,8 @@ enum CertMessageTypes {
 
 
 
-svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize);
-void wolfCertSvc_Cleanup(void);
+svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize, word32 timeoutSec);
+void wolfCertSvc_Cleanup(svcInfo* svc);
 
 int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx);
 void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx);
