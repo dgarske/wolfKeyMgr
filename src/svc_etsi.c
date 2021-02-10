@@ -22,9 +22,17 @@
 #include "keymanager.h"
 #include "mod_https.h"
 
-
 #ifdef WOLFKM_ETSI_SERVICE
 
+//#define DEBUG_ETSI
+
+/* shared context for worker threads (read only) */
+typedef struct etsiServiceCtx {
+    ecc_key key; /* last generated key */
+} etsiServiceCtx;
+static etsiServiceCtx svcCtx;
+
+/* the top level service */
 static svcInfo etsiService = {
     .desc = "ETSI",
 
@@ -38,9 +46,11 @@ static svcInfo etsiService = {
     .certBufferSz = 0,
     .keyBuffer = NULL,
     .keyBufferSz = 0,
+
+    .svcCtx = &svcCtx,
 };
 
-
+/* worker thread objects */
 typedef struct etsiSvcInfo {
     HttpReq req;
     WC_RNG  rng;
@@ -111,10 +121,13 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
     ret = wolfKeyMgr_HttpParse(&etsiSvc->req, (char*)conn->request,
         conn->requestSz);
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "ETSI HTTP Parse failed: %d\n", ret);
         return WOLFKM_BAD_REQUEST_TYPE;
     }
-    
+#ifdef DEBUG_ETSI
+    wolfKeyMgr_HttpReqDump(&etsiSvc->req);
+#endif
+
     /* Send Response */
     ret = wolfEtsiSvc_GetAsymPackage(conn, etsiSvc);
     if (ret == 0) {
@@ -160,6 +173,10 @@ void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcCtx)
 }
 
 #endif /* WOLFKM_ETSI_SERVICE */
+
+
+/* Thread to wake up connected clients and push new key periodically */
+
 
 
 svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize)

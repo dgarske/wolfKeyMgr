@@ -28,8 +28,13 @@ extern "C" {
 
 #include "wkm_types.h"
 
+/* Configurable HTTP Settings */
+#ifndef HTTP_HDR_MAX_ITEMS
+#define HTTP_HDR_MAX_ITEMS 10
+#endif
+
 /* HTTP Types */
-typedef enum HttpMethod {
+typedef enum HttpMethodType {
     HTTP_METHOD_UNKNOWN,
     HTTP_METHOD_OPTIONS,
     HTTP_METHOD_GET,
@@ -39,7 +44,7 @@ typedef enum HttpMethod {
     HTTP_METHOD_DELETE,
     HTTP_METHOD_TRACE,
     HTTP_METHOD_CONNECT,
-} HttpMethod;
+} HttpMethodType;
 
 typedef enum HttpHeaderType {
     HTTP_HDR_UNKNOWN,
@@ -91,31 +96,32 @@ typedef enum HttpHeaderType {
     HTTP_HDR_VIA,
     HTTP_HDR_WARNING,
     HTTP_HDR_WWW_AUTHENTICATE,
-    HTTP_HDR_MAX_ITEMS,
 } HttpHeaderType;
 
 typedef enum HttpErrorCodes {
-    HTTP_ERROR_EXPECTED_CRLF = -1000,
+    HTTP_ERROR_EXPECTED_CRLF   = -1000,
+    HTTP_ERROR_EXPECTED_METHOD = -1001,
 
 } HttpErrorCodes;
 
-typedef struct HttpHeaders {
+typedef struct HttpHeader {
     HttpHeaderType type;
-    char*          buffer;
-    word32         length;
-} HttpHeaders;
+    char*          header;
+    char*          string;
+} HttpHeader;
 
 typedef struct HttpReq {
-    HttpMethod  method;
-    char*       uri;
-    word32      uriLen;
-    char*       version;
-    HttpHeaders headers[HTTP_HDR_MAX_ITEMS];
+    HttpMethodType type;
+    char*          method;
+    char*          uri;
+    char*          version;
+    word32         headerCount;
+    HttpHeader     headers[HTTP_HDR_MAX_ITEMS];
 } HttpReq;
 
 
 int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz);
-
+void wolfKeyMgr_HttpReqDump(HttpReq* req);
 
 
 #ifdef __cplusplus

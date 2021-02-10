@@ -56,7 +56,7 @@ c) The key manager shall return an appropriate HTTP error code if there is not a
 Example:
 
 ```
-GET /.well-known/enterprise-transport- security/keys?fingerprints=00010203040506070809,09080706050403020100
+GET /.well-known/enterprise-transport-security/keys?fingerprints=00010203040506070809,09080706050403020100
 Accept: application/pkcs8, application/cms
 ```
 
@@ -77,7 +77,7 @@ e) If no group in `[groups]` is supported by the key manager, the key manager sh
 Example:
 
 ```
-GET /.well-known/enterprise-transport- security/keys?groups=0x0018,0x001d&certs=0x0401:0x0809,0x0503:0x0503
+GET /.well-known/enterprise-transport-security/keys?groups=0x0018,0x001d&certs=0x0401:0x0809,0x0503:0x0503
 Accept: application/pkcs8
 ```
 

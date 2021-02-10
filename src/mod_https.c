@@ -20,16 +20,57 @@
  */
 
 #include "mod_https.h"
+#include "wkm_utils.h"
 #include <string.h>
 
-/* Examples:
- * GET /.well-known/enterprise-transport-security/keys?fingerprints=[fingerprints]`
- * GET /.well-known/enterprise-transport-security/keys?groups=[groups]&certs=[sigalgs]&context=contextstr
- * GET /index.html HTTP/1.0\r\n\r\n
- */
-
-static const char* kGET = "GET";
 static const char* kCrlf = "\r\n";
+
+static void HttpParseMethod(HttpReq* req, char* method)
+{
+    if (strncmp(method, "GET", 3) == 0) {
+        req->type = HTTP_METHOD_GET;
+    }
+    else if (strncmp(method, "HEAD", 4) == 0) {
+        req->type = HTTP_METHOD_HEAD;
+    }
+    else if (strncmp(method, "POST", 4) == 0) {
+        req->type = HTTP_METHOD_POST;
+    }
+    else if (strncmp(method, "PUT", 3) == 0) {
+        req->type = HTTP_METHOD_PUT;
+    }
+    else if (strncmp(method, "DELETE", 6) == 0) {
+        req->type = HTTP_METHOD_DELETE;
+    }
+    else if (strncmp(method, "TRACE", 5) == 0) {
+        req->type = HTTP_METHOD_TRACE;
+    }
+    else if (strncmp(method, "CONNECT", 7) == 0) {
+        req->type = HTTP_METHOD_CONNECT;
+    }    
+}
+
+static void HttpParseHeader(HttpReq* req, char* hdrStr)
+{
+    HttpHeader* hdr;
+    word32 itemSz = 0;
+
+    if (req->headerCount >= HTTP_HDR_MAX_ITEMS)
+        return;
+    
+    hdr = &req->headers[req->headerCount];
+    memset(hdr, 0, sizeof(*hdr));
+
+    if (strncmp(hdrStr, "Accept: ", 8) == 0) {
+        hdr->type = HTTP_HDR_ACCEPT;
+        itemSz = 8;
+    }
+
+    hdrStr[itemSz-2] = '\0'; /* null terminate */
+    hdr->header = hdrStr;
+    hdr->string = hdrStr + itemSz;
+    req->headerCount++;
+}
 
 /* Parse incoming request into `HttpReq` struct */
 int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
@@ -42,38 +83,66 @@ int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
     if (req == NULL)  {
         return WOLFKM_BAD_ARGS;
     }
+    memset(req, 0, sizeof(*req));
 
     /* Method */
-    if (strncmp(sec, kGET, strlen(kGET)) == 0) {
-        req->method = HTTP_METHOD_GET;
-        itemSz = strlen(kGET) + 1; /* include space */
-        sec += itemSz; len -= itemSz;
-        endline = strstr(sec, kCrlf); /* Find end of line */
-        if (endline == NULL) {
-            return HTTP_ERROR_EXPECTED_CRLF;
-        }
+    /* find first space */
+    endline = strchr(sec, ' ');
+    if (endline) {
         *endline = '\0'; /* null terminate string */
+        HttpParseMethod(req, sec);
+    }
+    if (req->type == HTTP_METHOD_UNKNOWN) {
+        return HTTP_ERROR_EXPECTED_METHOD;
+    }
+    req->method = sec;
+    itemSz = strlen(sec) + 1; /* include space */    
+    sec += itemSz; len -= itemSz;
 
-        /* HTTP Header Version */
-        /* locate last space */
-        last = strrchr(sec, ' ');
-        if (last) {
-            req->version = last + 1;
-            *last = '\0';
-        }
-        /* Set URI */
-        req->uri = sec;
-        sec = endline+2;
-        len = (word32)((size_t)sec - (size_t)buf);
+    /* Find end of line */
+    endline = strstr(sec, kCrlf);
+    if (endline == NULL) {
+        return HTTP_ERROR_EXPECTED_CRLF;
+    }
+    *endline = '\0'; /* null terminate string */
 
-        /* Parse headers */
-        endline = strstr(sec, kCrlf); /* Find end of line */
-        while (endline) {
-            /* TODO: parse the header elements */
-            
-            endline = strstr(buf, kCrlf); /* Find end of line */
-        }
+    /* HTTP Header Version */
+    /* locate last space */
+    last = strrchr(sec, ' ');
+    if (last) {
+        req->version = last + 1;
+        *last = '\0';
+    }
+
+    /* Set URI */
+    req->uri = sec;
+    sec = endline + 2; /* 2=length of CRLF */
+
+    /* Parse headers */
+    endline = strstr(sec, kCrlf); /* Find end of line */
+    while (endline) {
+        *endline = '\0'; /* null terminate line */
+        HttpParseHeader(req, sec);
+        endline += 2; /* 2=length of CRLF */
+        endline = strstr(endline, kCrlf); /* Find end of line */
     }
 
     return ret;
+}
+
+void wolfKeyMgr_HttpReqDump(HttpReq* req)
+{
+    int i;
+
+    if (req == NULL)
+        return;
+
+    XLOG(WOLFKM_LOG_INFO, "HTTP %s\n", req->method);
+    XLOG(WOLFKM_LOG_INFO, "\tVer %s\n", req->version);
+    XLOG(WOLFKM_LOG_INFO, "\tURI %s\n",req->uri);
+    XLOG(WOLFKM_LOG_INFO, "\tHeaders: %d\n", req->headerCount);
+    for (i=0; i<req->headerCount; i++) {
+        XLOG(WOLFKM_LOG_INFO, "\t\t%d: %s: %s\n",
+            i, req->headers[i].header, req->headers[i].string);
+    }
 }

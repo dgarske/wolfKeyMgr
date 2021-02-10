@@ -87,11 +87,14 @@ struct svcInfo {
     freeThreadFunc  freeThreadCb;
     
     /* TLS certificate / key - As DER/ASN.1*/
-    int         noTLS;
-    byte*       keyBuffer;
-    byte*       certBuffer;
-    word32      keyBufferSz;
-    word32      certBufferSz;
+    int             noTLS;
+    byte*           keyBuffer;
+    byte*           certBuffer;
+    word32          keyBufferSz;
+    word32          certBufferSz;
+
+    /* Shared context for all threads */
+    void*           svcCtx;
 
     /* internal members */
     struct timeval  readto;         /* our event timeout */

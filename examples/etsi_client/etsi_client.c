@@ -39,6 +39,10 @@ static const char* host =  WOLFKM_DEFAULT_HOST;  /* peer host */
 static WOLFSSL_CTX* sslCtx;       /* ssl context factory */
 static int usingTLS = 1;          /* ssl is on by default */
 
+static const char* kEtsiGet1 = "GET /.well-known/enterprise-transport-security/keys?fingerprints=%s HTTP/1.1\r\nAccept: application/pkcs8\r\n";
+//static const char* kEtsiGet2 = "GET /.well-known/enterprise-transport-security/keys?groups=%s&certs=%s HTTP/1.1\r\nAccept: application/pkcs8\r\n";
+static const char* kEtsiPush = "PUT /enterprise-transport-security/keys HTTP/1.1\r\nAccept: application/pkcs8\r\n";
+
 
 /* return sent bytes or < 0 on error */
 static int DoClientSend(int sockfd, WOLFSSL* ssl, const byte* p, int len)
@@ -109,59 +113,68 @@ static int DoErrorMode(void)
 }
 
 /* ETSI Asymmetric Key Request */
-static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, char* saveResp)
+static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, int usePush, char* saveResp)
 {
     int     ret;
     int     requestSz = 0;
-    byte    tmp[4096];
+    byte    tmp[4096]; /* buffer large enough for private keys */
     byte*   request = tmp;  /* use to build header in front */
     int     sent = 0;
-    const char* msg = "GET /.well-known/enterprise-transport-security/keys?fingerprints=\r\n";
-    word32   msgSz = (word32)strlen(msg);
 
-    /* HTTP GET */
-    requestSz = msgSz;
-    memcpy(request, msg, msgSz);
-    XLOG(WOLFKM_LOG_INFO, "Create key request\n");
+    /* Build HTTP ETSI request */
+    if (usePush) {
+        requestSz = (int)strlen(kEtsiPush);
+        memcpy(request, kEtsiPush, requestSz);
+    }
+    else {
+        /* kEtsiGet1 / kEtsiGet2 */
+        requestSz = (int)strlen(kEtsiGet1);
+        memcpy(request, kEtsiGet1, requestSz);
+    }
 
     while (sent < requestSz) {
         ret = DoClientSend(sockfd, ssl, tmp + sent, requestSz - sent);
         if (ret < 0) {
             XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
-            exit(EXIT_FAILURE);
+            return ret;
         }
         sent += ret;
         if (sent == requestSz)
             break;
     }
-    XLOG(WOLFKM_LOG_INFO, "Sent request\n");
+    XLOG(WOLFKM_LOG_INFO, "Sent %s request\n", usePush ? "push" : "single");
 
-    ret = DoClientRead(sockfd, ssl, tmp, sizeof(tmp));
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
-        exit(EXIT_FAILURE);
-    }
-    else if (ret == 0) {
-        XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
-        exit(EXIT_FAILURE);
-    }
-    
-    /* Process asymmetric key package response */
-    XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", ret);
-    /* TODO: Show parsing key package */
+    /* for push run until error */
+    do {
+        ret = DoClientRead(sockfd, ssl, tmp, sizeof(tmp));
+        if (ret < 0) {
+            XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
+            return ret;
+        }
+        else if (ret == 0) {
+            XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
+            return -1;
+        }
+        
+        /* Process asymmetric key package response */
+        XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", ret);
 
-    if (saveResp) {
-        FILE* raw = fopen(saveResp, "wb");
-        if (raw == NULL) {
-            XLOG(WOLFKM_LOG_INFO, "Error saving response to %s\n", saveResp);
-            exit(EXIT_FAILURE);
+        /* TODO: Show parsing key package */
+
+        if (saveResp) {
+            FILE* raw = fopen(saveResp, "wb");
+            if (raw == NULL) {
+                XLOG(WOLFKM_LOG_INFO, "Error saving response to %s\n", saveResp);
+                return -1;
+            }
+            requestSz = (int)fwrite(tmp, 1, ret, raw);
+            fclose(raw);
+            if (ret != requestSz) {
+                XLOG(WOLFKM_LOG_ERROR, "fwrite failed\n");
+                return -1;
+            }
         }
-        if ((int)fwrite(tmp, ret, 1, raw) != 1) {
-            XLOG(WOLFKM_LOG_ERROR, "fwrite failed\n");
-            exit(EXIT_FAILURE);
-        }
-        fclose(raw);
-    }
+    } while (usePush && ret > 0);
 
     return 0;
 }
@@ -180,7 +193,7 @@ static void* DoRequests(void* arg)
     ssl = NewSSL(sockfd);
 
     for (i = 0; i < requests; i++) {
-        ret = DoKeyRequest(sockfd, ssl, NULL);
+        ret = DoKeyRequest(sockfd, ssl, 0, NULL);
         if (ret != 0) {
             XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
             exit(EXIT_FAILURE);
@@ -228,6 +241,7 @@ static void Usage(void)
     printf("-r <num>    Requests per thread, default %d\n",
                                                           WOLFKM_DEFAULT_REQUESTS);
     printf("-f <file>   <file> to store ETSI response\n");
+    printf("-u          Use Push (HTTP PUT)");
 }
 
 
@@ -238,6 +252,7 @@ int main(int argc, char** argv)
     char*       saveResp  = NULL;        /* save response */
     int         requests = WOLFKM_DEFAULT_REQUESTS;
     int         errorMode = 0;
+    int         usePush = 0;
     SOCKET_T    sockfd;
     WOLFSSL*    ssl = NULL;
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
@@ -249,7 +264,7 @@ int main(int argc, char** argv)
 #endif
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:")) != -1) {
+    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:u")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -279,6 +294,9 @@ int main(int argc, char** argv)
                     exit(EX_USAGE);
                 }
                 break;
+            case 'u':
+                usePush = 1;
+                break;
 
             default:
                 Usage();
@@ -305,7 +323,7 @@ int main(int argc, char** argv)
     XLOG(WOLFKM_LOG_INFO, "Connected to etsi service\n");
 
     /* Do a etsi test and save the pem */
-    ret = DoKeyRequest(sockfd, ssl, saveResp);
+    ret = DoKeyRequest(sockfd, ssl, usePush, saveResp);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
         exit(EXIT_FAILURE);
