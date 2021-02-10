@@ -109,8 +109,7 @@ static int DoErrorMode(void)
 }
 
 /* ETSI Asymmetric Key Request */
-static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, 
-    char* saveResp, char* dumpFile)
+static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, char* saveResp)
 {
     int     ret;
     int     requestSz = 0;
@@ -123,7 +122,7 @@ static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl,
     /* HTTP GET */
     requestSz = msgSz;
     memcpy(request, msg, msgSz);
-    XLOG(WOLFKM_LOG_INFO, "Created key request\n");
+    XLOG(WOLFKM_LOG_INFO, "Create key request\n");
 
     while (sent < requestSz) {
         ret = DoClientSend(sockfd, ssl, tmp + sent, requestSz - sent);
@@ -147,11 +146,22 @@ static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl,
         exit(EXIT_FAILURE);
     }
     
-    /* TODO: Process asymmetric key package response */
-    XLOG(WOLFKM_LOG_INFO, "Got response sz = %d\n", requestSz);
-    (void)dumpFile;
-    (void)saveResp;
+    /* Process asymmetric key package response */
+    XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", ret);
+    /* TODO: Show parsing key package */
 
+    if (saveResp) {
+        FILE* raw = fopen(saveResp, "wb");
+        if (raw == NULL) {
+            XLOG(WOLFKM_LOG_INFO, "Error saving response to %s\n", saveResp);
+            exit(EXIT_FAILURE);
+        }
+        if ((int)fwrite(tmp, ret, 1, raw) != 1) {
+            XLOG(WOLFKM_LOG_ERROR, "fwrite failed\n");
+            exit(EXIT_FAILURE);
+        }
+        fclose(raw);
+    }
 
     return 0;
 }
@@ -170,7 +180,7 @@ static void* DoRequests(void* arg)
     ssl = NewSSL(sockfd);
 
     for (i = 0; i < requests; i++) {
-        ret = DoKeyRequest(sockfd, ssl, NULL, NULL);
+        ret = DoKeyRequest(sockfd, ssl, NULL);
         if (ret != 0) {
             XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
             exit(EXIT_FAILURE);
@@ -217,8 +227,7 @@ static void Usage(void)
     printf("-l <num>    Log Level, default %d\n", WOLFKM_DEFAULT_LOG_LEVEL);
     printf("-r <num>    Requests per thread, default %d\n",
                                                           WOLFKM_DEFAULT_REQUESTS);
-    printf("-d <file>   Dump raw binary etsi request fo <file>\n");
-    printf("-f <file>   <file> to store etsi response\n");
+    printf("-f <file>   <file> to store ETSI response\n");
 }
 
 
@@ -226,8 +235,7 @@ int main(int argc, char** argv)
 {
     int         ch, i;
     int         ret;
-    char*       dumpFile = NULL;        /* dump request etsi */
-    char*       saveResp  = NULL;        /* dump response etsi */
+    char*       saveResp  = NULL;        /* save response */
     int         requests = WOLFKM_DEFAULT_REQUESTS;
     int         errorMode = 0;
     SOCKET_T    sockfd;
@@ -241,16 +249,13 @@ int main(int argc, char** argv)
 #endif
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:d:f:")) != -1) {
+    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
                 exit(EX_USAGE);
             case 'h' :
                 host = optarg;
-                break;
-            case 'd' :
-                dumpFile = optarg;
                 break;
             case 'f' :
                 saveResp = optarg;
@@ -300,7 +305,7 @@ int main(int argc, char** argv)
     XLOG(WOLFKM_LOG_INFO, "Connected to etsi service\n");
 
     /* Do a etsi test and save the pem */
-    ret = DoKeyRequest(sockfd, ssl, saveResp, dumpFile);
+    ret = DoKeyRequest(sockfd, ssl, saveResp);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
         exit(EXIT_FAILURE);

@@ -36,8 +36,9 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int poolSize);
 void wolfEtsiSvc_Cleanup(void);
 
 int wolfEtsiSvc_WorkerInit(svcInfo* svc, void** svcCtx);
-int wolfEtsiSvc_DoRequest(svcConn* conn);
 void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcCtx);
+
+int wolfEtsiSvc_DoRequest(svcConn* conn);
 
 #ifdef __cplusplus
 }

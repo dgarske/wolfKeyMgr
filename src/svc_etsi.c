@@ -46,58 +46,37 @@ typedef struct etsiSvcInfo {
     WC_RNG  rng;
 } etsiSvcInfo;
 
-static const char kHttpServerMsg[] =
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Connection: close\r\n"
-    "Content-Length: 141\r\n"
-    "\r\n"
-    "<html>\r\n"
-    "<head>\r\n"
-    "<title>Welcome to wolfSSL!</title>\r\n"
-    "</head>\r\n"
-    "<body>\r\n"
-    "<p>wolfSSL has successfully performed handshake!</p>\r\n"
-    "</body>\r\n"
-    "</html>\r\n";
-
 
 static int wolfEtsiSvc_GenerateEccKey(etsiSvcInfo* etsiSvc, 
     byte* out, word32* outSz)
 {
     int ret;
     ecc_key eccKey;
-    byte eccPubKeyBuf[ECC_BUFSIZE], eccPrivKeyBuf[ECC_BUFSIZE];
-    word32 eccPubKeyLen, eccPrivKeyLen;
+
+    ret = wc_ecc_init(&eccKey);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "ECC Init Failed! %d\n", ret);
+        return ret;
+    }
 
     /* Generate key */
-    wc_ecc_init(&eccKey);
-    ret = wc_ecc_make_key_ex(&etsiSvc->rng, 32, &eccKey, ECC_CURVE_DEF);
-    if(ret != 0) {
-        printf("ECC Make Key Failed! %d\n", ret);
-    }
-
-    /* Display public key data */
-    eccPubKeyLen = ECC_BUFSIZE;
-    ret = wc_ecc_export_x963(&eccKey, eccPubKeyBuf, &eccPubKeyLen);
+    /* TODO: Support other key sizes and curves */
+    ret = wc_ecc_make_key_ex(&etsiSvc->rng, 32, &eccKey, ECC_SECP256R1);
     if (ret != 0) {
-        printf("ECC public key x963 export failed! %d\n", ret);
-        ret = EXIT_FAILURE;
+        XLOG(WOLFKM_LOG_ERROR, "ECC Make Key Failed! %d\n", ret);
         goto exit;
     }
-    printf("ECC Public Key: Len %d\n", eccPubKeyLen);
-    WOLFSSL_BUFFER(eccPubKeyBuf, eccPubKeyLen);
 
-    /* Display private key data */
-    eccPrivKeyLen = ECC_BUFSIZE;
-    ret = wc_ecc_export_private_only(&eccKey, eccPrivKeyBuf, &eccPrivKeyLen);
-    if (ret != 0) {
-        printf("ECC private key export failed! %d\n", ret);
-        ret = EXIT_FAILURE;
+    /* Export as DER IETF RFC 5915 */
+    ret = wc_EccKeyToDer(&eccKey, out, *outSz);
+    if (ret < 0) {
+        XLOG(WOLFKM_LOG_ERROR, "wc_EccKeyToDer failed %d\n", ret);
         goto exit;
     }
-    printf("ECC Private Key: Len %d\n", eccPrivKeyLen);
-    WOLFSSL_BUFFER(eccPrivKeyBuf, eccPrivKeyLen);
+    *outSz = ret;
+    ret = 0;
+
+    XLOG(WOLFKM_LOG_INFO, "ECC DER Len %d\n", *outSz);
 
 exit:
     wc_ecc_free(&eccKey);
@@ -111,21 +90,6 @@ static int wolfEtsiSvc_GetAsymPackage(svcConn* conn, etsiSvcInfo* etsiSvc)
     conn->requestSz = sizeof(conn->request);
     ret = wolfEtsiSvc_GenerateEccKey(etsiSvc, (byte*)conn->request,
         &conn->requestSz);
-
-    /* Version 2 (int 1) */
-    
-    /* privateKeyAlgorithm shall be set to the key pair algorithm identifier */
-    /* DHE - { 1 2 840 10046 2 1 }
-    parameter encoding: DomainParameters
-    private key encoding: INTEGER
-    public key encoding: INTEGER
-    */
-
-    /* ECDHE - { 1 3 132 1 12 }
-    parameter encoding: ECParameters
-    private key encoding: ECPrivateKey
-    public key encoding: ECPoint
-    */
 
    return ret;
 }
@@ -154,16 +118,15 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
     /* Send Response */
     ret = wolfEtsiSvc_GetAsymPackage(conn, etsiSvc);
     if (ret == 0) {
-        ret = wolfKeyMgr_DoSend(conn, (byte*)kHttpServerMsg,
-            strlen(kHttpServerMsg));
-        /* send it, response is now in request buffer */
+        /* send response, which is in the reused request buffer */
+        ret = wolfKeyMgr_DoSend(conn, (byte*)conn->request, conn->requestSz);
         if (ret < 0) {
             XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
             return WOLFKM_BAD_SEND;
         }
         XLOG(WOLFKM_LOG_INFO, "Sent ETSI Response\n");
     }
-    return 0;
+    return ret;
 }
 
 /* Called for startup of each worker thread */
