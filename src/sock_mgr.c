@@ -252,13 +252,13 @@ static connItem* ConnQueuePop(connQueue* cq)
 }
 
 
-/* put cert connection item back onto the free item list, handle stats */
-static void ServiceConnFree(svcConn* conn)
+/* put connection item back onto the free item list, handle stats */
+void wolfKeyMgr_ServiceConnFree(svcConn* conn)
 {
     if (conn == NULL)
         return;
 
-    XLOG(WOLFKM_LOG_DEBUG, "Freeing Service Connection\n");
+    XLOG(WOLFKM_LOG_DEBUG, "Freeing %s Service Connection\n", conn->svc->desc);
     DecrementCurrentConnections(conn);
 
     /* release per connection resources */
@@ -356,24 +356,39 @@ static void WorkerExit(void* arg)
 /* our event callback */
 static void EventCb(struct bufferevent* bev, short what, void* ctx)
 {
+    svcConn* conn = (svcConn*)ctx;
+
     XLOG(WOLFKM_LOG_INFO, "EventCb what = %d\n", what);
 
     if (what & BEV_EVENT_TIMEOUT) {
-        XLOG(WOLFKM_LOG_INFO, "Got timeout on connection, closing\n");
-        ServiceConnFree(ctx);
-        IncrementTimeouts(ctx);
+        int doClose = 1;
+        if (conn && conn->svc && conn->svc->timeoutCb) {
+            doClose = conn->svc->timeoutCb(conn);
+        }
+        if (doClose) {
+            XLOG(WOLFKM_LOG_INFO, "Got timeout on connection, closing\n");
+            wolfKeyMgr_ServiceConnFree(conn);
+            IncrementTimeouts(conn);
+        }
+        else {
+            IncrementCompleted(conn);
+
+            /* reset read/write enable */
+            XLOG(WOLFKM_LOG_INFO, "Keeping connection open\n");
+            bufferevent_enable(conn->stream, (EV_READ | EV_WRITE));
+        }
         return;
     }
 
     if (what & BEV_EVENT_EOF) {
         XLOG(WOLFKM_LOG_INFO, "Peer ended connection, closing\n");
-        ServiceConnFree(ctx);
+        wolfKeyMgr_ServiceConnFree(conn);
         return;
     }
 
     if (what & BEV_EVENT_ERROR) {
         XLOG(WOLFKM_LOG_INFO, "Generic connection error, closing\n");
-        ServiceConnFree(ctx);
+        wolfKeyMgr_ServiceConnFree(conn);
         return;
     }
 }
@@ -440,7 +455,7 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
             if (ret < 0) {
                 /* error */
                 XLOG(WOLFKM_LOG_ERROR, "Do request error %d\n", ret);
-                ServiceConnFree(conn);
+                wolfKeyMgr_ServiceConnFree(conn);
                 conn = NULL;
             }
             else {
@@ -456,7 +471,7 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
     else {
         /* ret < 0, we have an actual error */
         XLOG(WOLFKM_LOG_ERROR, "DoRead error %d\n", ret);
-        ServiceConnFree(conn);
+        wolfKeyMgr_ServiceConnFree(conn);
     }
 }
 
@@ -495,8 +510,8 @@ static void ThreadEventProcess(int fd, short which, void* arg)
                              (BEV_OPT_CLOSE_ON_FREE | BEV_OPT_DEFER_CALLBACKS));
         if (conn->stream == NULL) {
             XLOG(WOLFKM_LOG_ERROR, "bufferevent_socket_new() failed\n");
-            ServiceConnFree(conn);
-            close(clientFd); /* normally ServiceConnFree would close fd by stream
+            wolfKeyMgr_ServiceConnFree(conn);
+            close(clientFd); /* normally wolfKeyMgr_ServiceConnFree would close fd by stream
                                 but since stream is NULL, force it */
             return;
         }
@@ -504,7 +519,7 @@ static void ThreadEventProcess(int fd, short which, void* arg)
             conn->ssl = wolfSSL_new(conn->svc->sslCtx);
             if (conn->ssl == NULL) {
                 XLOG(WOLFKM_LOG_ERROR, "wolfSSL_New() failed\n");
-                ServiceConnFree(conn);
+                wolfKeyMgr_ServiceConnFree(conn);
                 return;
             }
             wolfSSL_SetIOReadCtx( conn->ssl, conn->stream);
@@ -569,7 +584,7 @@ static void* WorkerEvent(void* arg)
 
     /* zero out per thread stats, after creating pool */
     svcConn* conn = ServiceConnNew(me);
-    ServiceConnFree(conn);
+    wolfKeyMgr_ServiceConnFree(conn);
     InitStats(&threadStats);
 
     /* tell creator we're ready */

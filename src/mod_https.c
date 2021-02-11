@@ -137,12 +137,12 @@ void wolfKeyMgr_HttpReqDump(HttpReq* req)
     if (req == NULL)
         return;
 
-    XLOG(WOLFKM_LOG_INFO, "HTTP %s\n", req->method);
-    XLOG(WOLFKM_LOG_INFO, "\tVersion: %s\n", req->version);
-    XLOG(WOLFKM_LOG_INFO, "\tURI: %s\n",req->uri);
-    XLOG(WOLFKM_LOG_INFO, "\tHeaders: %d\n", req->headerCount);
+    XLOG(WOLFKM_LOG_DEBUG, "HTTP %s\n", req->method);
+    XLOG(WOLFKM_LOG_DEBUG, "\tVersion: %s\n", req->version);
+    XLOG(WOLFKM_LOG_DEBUG, "\tURI: %s\n",req->uri);
+    XLOG(WOLFKM_LOG_DEBUG, "\tHeaders: %d\n", req->headerCount);
     for (i=0; i<req->headerCount; i++) {
-        XLOG(WOLFKM_LOG_INFO, "\t\t%s: %s\n",
+        XLOG(WOLFKM_LOG_DEBUG, "\t\t%s: %s\n",
             req->headers[i].header, req->headers[i].string);
     }
 }

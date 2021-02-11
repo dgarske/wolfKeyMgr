@@ -36,6 +36,7 @@ byte* wolfKeyMgr_UriDecode(const char *s, byte *dec);
 double wolfKeyMgr_GetCurrentTime(void);
 
 int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
+void wolfKeyMgr_PrintBin(const byte* buffer, word32 length);
 
 /* misc functions */
 void c16toa(unsigned short, unsigned char*);
@@ -43,6 +44,7 @@ void ato16(const unsigned char*, unsigned short*);
 #if !defined(min) && !defined(WOLFSSL_HAVE_MIN)
 int min(int a, int b);
 #endif
+
 
 
 #endif /* WOLFKM_UTILS_H */

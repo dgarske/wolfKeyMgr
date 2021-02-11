@@ -35,10 +35,11 @@ extern "C" {
 svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec);
 void wolfEtsiSvc_Cleanup(svcInfo* svc);
 
-int wolfEtsiSvc_WorkerInit(svcInfo* svc, void** svcCtx);
-void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcCtx);
+int wolfEtsiSvc_WorkerInit(svcInfo* svc, void** svcThreadCtx);
+void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcThreadCtx);
 
 int wolfEtsiSvc_DoRequest(svcConn* conn);
+int wolfEtsiSvc_HandleTimeout(svcConn* conn);
 
 #ifdef __cplusplus
 }
