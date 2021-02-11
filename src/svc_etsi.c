@@ -26,11 +26,11 @@
 
 #define DEBUG_ETSI
 
-/* shared context for worker threads (read only) */
+/* shared context for worker threads */
 typedef struct etsiSvcCtx {
     ecc_key         key;  /* last generated key */
     double          last; /* time last generated */
-    pthread_mutex_t lock;     /* queue lock */
+    pthread_mutex_t lock; /* queue lock */
 } etsiSvcCtx;
 static etsiSvcCtx svcCtx;
 
@@ -56,54 +56,75 @@ static svcInfo etsiService = {
 typedef struct etsiSvcThread {
     HttpReq req;
     WC_RNG  rng;
+    double  last; /* time key last generated */
+    byte*   keyBuf;
+    word32  keySz;
 } etsiSvcThread;
 
 
-static int wolfEtsiSvc_GenerateEccKey(etsiSvcThread* etsiThread, 
-    byte* out, word32* outSz)
+static int SetupKeyPackage(etsiSvcCtx* svcCtx, etsiSvcThread* etsiThread)
 {
     int ret;
-    ecc_key eccKey;
+    byte tmp[4096];
+    word32 tmpSz = sizeof(tmp);
 
-    ret = wc_ecc_init(&eccKey);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "ECC Init Failed! %d\n", ret);
-        return ret;
-    }
+    pthread_mutex_lock(&svcCtx->lock);
+    if (svcCtx->last == 0) {
+        ret = wc_ecc_init(&svcCtx->key);
+        if (ret != 0) {
+            pthread_mutex_unlock(&svcCtx->lock);
+            XLOG(WOLFKM_LOG_ERROR, "ECC Init Failed! %d\n", ret);
+            return WOLFKM_BAD_KEY;
+        }
 
-    /* Generate key */
-    /* TODO: Support other key sizes and curves */
-    ret = wc_ecc_make_key_ex(&etsiThread->rng, 32, &eccKey, ECC_SECP256R1);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "ECC Make Key Failed! %d\n", ret);
-        goto exit;
+        /* Generate key */
+        /* TODO: Support other key sizes and curves */
+        ret = wc_ecc_make_key_ex(&etsiThread->rng, 32, &svcCtx->key, ECC_SECP256R1);
+        if (ret != 0) {
+            pthread_mutex_unlock(&svcCtx->lock);
+            XLOG(WOLFKM_LOG_ERROR, "ECC Make Key Failed! %d\n", ret);
+            return WOLFKM_BAD_KEY;
+        }
+        svcCtx->last = wolfKeyMgr_GetCurrentTime();
     }
 
     /* Export as DER IETF RFC 5915 */
-    ret = wc_EccKeyToDer(&eccKey, out, *outSz);
+    ret = wc_EccKeyToDer(&svcCtx->key, tmp, tmpSz);
     if (ret < 0) {
+        pthread_mutex_unlock(&svcCtx->lock);
         XLOG(WOLFKM_LOG_ERROR, "wc_EccKeyToDer failed %d\n", ret);
-        goto exit;
+        return WOLFKM_BAD_KEY;
     }
-    *outSz = ret;
+    tmpSz = ret;
     ret = 0;
+    pthread_mutex_unlock(&svcCtx->lock);
 
-    XLOG(WOLFKM_LOG_INFO, "ECC DER Len %d\n", *outSz);
+    /* allocate actual size and store in thread */
+    if (etsiThread->keyBuf) {
+        free(etsiThread->keyBuf);
+    }
+    etsiThread->keyBuf = malloc(tmpSz);
+    if (etsiThread->keyBuf) {
+        etsiThread->keySz = tmpSz;
+        memcpy(etsiThread->keyBuf, tmp, tmpSz);
+    }
+    else {
+        ret = WOLFKM_BAD_MEMORY;
+    }
 
-exit:
-    wc_ecc_free(&eccKey);
     return ret;
 }
 
 static int wolfEtsiSvc_GetAsymPackage(svcConn* conn, etsiSvcThread* etsiThread)
 {
-    int ret;
-
-    conn->requestSz = sizeof(conn->request);
-    ret = wolfEtsiSvc_GenerateEccKey(etsiThread, (byte*)conn->request,
-        &conn->requestSz);
-
-   return ret;
+    if (etsiThread->keyBuf == NULL) {
+        XLOG(WOLFKM_LOG_ERROR, "ETSI Key not found!\n");
+        return WOLFKM_BAD_KEY;
+    }
+    /* send already setup key */
+    memcpy(conn->request, etsiThread->keyBuf, etsiThread->keySz);
+    conn->requestSz = etsiThread->keySz;
+    return 0;
 }
 
 
@@ -157,7 +178,9 @@ int wolfEtsiSvc_WorkerInit(svcInfo* svc, void** svcThreadCtx)
 
     /* Init RNG for each worker */
     wc_InitRng(&etsiThread->rng);
-    svcCtx->last = wolfKeyMgr_GetCurrentTime();
+
+    /* make sure we have a key package setup to send */
+    SetupKeyPackage(svcCtx, etsiThread);
 
     *svcThreadCtx = etsiThread;
 
@@ -173,6 +196,9 @@ void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcThreadCtx)
         return;
 
     wc_FreeRng(&etsiThread->rng);
+    if (etsiThread->keyBuf) {
+        free(etsiThread->keyBuf);
+    }
     (void)svcCtx;
 
     free(etsiThread);
@@ -188,7 +214,7 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec)
     char* listenPort = WOLFKM_ETSISVC_PORT;
     svcInfo* svc = &etsiService;
     etsiSvcCtx* svcCtx = (etsiSvcCtx*)svc->svcCtx;
-
+    
     ret = wolfKeyMgr_LoadKeyFile(svc, WOLFKM_ETSISVC_KEY, 
         WOLFSSL_FILETYPE_PEM, WOLFKM_ETSISVC_KEY_PASSWORD);
     if (ret != 0) {
@@ -214,10 +240,9 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec)
         return NULL;
     }
 
-    /* using the timeout to trigger sending new set of keys */
+    /* use the timeout to trigger sending new set of keys */
+    wolfKeyMgr_SetTimeout(svc, timeoutSec);
 
-    //wolfKeyMgr_SetTimeout(svc, timeoutSec);
-    (void)timeoutSec;
     (void)svcCtx;
 
     return svc;
@@ -228,16 +253,21 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec)
 
 void wolfEtsiSvc_Cleanup(svcInfo* svc)
 {
-    if (svc == NULL)
-        return;
+    if (svc) {
 #ifdef WOLFKM_ETSI_SERVICE
-    if (svc->keyBuffer) {
-        free(svc->keyBuffer);
-        svc->keyBuffer = NULL;
-    }
-    if (svc->certBuffer) {
-        free(svc->certBuffer);
-        svc->certBuffer = NULL;
+        etsiSvcCtx* svcCtx = (etsiSvcCtx*)svc->svcCtx;
+        if (svc->keyBuffer) {
+            free(svc->keyBuffer);
+            svc->keyBuffer = NULL;
+        }
+        if (svc->certBuffer) {
+            free(svc->certBuffer);
+            svc->certBuffer = NULL;
+        }
+
+        if (svcCtx->last != 0) {
+            wc_ecc_free(&svcCtx->key);
+        }
     }
 #endif
 }

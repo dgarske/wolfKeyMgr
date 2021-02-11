@@ -48,7 +48,7 @@
 /* program constants */
 enum ProgramConstMisc {
     WOLFKM_DEFAULT_FILES       =  1024,        /* default max open files */
-    WOLFKM_DEFAULT_TIMEOUT     =     3,        /* default timeout in seconds */
+    WOLFKM_DEFAULT_TIMEOUT     =    60,        /* default timeout in seconds */
     WOLFKM_CONN_ITEMS          =  1024,        /* new conn item pool size */
     WOLFKM_BACKOFF_TIME        = 10000,        /* in microseconds */
 };

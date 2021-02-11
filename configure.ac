@@ -107,8 +107,8 @@ LIBS="$LIBS $PTHREAD_LIBS"
 # DEBUG
 AX_DEBUG
 AS_IF([test "$ax_enable_debug" = "yes"],
-      [CFLAGS="$CFLAGS_OPTIMIZE -DNDEBUG $CFLAGS"],
-      [CFLAGS="$CFLAGS_DEBUG $CFLAGS"])
+      [CFLAGS="$CFLAGS_DEBUG $CFLAGS"],
+      [CFLAGS="$CFLAGS_OPTIMIZE -DNDEBUG $CFLAGS"])
 
 
 # system depedent stuff
