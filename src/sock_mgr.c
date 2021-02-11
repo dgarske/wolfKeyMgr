@@ -313,7 +313,7 @@ static svcConn* ServiceConnNew(eventThread* me)
         conn->start     = 0.0f;
         conn->requestSz = 0;
         conn->svc       = svc;
-        conn->svcCtx    = me->svcCtx;
+        conn->svcThreadCtx = me->svcThreadCtx;
         conn->me        = me;
         IncrementTotalConnections(conn);
     }
@@ -329,7 +329,7 @@ static void WorkerExit(void* arg)
     svcInfo* svc = me->svc;
 
     if (svc && svc->freeThreadCb) {
-        svc->freeThreadCb(svc, me->svcCtx);
+        svc->freeThreadCb(svc, me->svcThreadCtx);
     }
 
     event_del(me->notify);
@@ -546,7 +546,7 @@ static void SetupThread(svcInfo* svc, eventThread* me)
     /* issue callback to service to init */
     me->svc = svc;
     if (svc->initThreadCb) {
-        svc->initThreadCb(svc, &me->svcCtx);
+        svc->initThreadCb(svc, &me->svcThreadCtx);
     }
 }
 
@@ -968,7 +968,7 @@ int wolfKeyMgr_AddListeners(svcInfo* svc, int af_v, char* listenPort,
     struct evutil_addrinfo  hints;
     struct evutil_addrinfo* answer = NULL;
     struct evutil_addrinfo* current = NULL;  /* list traversal */
-    char addrStr[100];
+    char addrStr[NI_MAXHOST + NI_MAXSERV];
 
     /* listening addr info */
     memset(&hints, 0, sizeof(hints));

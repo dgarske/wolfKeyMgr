@@ -225,10 +225,8 @@ static int GenerateVerify(svcConn* conn)
 /* increment signing counter, re-init rng if over max signs, 0 on success */
 static int IncrementSignCounter(svcConn* conn)
 {
-    certSvcInfo* certSvc;
     int ret = 0;
-
-    certSvc = (certSvcInfo*)conn->svcCtx;
+    certSvcInfo* certSvc = (certSvcInfo*)conn->svcThreadCtx;
 
     certSvc->signCount++;
     if (certSvc->signCount > certSvc->maxSigns) {
@@ -260,7 +258,7 @@ static int GenerateSign(svcConn* conn)
     byte* hdrSz     = request + CERT_HEADER_SZ_OFFSET;
     int   requestSz = conn->requestSz - CERT_HEADER_SZ;
 
-    certSvcInfo* certSvc = (certSvcInfo*)conn->svcCtx;
+    certSvcInfo* certSvc = (certSvcInfo*)conn->svcThreadCtx;
 
     /* make header */
     request[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
@@ -300,7 +298,7 @@ static int GenerateCert(svcConn* conn)
     byte* hdrSz     = request + CERT_HEADER_SZ_OFFSET;
     int   requestSz = conn->requestSz - CERT_HEADER_SZ;
 
-    certSvcInfo* certSvc = (certSvcInfo*)conn->svcCtx;
+    certSvcInfo* certSvc = (certSvcInfo*)conn->svcThreadCtx;
 
     /* make header */
     request[CERT_HEADER_VERSION_OFFSET] = CERT_VERSION;
@@ -556,7 +554,7 @@ int wolfCertSvc_DoRequest(svcConn* conn)
 }
 
 /* Called for startup of each worker thread */
-int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
+int wolfCertSvc_WorkerInit(svcInfo* svc, void** threadCtx)
 {
     int ret;
     word32 idx;
@@ -569,7 +567,7 @@ int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
     memset(certSvc, 0, sizeof(*certSvc));
     certSvc->maxSigns = CERTSVC_MAX_SIGNS;
 
-    *svcCtx = certSvc;
+    *threadCtx = certSvc;
 
     /* do per thread rng, key init */
     ret = wc_InitRng(&certSvc->rng);
@@ -594,11 +592,11 @@ int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx)
     return ret;
 }
 
-void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx)
+void wolfCertSvc_WorkerFree(svcInfo* svc, void* threadCtx)
 {
-    certSvcInfo* certSvc = (certSvcInfo*)svcCtx;
+    certSvcInfo* certSvc = (certSvcInfo*)threadCtx;
 
-    if (svc == NULL || svcCtx == NULL)
+    if (svc == NULL || threadCtx == NULL)
         return;
 
     wc_FreeRng(&certSvc->rng);
@@ -609,7 +607,7 @@ void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx)
 #endif /* WOLFKM_CERT_SERVICE */
 
 
-svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize, word32 timeoutSec)
+svcInfo* wolfCertSvc_Init(struct event_base* mainBase, word32 timeoutSec)
 {
 #ifdef WOLFKM_CERT_SERVICE
     int ret;
@@ -629,18 +627,17 @@ svcInfo* wolfCertSvc_Init(struct event_base* mainBase, int poolSize, word32 time
         return NULL;
     }
 
-    /* setup listening events, bind before .pid file creation */
-    ret =  wolfKeyMgr_AddListeners(&certService, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
-    ret += wolfKeyMgr_AddListeners(&certService, AF_INET, listenPort, mainBase);   /* should be first */
+    /* setup listening events */
+    ret = wolfKeyMgr_AddListeners(&certService, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
+    if (ret < 0) {
+        ret = wolfKeyMgr_AddListeners(&certService, AF_INET, listenPort, mainBase);
+    }
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one listener,"
                                "already running?\n");
         wolfCertSvc_Cleanup(&certService);
         return NULL;
     }
-    /* thread setup */
-    wolfKeyMgr_ServiceInit(&certService, poolSize);
-        /* cleanup handled in sigint handler and wolfKeyMgr_ServiceCleanup */
 
     wolfKeyMgr_SetTimeout(&certService, timeoutSec);
 

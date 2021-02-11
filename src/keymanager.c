@@ -155,7 +155,7 @@ int main(int argc, char** argv)
         ret = EX_OSERR; goto exit;
     }
 
-    /* setup pid */
+    /* setup pid before binding listeners */
     pidF = wolfKeyMgr_GetPidFile(pidName, getpid());
     if (pidF == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to get pidfile (already running?)\n");
@@ -166,9 +166,18 @@ int main(int argc, char** argv)
     wolfKeyMgr_SetMaxFiles(maxFiles);
 
     /********** Certificate Service **********/
-    certSvc = wolfCertSvc_Init(mainBase, poolSize, timeoutSec);
+    certSvc = wolfCertSvc_Init(mainBase, timeoutSec);
+    if (certSvc) {
+        /* thread setup - cleanup handled in sigint handler */
+        wolfKeyMgr_ServiceInit(certSvc, poolSize);
+    }
+
     /********** ETSI Service **********/
-    etsiSvc = wolfEtsiSvc_Init(mainBase, poolSize, timeoutSec);
+    etsiSvc = wolfEtsiSvc_Init(mainBase, timeoutSec);
+    if (etsiSvc) {
+        /* thread setup - cleanup handled in sigint handler */
+        wolfKeyMgr_ServiceInit(etsiSvc, poolSize);
+    }
 
     /* SIGINT handler */
     signalEvent = event_new(mainBase, SIGINT, (EV_SIGNAL | EV_PERSIST), 

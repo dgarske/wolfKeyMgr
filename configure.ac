@@ -248,5 +248,7 @@ echo "   * C Compiler:                $CC_VERSION"
 echo "   * C Flags:                   $CFLAGS"
 echo "   * CPP Flags:                 $CPPFLAGS"
 echo "   * LIB Flags:                 $LIB"
+echo "   * Debug enabled:             $ax_enable_debug"
 
 echo "   * Certificate Service        $ENABLED_CERT_SERVICE"
+echo "   * ETSI Service               $ENABLED_ETSI_SERVICE"

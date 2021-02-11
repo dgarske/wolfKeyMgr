@@ -130,7 +130,7 @@ struct svcConn {
     word32              requestSz;  /* bytes in request buffer */
     byte                request[MAX_REQUEST_SIZE]; /* full input request */
     svcInfo*            svc;
-    void*               svcCtx;
+    void*               svcThreadCtx;
     double              start;      /* response processing time start */
     eventThread*        me;
     svcConn*            next;       /* for free list */
@@ -152,7 +152,7 @@ struct eventThread {
     int                notifyRecv;      /* receiving end of notification pipe */
     int                notifySend;      /* sending  end of notification pipe */
     svcInfo*           svc;
-    void*              svcCtx;
+    void*              svcThreadCtx;
     svcConn*           freeSvcConns;    /* per thread conn list */
 };
 
