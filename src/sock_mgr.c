@@ -1222,7 +1222,9 @@ int wolfKeyMgr_NotifyAllClients(svcInfo* svc)
     for (i = 0; i < svc->threadPoolSize; i++) {
         eventThread* me = (eventThread*)&svc->threads[i];
         if (me->svc == svc) {
-            write(me->notifySend, &kNotify, sizeof(kNotify));
+            if (write(me->notifySend, &kNotify, sizeof(kNotify)) != sizeof(kNotify)) {
+                XLOG(WOLFKM_LOG_ERROR, "Notify thread failed!\n");
+            }
         }
     }    
     return 0;
