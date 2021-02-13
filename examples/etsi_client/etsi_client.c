@@ -160,7 +160,6 @@ static int DoKeyRequest(SOCKET_T sockfd, WOLFSSL* ssl, int useGet, char* saveRes
         /* Process asymmetric key package response */
         responseSz = ret;
         XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", responseSz);
-        wolfKeyMgr_PrintBin(tmp, responseSz);
 
         /* Parsing key package */
         ret = wc_ecc_init(&key);

@@ -64,6 +64,7 @@ typedef struct eventThread eventThread;
 /* service connection */
 typedef int  (*svcRequestFunc)(svcConn*);
 typedef int  (*svcTimeoutFunc)(svcConn*);
+typedef int  (*svcNotifyFunc)(svcConn*);
 typedef int  (*initThreadFunc)(svcInfo*, void**);
 typedef void (*freeThreadFunc)(svcInfo*, void*);
 
@@ -86,6 +87,7 @@ struct svcInfo {
     initThreadFunc  initThreadCb;
     svcRequestFunc  requestCb;
     svcTimeoutFunc  timeoutCb;
+    svcNotifyFunc   notifyCb;
     freeThreadFunc  freeThreadCb;
     
     /* TLS certificate / key - As DER/ASN.1*/
@@ -152,10 +154,12 @@ struct eventThread {
     struct event*      notify;          /* listen event for notify pipe */
     connQueue*         connections;     /* queue for new connections */
     int                notifyRecv;      /* receiving end of notification pipe */
-    int                notifySend;      /* sending  end of notification pipe */
+    int                notifySend;      /* sending end of notification pipe */
     svcInfo*           svc;
     void*              svcThreadCtx;
-    svcConn*           freeSvcConns;    /* per thread conn list */
+    svcConn*           freeSvcConns;    /* per thread free connection list */
+    svcConn*           activeSvcConns;  /* per thread active connection list */
+    pthread_mutex_t    itemLock;        /* lock for connection list */
 };
 
 
@@ -182,8 +186,7 @@ void wolfKeyMgr_ServiceCleanup(svcInfo* svc);
 void wolfKeyMgr_FreeListeners(void);
 
 int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz);
-void wolfKeyMgr_ServiceConnFree(svcConn* conn);
-
+int wolfKeyMgr_NotifyAllClients(svcInfo* svc);
 int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType, const char* password);
 int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType);
 

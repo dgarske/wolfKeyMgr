@@ -40,6 +40,7 @@ void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcThreadCtx);
 
 int wolfEtsiSvc_DoRequest(svcConn* conn);
 int wolfEtsiSvc_HandleTimeout(svcConn* conn);
+int wolfEtsiSvc_DoNotify(svcConn* conn);
 
 #ifdef __cplusplus
 }
