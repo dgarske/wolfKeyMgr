@@ -124,7 +124,11 @@ $ make check   # (optional, but highly recommended)
 $ sudo make install
 ```
 
-3. Building on *nix from git repository
+Notes:
+* To enable all Intel speedups use `--enable-intelasm --enable-sp --enable-sp-asm`
+* To enable all Aarch64 speedups use `--enable-armasm --enable-sp --enable-sp-asm`
+
+3. Building wolfKeyMgr on *nix from git repository
 
     Run the autogen script to generate configure, you'll need the autoconf tools
     installed, then proceed to the next step.
@@ -133,7 +137,7 @@ $ sudo make install
 $ ./autogen.sh
 ```
 
-4. Building on *nix from a release
+4. Building wolfKeyMgr on *nix from a release
 
 ```sh
 $ ./configure

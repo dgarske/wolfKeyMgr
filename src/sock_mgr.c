@@ -378,9 +378,17 @@ static void WorkerExit(void* arg)
     svcInfo* svc = me->svc;
     svcConn *conn, *next;
 
-    if (svc && svc->freeThreadCb) {
-        svc->freeThreadCb(svc, me->svcThreadCtx);
-    }
+    /* put per thread stats into global stats */
+    /* do this before closing active connections, 
+        so we can see how many were connected */
+    pthread_mutex_lock(&svc->globalStats.lock);
+    svc->globalStats.totalConnections   += threadStats.totalConnections;
+    svc->globalStats.completedRequests  += threadStats.completedRequests;
+    svc->globalStats.timeouts           += threadStats.timeouts;
+    svc->globalStats.currentConnections += threadStats.currentConnections;
+    svc->globalStats.maxConcurrent      += threadStats.maxConcurrent;
+    svc->globalStats.responseTime       += threadStats.responseTime;
+    pthread_mutex_unlock(&svc->globalStats.lock);
 
     /* close all active connections */
     conn = me->activeSvcConns.head;
@@ -394,23 +402,16 @@ static void WorkerExit(void* arg)
         conn = next;
     }
 
+    /* issue callback to service signaling thread exit / free */
+    if (svc && svc->freeThreadCb) {
+        svc->freeThreadCb(svc, me->svcThreadCtx);
+    }
+
     event_del(me->notify);
     event_base_loopexit(me->threadBase, NULL);
 
     XLOG(WOLFKM_LOG_INFO, "Worker thread exiting, tid = %ld\n",
                         (long)pthread_self());
-
-    /* put per thread stats into global stats */
-    pthread_mutex_lock(&svc->globalStats.lock);
-
-    svc->globalStats.totalConnections   += threadStats.totalConnections;
-    svc->globalStats.completedRequests  += threadStats.completedRequests;
-    svc->globalStats.timeouts           += threadStats.timeouts;
-    svc->globalStats.currentConnections += threadStats.currentConnections;
-    svc->globalStats.maxConcurrent      += threadStats.maxConcurrent;
-    svc->globalStats.responseTime       += threadStats.responseTime;
-
-    pthread_mutex_unlock(&svc->globalStats.lock);
 
     pthread_exit(NULL);
 }
