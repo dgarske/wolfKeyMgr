@@ -168,7 +168,6 @@ static void ConnQueueInit(connQueue* cq)
     pthread_mutex_init(&cq->lock, NULL);
 }
 
-
 /* put connection item back onto the free connection item list */
 static void ConnItemFree(connItem* item)
 {
@@ -252,11 +251,36 @@ static connItem* ConnQueuePop(connQueue* cq)
     return item;
 }
 
+static void ServiceConnListDel(svcConnList* list, svcConn* conn)
+{
+    if (conn->prev)
+        conn->prev->next = conn->next;
+    else
+        list->head = conn->next;
+    if (conn->next)
+        conn->next->prev = conn->prev;
+}
+
+static void ServiceConnListAddFront(svcConnList* list, svcConn* conn)
+{
+    conn->next = list->head;
+    if (list->head)
+        list->head->prev = conn;
+    list->head = conn;
+}
+
+static svcConn* ServiceConnListPop(svcConnList* list)
+{
+    svcConn* conn = list->head;
+    if (conn) {
+        list->head = conn->next;
+    }
+    return conn;
+}
 
 /* put connection item back onto the free item list, handle stats */
 void ServiceConnFree(svcConn* conn)
 {
-    svcConn *next, *prev = NULL;
     eventThread* me;
 
     if (conn == NULL)
@@ -277,30 +301,14 @@ void ServiceConnFree(svcConn* conn)
         conn->ssl = NULL;
     }
 
-    pthread_mutex_lock(&me->itemLock);
-    /* remove from active list */
-    /* walk list to find entry */
-    next = conn->me->activeSvcConns;
-    while (next) {
-        if (next == conn) {
-            /* pop from active list */
-            if (prev)
-                prev->next = next->next;
-            else
-                conn->me->activeSvcConns = next->next;
-            break;
-        }
-        prev = next;
-        next = next->next;
-    }
+    /* remove "conn" from source list */
+    ServiceConnListDel(&me->activeSvcConns, conn);
 
-    /* add to free list */
-    conn->next = conn->me->freeSvcConns;
-    conn->me->freeSvcConns = conn;
-    pthread_mutex_unlock(&me->itemLock);
+    /* add "conn" to destination list */
+    ServiceConnListAddFront(&me->freeSvcConns, conn);
 }
 
-static int GrowServiceConnPool(eventThread* me)
+static int ServiceConnGrowPool(eventThread* me)
 {
     svcInfo* svc = me->svc;
     svcConn* conn;
@@ -312,17 +320,13 @@ static int GrowServiceConnPool(eventThread* me)
         int i;
 
         /* the first one is the new item */
-        for (i = 0; i < WOLFKM_CONN_ITEMS; i++)
-            conn[i].next = &conn[i+1];
-
-        pthread_mutex_lock(&me->itemLock);
-        conn[WOLFKM_CONN_ITEMS].next = me->freeSvcConns;
-        me->freeSvcConns = &conn[0];
-        pthread_mutex_unlock(&me->itemLock);
+        for (i = 0; i < WOLFKM_CONN_ITEMS; i++) {
+            ServiceConnListAddFront(&me->freeSvcConns, &conn[i]);
+        }
         return 0;
     }
 
-    XLOG(WOLFKM_LOG_ERROR, "GrowServiceConnPool malloc error\n");
+    XLOG(WOLFKM_LOG_ERROR, "ServiceConnGrowPool malloc error\n");
     return WOLFKM_BAD_MEMORY;
 }
 
@@ -332,25 +336,19 @@ static svcConn* ServiceConnNew(eventThread* me)
     svcInfo* svc = me->svc;
     svcConn* conn;
 
-    pthread_mutex_lock(&me->itemLock);
-    if ( (conn = me->freeSvcConns) )
-        me->freeSvcConns = conn->next;
-    pthread_mutex_unlock(&me->itemLock);
-
+    conn = ServiceConnListPop(&me->freeSvcConns);
     if (conn == NULL) {
         /* free list empty, add more items to the free list pool */
-        GrowServiceConnPool(me);
+        ServiceConnGrowPool(me);
 
-        pthread_mutex_lock(&me->itemLock);
-        conn = me->freeSvcConns;
-        if (conn)
-            me->freeSvcConns = conn->next;
-        pthread_mutex_unlock(&me->itemLock);
+        conn = ServiceConnListPop(&me->freeSvcConns);
     }
 
+    /* get first free connection */
     if (conn) {
         /* per connection inits */
         conn->next      = NULL;
+        conn->prev      = NULL;
         conn->stream    = NULL;
         conn->ssl       = NULL;
         conn->start     = 0.0f;
@@ -359,13 +357,10 @@ static svcConn* ServiceConnNew(eventThread* me)
         conn->svcThreadCtx = me->svcThreadCtx;
         conn->me        = me;
         IncrementTotalConnections(conn);
-    }
 
-    /* add to active connection list */
-    pthread_mutex_lock(&me->itemLock);
-    conn->next = conn->me->activeSvcConns;
-    conn->me->activeSvcConns = conn;
-    pthread_mutex_unlock(&me->itemLock);
+        /* add "conn" to active list */
+        ServiceConnListAddFront(&me->activeSvcConns, conn);
+    }
 
     return conn;
 }
@@ -542,16 +537,17 @@ static void ThreadEventProcess(int fd, short which, void* arg)
         return;
     }
     else if (memcmp(buffer, &kNotify, sizeof(kNotify)) == 0) {
-        svcConn* conn;
-        pthread_mutex_lock(&me->itemLock);
-        conn = me->activeSvcConns;
+        svcConn* conn = me->activeSvcConns.head;
         while (conn) {
             if (conn->svc->notifyCb) {
                 conn->svc->notifyCb(conn);
             }
+            if (conn->next == conn) {
+                XLOG(WOLFKM_LOG_ERROR, "active list corrupt!\n");
+                return;
+            }
             conn = conn->next;
         }
-        pthread_mutex_unlock(&me->itemLock);
         return;
     }
 
@@ -600,8 +596,6 @@ static void ThreadEventProcess(int fd, short which, void* arg)
 /* Individual thread setup */
 static void SetupThread(svcInfo* svc, eventThread* me)
 {
-    pthread_mutex_init(&me->itemLock, NULL);
-
     /* thread base */
     me->threadBase = event_base_new();
     if (me->threadBase == NULL) {
@@ -649,7 +643,7 @@ static void* WorkerEvent(void* arg)
 {
     eventThread* me = (eventThread*)arg;
 
-    GrowServiceConnPool(me);
+    ServiceConnGrowPool(me);
     InitStats(&threadStats);
 
     /* tell creator we're ready */
@@ -1197,14 +1191,19 @@ int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz)
     int ret = -1;
 
     if (conn->svc->noTLS) {
-        ret = evbuffer_add( bufferevent_get_output(conn->stream), resp, respSz);
+        ret = evbuffer_add(bufferevent_get_output(conn->stream), resp, respSz);
     }
     else if (conn->ssl) {
         ret = wolfSSL_write(conn->ssl, resp, respSz);
         if (ret < 0) {
             int err = wolfSSL_get_error(conn->ssl, 0);
-            XLOG(WOLFKM_LOG_ERROR, "wolfSSL_write err = %s",
-                                 wolfSSL_ERR_reason_error_string(err));
+            if (err == WOLFSSL_ERROR_WANT_WRITE) {
+                ret = 0; /* translate to 0 wouldblock */
+            }
+            else {
+                XLOG(WOLFKM_LOG_ERROR, "wolfSSL_write error %d: %s",
+                                     err, wolfSSL_ERR_reason_error_string(err));
+            }
         }
     }
     else {
@@ -1218,11 +1217,12 @@ int wolfKeyMgr_DoSend(svcConn* conn, byte* resp, int respSz)
 int wolfKeyMgr_NotifyAllClients(svcInfo* svc)
 {
     int i;
-    /* loop through list of connected clients and issue timeout event */
+    /* loop through each worker thread and notify */
     for (i = 0; i < svc->threadPoolSize; i++) {
         eventThread* me = (eventThread*)&svc->threads[i];
         if (me->svc == svc) {
-            if (write(me->notifySend, &kNotify, sizeof(kNotify)) != sizeof(kNotify)) {
+            if (write(me->notifySend, &kNotify, sizeof(kNotify)) != 
+                    sizeof(kNotify)) {
                 XLOG(WOLFKM_LOG_ERROR, "Notify thread failed!\n");
             }
         }

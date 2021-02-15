@@ -55,8 +55,8 @@ static int DoClientSend(int sockfd, WOLFSSL* ssl, const byte* p, int len)
         ret = wolfSSL_write(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
-            XLOG(WOLFKM_LOG_ERROR, "DoClientSend err = %s\n",
-                                 wolfSSL_ERR_reason_error_string(err));
+            XLOG(WOLFKM_LOG_ERROR, "DoClientSend error %d: %s\n",
+                                 err, wolfSSL_ERR_reason_error_string(err));
             if (err < 0) ret = err;
         }
     }
@@ -76,8 +76,8 @@ static int DoClientRead(int sockfd, WOLFSSL* ssl, byte* p, int len)
         ret = wolfSSL_read(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
-            XLOG(WOLFKM_LOG_ERROR, "DoClientRead err = %s\n",
-                                 wolfSSL_ERR_reason_error_string(err));
+            XLOG(WOLFKM_LOG_ERROR, "DoClientRead error %d: %s\n",
+                                 err, wolfSSL_ERR_reason_error_string(err));
             if (err < 0) ret = err;
         }
     }
@@ -238,6 +238,12 @@ static void* DoRequests(void* arg)
 static int InitClientTLS(void)
 {
     int ret;
+
+#if 0
+    wolfSSL_Debugging_ON();
+#endif
+    wolfSSL_Init();
+
     sslCtx = wolfSSL_CTX_new(wolfTLSv1_3_client_method());
     if (sslCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.3 context");
@@ -396,6 +402,7 @@ int main(int argc, char** argv)
     }
 
     wolfSSL_CTX_free(sslCtx);
+    wolfSSL_Cleanup();
 
     return 0;
 }

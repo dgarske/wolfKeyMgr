@@ -99,8 +99,8 @@ typedef enum HttpHeaderType {
 } HttpHeaderType;
 
 typedef enum HttpErrorCodes {
-    HTTP_ERROR_EXPECTED_CRLF   = -1000,
-    HTTP_ERROR_EXPECTED_METHOD = -1001,
+    HTTP_ERROR_EXPECTED_CRLF   = -2000,
+    HTTP_ERROR_EXPECTED_METHOD = -2001,
 
 } HttpErrorCodes;
 

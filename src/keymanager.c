@@ -140,6 +140,9 @@ int main(int argc, char** argv)
 #endif
 
     /* Init wolfSSL */
+#if 0
+    wolfSSL_Debugging_ON();
+#endif
     wolfSSL_Init();
 
     /* main thread base event */

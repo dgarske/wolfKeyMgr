@@ -128,6 +128,13 @@ struct connItem {
     svcInfo*  svc;
 };
 
+/* queue for connections, shared between main thread and worker threads */
+typedef struct {
+    connItem*       head;     /* head of queue */
+    connItem*       tail;     /* tail of queue */
+    pthread_mutex_t lock;     /* queue lock */
+} connQueue;
+
 struct svcConn {
     struct bufferevent* stream;     /* buffered stream */
     WOLFSSL*            ssl;        /* ssl object */
@@ -137,15 +144,15 @@ struct svcConn {
     void*               svcThreadCtx;
     double              start;      /* response processing time start */
     eventThread*        me;
-    svcConn*            next;       /* for free list */
+    svcConn*            next;
+    svcConn*            prev;
 };
 
-/* queue for connections, shared between main thread and worker threads */
-typedef struct {
-    connItem*       head;     /* head of queue */
-    connItem*       tail;     /* tail of queue */
-    pthread_mutex_t lock;     /* queue lock */
-} connQueue;
+typedef struct svcConnList {
+    svcConn* head;
+    /* no locking needed, this list is only accedded by the working thread */
+} svcConnList;
+
 
 /* each thread in the pool has some unique data */
 struct eventThread {
@@ -157,9 +164,8 @@ struct eventThread {
     int                notifySend;      /* sending end of notification pipe */
     svcInfo*           svc;
     void*              svcThreadCtx;
-    svcConn*           freeSvcConns;    /* per thread free connection list */
-    svcConn*           activeSvcConns;  /* per thread active connection list */
-    pthread_mutex_t    itemLock;        /* lock for connection list */
+    svcConnList        freeSvcConns;    /* free connection list */
+    svcConnList        activeSvcConns;  /* active connection list */
 };
 
 
