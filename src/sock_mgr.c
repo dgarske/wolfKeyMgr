@@ -287,8 +287,13 @@ void ServiceConnFree(svcConn* conn)
         return;
 
     me = conn->me;
+
     XLOG(WOLFKM_LOG_DEBUG, "Freeing %s Service Connection\n", conn->svc->desc);
     DecrementCurrentConnections(conn);
+
+    if (conn->svc && conn->svc->closeCb) {
+        conn->svc->closeCb(conn);
+    }
 
     /* release per connection resources */
     if (conn->stream) {
@@ -371,9 +376,22 @@ static void WorkerExit(void* arg)
 {
     eventThread* me = (eventThread*)arg;
     svcInfo* svc = me->svc;
+    svcConn *conn, *next;
 
     if (svc && svc->freeThreadCb) {
         svc->freeThreadCb(svc, me->svcThreadCtx);
+    }
+
+    /* close all active connections */
+    conn = me->activeSvcConns.head;
+    while (conn) {
+        next = conn->next;
+        ServiceConnFree(conn);
+        if (next == conn) {
+            XLOG(WOLFKM_LOG_ERROR, "active list corrupt!\n");
+            break;
+        }
+        conn = next;
     }
 
     event_del(me->notify);
@@ -381,7 +399,8 @@ static void WorkerExit(void* arg)
 
     XLOG(WOLFKM_LOG_INFO, "Worker thread exiting, tid = %ld\n",
                         (long)pthread_self());
-    /* put per thread stats into global stats*/
+
+    /* put per thread stats into global stats */
     pthread_mutex_lock(&svc->globalStats.lock);
 
     svc->globalStats.totalConnections   += threadStats.totalConnections;
@@ -415,8 +434,6 @@ static void EventCb(struct bufferevent* bev, short what, void* ctx)
             IncrementTimeouts(conn);
         }
         else {
-            IncrementCompleted(conn);
-
             /* reset read/write enable */
             XLOG(WOLFKM_LOG_INFO, "Keeping connection open\n");
             bufferevent_enable(conn->stream, (EV_READ | EV_WRITE));

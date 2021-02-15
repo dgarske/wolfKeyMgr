@@ -50,6 +50,7 @@ static svcInfo etsiService = {
     .initThreadCb = wolfEtsiSvc_WorkerInit,
     .freeThreadCb = wolfEtsiSvc_WorkerFree,
     .notifyCb = wolfEtsiSvc_DoNotify,
+    .closeCb = wolfEtsiSvc_ConnClose,
 
     /* TLS Certificate and Buffer */
     .certBuffer = NULL,
@@ -62,11 +63,14 @@ static svcInfo etsiService = {
 
 /* worker thread objects */
 typedef struct etsiSvcThread {
-    HttpReq req;
     word32  index;
     byte*   keyBuf;
     word32  keySz;
 } etsiSvcThread;
+
+typedef struct etsiSvcConn {
+    HttpReq req;
+} etsiSvcConn;
 
 
 static int GenNewKey(etsiSvcCtx* svcCtx)
@@ -196,29 +200,42 @@ int wolfEtsiSvc_DoResponse(svcConn* conn)
 int wolfEtsiSvc_DoRequest(svcConn* conn)
 {
     int ret;
-    etsiSvcThread* etsiThread;
+    etsiSvcConn* etsiConn;
 
     if (conn == NULL || conn->stream == NULL || conn->svcThreadCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Bad ETSI Request pointers\n");
         return WOLFKM_BAD_ARGS;
     }
-    etsiThread = (etsiSvcThread*)conn->svcThreadCtx;
 
     XLOG(WOLFKM_LOG_INFO, "Got ETSI Request\n");
 
-    ret = wolfKeyMgr_HttpParse(&etsiThread->req, (char*)conn->request,
+    conn->svcConnCtx = malloc(sizeof(etsiSvcConn));
+    if (conn->svcConnCtx == NULL) {
+        return WOLFKM_BAD_MEMORY;
+    }
+    etsiConn = (etsiSvcConn*)conn->svcConnCtx;
+
+    ret = wolfKeyMgr_HttpParse(&etsiConn->req, (char*)conn->request,
         conn->requestSz);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "ETSI HTTP Parse failed: %d\n", ret);
         return WOLFKM_BAD_REQUEST_TYPE;
     }
-    wolfKeyMgr_HttpReqDump(&etsiThread->req);
+    wolfKeyMgr_HttpReqDump(&etsiConn->req);
 
     /* Perform URI decode? */
-    wolfKeyMgr_UriDecode(etsiThread->req.uri, (byte*)etsiThread->req.uri);
+    wolfKeyMgr_UriDecode(etsiConn->req.uri, (byte*)etsiConn->req.uri);
 
     /* Send Response */
     return wolfEtsiSvc_DoResponse(conn);
+}
+
+void wolfEtsiSvc_ConnClose(svcConn* conn)
+{
+    if (conn && conn->svcConnCtx) {
+        free(conn->svcConnCtx);
+        conn->svcConnCtx = NULL;
+    }
 }
 
 int wolfEtsiSvc_DoNotify(svcConn* conn)
@@ -227,9 +244,10 @@ int wolfEtsiSvc_DoNotify(svcConn* conn)
     svcInfo* svc;
     etsiSvcCtx* svcCtx;
     etsiSvcThread* etsiThread;
+    etsiSvcConn* etsiConn;
 
     if (conn == NULL || conn->stream == NULL || conn->svc == NULL || 
-            conn->svcThreadCtx == NULL) {
+            conn->svcThreadCtx == NULL || conn->svcConnCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Bad ETSI notify pointers\n");
         return WOLFKM_BAD_ARGS;
     }
@@ -237,8 +255,9 @@ int wolfEtsiSvc_DoNotify(svcConn* conn)
     svc = conn->svc;
     svcCtx = (etsiSvcCtx*)svc->svcCtx;
     etsiThread = (etsiSvcThread*)conn->svcThreadCtx;
+    etsiConn = (etsiSvcConn*)conn->svcConnCtx;
 
-    if (etsiThread->req.type == HTTP_METHOD_PUT) {
+    if (etsiConn->req.type == HTTP_METHOD_PUT) {
         /* updated key */
         ret = SetupKeyPackage(svcCtx, etsiThread);
         if (ret == 0) {
@@ -252,16 +271,16 @@ int wolfEtsiSvc_DoNotify(svcConn* conn)
 
 int wolfEtsiSvc_HandleTimeout(svcConn* conn)
 {
-    etsiSvcThread* etsiThread;
+    etsiSvcConn* etsiConn;
 
-    if (conn == NULL || conn->svcThreadCtx == NULL) {
+    if (conn == NULL || conn->svcConnCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Bad ETSI timeout pointers\n");
         return WOLFKM_BAD_ARGS;
     }
 
-    etsiThread = (etsiSvcThread*)conn->svcThreadCtx;
+    etsiConn = (etsiSvcConn*)conn->svcConnCtx;
 
-    if (etsiThread->req.type == HTTP_METHOD_PUT) {
+    if (etsiConn->req.type == HTTP_METHOD_PUT) {
         return 0; /* keep open (return non-zero value to close connection) */
     }
     return 1; /* close connection */

@@ -65,6 +65,7 @@ typedef struct eventThread eventThread;
 typedef int  (*svcRequestFunc)(svcConn*);
 typedef int  (*svcTimeoutFunc)(svcConn*);
 typedef int  (*svcNotifyFunc)(svcConn*);
+typedef void (*svcCloseFunc)(svcConn*);
 typedef int  (*initThreadFunc)(svcInfo*, void**);
 typedef void (*freeThreadFunc)(svcInfo*, void*);
 
@@ -89,6 +90,7 @@ struct svcInfo {
     svcTimeoutFunc  timeoutCb;
     svcNotifyFunc   notifyCb;
     freeThreadFunc  freeThreadCb;
+    svcCloseFunc    closeCb;
     
     /* TLS certificate / key - As DER/ASN.1*/
     int             noTLS;
@@ -115,8 +117,8 @@ struct svcInfo {
 
 /* signal processing holder */
 typedef struct {
-    struct event_base* base;       /* base event that setup signal handler */
-    struct event*      ev;         /* actual signal event */
+    struct event_base* base;        /* base event that setup signal handler */
+    struct event*      ev;          /* actual signal event */
     svcInfo*           svc[MAX_SERVICES];
 } signalArg;
 
@@ -136,13 +138,14 @@ typedef struct {
 } connQueue;
 
 struct svcConn {
-    struct bufferevent* stream;     /* buffered stream */
-    WOLFSSL*            ssl;        /* ssl object */
-    word32              requestSz;  /* bytes in request buffer */
+    struct bufferevent* stream;       /* buffered stream */
+    WOLFSSL*            ssl;          /* ssl object */
+    word32              requestSz;    /* bytes in request buffer */
     byte                request[MAX_REQUEST_SIZE]; /* full input request */
     svcInfo*            svc;
-    void*               svcThreadCtx;
-    double              start;      /* response processing time start */
+    void*               svcThreadCtx; /* context for the thread */
+    void*               svcConnCtx;   /* context for the connection specific to the service */
+    double              start;        /* response processing time start */
     eventThread*        me;
     svcConn*            next;
     svcConn*            prev;
@@ -156,16 +159,16 @@ typedef struct svcConnList {
 
 /* each thread in the pool has some unique data */
 struct eventThread {
-    pthread_t          tid;             /* this thread's ID */
-    struct event_base* threadBase;      /* base handle for this thread */
-    struct event*      notify;          /* listen event for notify pipe */
-    connQueue*         connections;     /* queue for new connections */
-    int                notifyRecv;      /* receiving end of notification pipe */
-    int                notifySend;      /* sending end of notification pipe */
+    pthread_t          tid;            /* this thread's ID */
+    struct event_base* threadBase;     /* base handle for this thread */
+    struct event*      notify;         /* listen event for notify pipe */
+    connQueue*         connections;    /* queue for new connections */
+    int                notifyRecv;     /* receiving end of notification pipe */
+    int                notifySend;     /* sending end of notification pipe */
     svcInfo*           svc;
     void*              svcThreadCtx;
-    svcConnList        freeSvcConns;    /* free connection list */
-    svcConnList        activeSvcConns;  /* active connection list */
+    svcConnList        freeSvcConns;   /* free connection list */
+    svcConnList        activeSvcConns; /* active connection list */
 };
 
 
