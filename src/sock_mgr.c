@@ -395,10 +395,6 @@ static void WorkerExit(void* arg)
     while (conn) {
         next = conn->next;
         ServiceConnFree(conn);
-        if (next == conn) {
-            XLOG(WOLFKM_LOG_ERROR, "active list corrupt!\n");
-            break;
-        }
         conn = next;
     }
 
@@ -559,10 +555,6 @@ static void ThreadEventProcess(int fd, short which, void* arg)
         while (conn) {
             if (conn->svc->notifyCb) {
                 conn->svc->notifyCb(conn);
-            }
-            if (conn->next == conn) {
-                XLOG(WOLFKM_LOG_ERROR, "active list corrupt!\n");
-                return;
             }
             conn = conn->next;
         }
