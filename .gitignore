@@ -25,6 +25,8 @@ stamp-h1
 *.log
 *.trs
 aminclude.am
+*.lo
+*.la
 
 # misc
 tags
@@ -34,9 +36,9 @@ dump.der
 diff
 
 # applications
+src/.libs
+src/wolfkeymgr
 examples/cert_client/cert_client
 examples/etsi_client/etsi_client
 libtool
 src/options.h
-settings.json
-src/wolfkeymgr

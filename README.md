@@ -1,6 +1,6 @@
 # wolf Key Manager
 
-This is an secure service for Key and Certificate management.
+This is a secure service for Key and Certificate management.
 
 Based on:
 * ETSI TS 103 523-3 V1.3.1 (2019-08)
@@ -8,15 +8,15 @@ Based on:
 
 ## Features
 
-* Protection of key material / sensitive data:
+* Protection of key material / sensitive data
 * Provisioning keys using an asymmetric key package request
 * Provisioning a trusted certificate using a CSR.
 
 ## Design
 
 * Low level socket handling using libevent, which is a portable framework for handling sockets.
-* An HTTPS server supports GET requests using HTTP/1.1.
-* A TLS server supports custom commands for CSR signing and Generic hash signatures using a trusted CA.
+* HTTPS server supports GET requests using HTTP/1.1.
+* TLS server supports custom commands for CSR signing and Generic hash signatures using a trusted CA.
 * The CA key can be local PKCS #8 (simple password/encrypted), PKCS #11 HSM or TPM 2.0.
 * Generated key and certificate material is encrypted with AES XTS and indexed.
 * Uses stdint.h types.
