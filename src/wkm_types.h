@@ -32,6 +32,15 @@
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/types.h>
+#include <wolfssl/wolfcrypt/ecc.h>
+
+
+#ifdef WOLFKM_ETSI_SERVICE
+    #ifndef HAVE_ECC
+        #error This service requires ECC support
+    #endif
+#endif
+
 
 /* key manager errors */
 enum  {
@@ -44,6 +53,7 @@ enum  {
     WOLFKM_BAD_SEND          = -1006,
     WOLFKM_BAD_LISTENER      = -1007,
     WOLFKM_NOT_COMPILED_IN   = -1008,
+    WOLFKM_BAD_HOST          = -1009,
     WOLFKM_BAD_HEADER_SZ     = -1100,
     WOLFKM_BAD_VERSION       = -1101,
     WOLFKM_BAD_REQUEST_TYPE  = -1102,
@@ -64,12 +74,7 @@ enum log_level_t {
     WOLFKM_DEFAULT_LOG_LEVEL = WOLFKM_LOG_DEBUG
 };
 
-#ifdef __GNUC__
-#define ATT_STRFUNC __attribute__((format(printf, 2, 3)))
-#else
-#define ATT_STRFUNC
-#endif
-
 #define XLOG wolfKeyMgr_Log
+
 
 #endif /* WOLFKM_TYPES_H */

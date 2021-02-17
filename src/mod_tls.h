@@ -1,4 +1,4 @@
-/* etsi_client.h
+/* mod_tls.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,23 +19,39 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef ETSI_CLIENT_H
-#define ETSI_CLIENT_H
+#ifndef WOLFKM_TLS_H
+#define WOLFKM_TLS_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* for client tests only */
-#define WOLFKM_DEFAULT_HOST         "localhost"
-#define WOLFKM_DEFAULT_ETSISVC_PORT "8119"
-#define WOLFKM_DEFAULT_REQUESTS     100   /* per thread */
-#define WOLFKM_ERROR_MODE_MAX       5       /* error mode type for forcing errors */
+#include "wkm_types.h"
+#include "wkm_utils.h"
+#include "mod_socket.h"
 
 
+/* wolfssl headers */
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/ssl.h>
+
+typedef struct wkmTlsCtx {
+    WOLFSSL_CTX*   sslCtx;
+    WOLFSSL*       ssl;
+    WKM_SOCKET_T   sockfd;
+    int            noTLS;
+} wkmTlsCtx;
+
+WOLFKM_API int  wolfKeyMgr_TlsClientInit(wkmTlsCtx* client, 
+    const char* ca, const char* key, const char* cert);
+WOLFKM_API int  wolfKeyMgr_TlsConnect(wkmTlsCtx* client, const char* host, word16 port);
+WOLFKM_API int  wolfKeyMgr_TlsRead(wkmTlsCtx* client, byte* p, int len);
+WOLFKM_API int  wolfKeyMgr_TlsWrite(wkmTlsCtx* client, byte* p, int len);
+WOLFKM_API void wolfKeyMgr_TlsClose(wkmTlsCtx* client, int sendShutdown);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ETSI_CLIENT_H */
+#endif /* WOLFKM_TLS_H */

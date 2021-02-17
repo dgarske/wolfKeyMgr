@@ -1,4 +1,4 @@
-/* etsi_client.h
+/* mod_cert.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,23 +19,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef ETSI_CLIENT_H
-#define ETSI_CLIENT_H
+#ifndef WOLFKM_CERT_H
+#define WOLFKM_CERT_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* for client tests only */
-#define WOLFKM_DEFAULT_HOST         "localhost"
-#define WOLFKM_DEFAULT_ETSISVC_PORT "8119"
-#define WOLFKM_DEFAULT_REQUESTS     100   /* per thread */
-#define WOLFKM_ERROR_MODE_MAX       5       /* error mode type for forcing errors */
-
+#include "wkm_types.h"
 
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ETSI_CLIENT_H */
+#endif /* WOLFKM_CERT_H */

@@ -294,24 +294,19 @@ void wolfKeyMgr_PrintBin(const byte* buffer, word32 length)
     }
 }
 
-
-
-#ifndef min
-int min(int a, int b)
+int wolfKeyMgr_SaveFile(const char* file, byte* buffer, word32 length)
 {
-    return a < b ? a : b;
-}
-#endif
-
-/* convert short to network byte order, no alignment required */
-void c16toa(unsigned short u16, unsigned char* c)
-{
-    c[0] = (u16 >> 8) & 0xff;
-    c[1] =  u16 & 0xff;
-}
-
-/* convert opaque to 16 bit integer */
-void ato16(const unsigned char* c, unsigned short* u16)
-{
-    *u16 = (c[0] << 8) | (c[1]);
+    word32 ret;
+    FILE* raw = fopen(file, "wb");
+    if (raw == NULL) {
+        XLOG(WOLFKM_LOG_INFO, "Error saving response to %s\n", file);
+        return -1;
+    }
+    ret = (word32)fwrite(buffer, 1, length, raw);
+    fclose(raw);
+    if (ret != length) {
+        XLOG(WOLFKM_LOG_ERROR, "fwrite failed\n");
+        return -1;
+    }
+    return 0;
 }

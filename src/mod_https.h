@@ -120,8 +120,8 @@ typedef struct HttpReq {
 } HttpReq;
 
 
-int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz);
-void wolfKeyMgr_HttpReqDump(HttpReq* req);
+WOLFKM_API int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz);
+WOLFKM_API void wolfKeyMgr_HttpReqDump(HttpReq* req);
 
 
 #ifdef __cplusplus

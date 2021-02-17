@@ -1,4 +1,4 @@
-/* etsi_client.h
+/* mod_etsi.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,23 +19,40 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef ETSI_CLIENT_H
-#define ETSI_CLIENT_H
+#ifndef WOLFKM_ETSI_H
+#define WOLFKM_ETSI_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* for client tests only */
-#define WOLFKM_DEFAULT_HOST         "localhost"
-#define WOLFKM_DEFAULT_ETSISVC_PORT "8119"
-#define WOLFKM_DEFAULT_REQUESTS     100   /* per thread */
-#define WOLFKM_ERROR_MODE_MAX       5       /* error mode type for forcing errors */
+#include "wkm_types.h"
+#include "mod_socket.h"
+
+typedef struct EtsiClientCtx EtsiClientCtx;
+
+typedef enum EtsiClientType {
+    ETSI_CLIENT_UNKNOWN,
+    ETSI_CLIENT_GET,
+    ETSI_CLIENT_PUSH,
+} EtsiClientType;
 
 
+WOLFKM_API EtsiClientCtx* wolfKeyMgr_EtsiClientNew(void);
+
+WOLFKM_API int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, 
+    const char* host, word16 port);
+
+WOLFKM_API int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client, 
+    EtsiClientType type, const char* fingerprint, int timeoutSec,
+    byte* response, word32* responseSz);
+
+WOLFKM_API void wolfKeyMgr_EtsiClientFree(EtsiClientCtx* client);
+
+WOLFKM_API int wolfKeyMgr_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ETSI_CLIENT_H */
+#endif /* WOLFKM_ETSI_H */

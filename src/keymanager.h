@@ -22,18 +22,23 @@
 #ifndef KEYMANAGER_H
 #define KEYMANAGER_H
 
+/* wolfssl headers */
+#include <wolfssl/options.h>
+#include <wolfssl/wolfcrypt/settings.h>
+
+
 /* Key Manager Headers */
 #include "wkm_types.h"
-#include "sock_mgr.h"
 #include "wkm_utils.h"
+#include "mod_https.h"
+#include "mod_cert.h"
+#include "mod_etsi.h"
+#include "sock_mgr.h"
 #include "svc_cert.h"
 #include "svc_etsi.h"
 
 
 /* wolfssl headers */
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/settings.h>
-
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/asn.h>

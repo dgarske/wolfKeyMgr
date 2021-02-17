@@ -744,8 +744,8 @@ static int InitServerTLS(svcInfo* svc)
         XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS 1.3 context\n");
         return WOLFKM_BAD_MEMORY;
     }
-    wolfSSL_SetIORecv(svc->sslCtx, wolfsslRecvCb);
-    wolfSSL_SetIOSend(svc->sslCtx, wolfsslSendCb);
+    wolfSSL_CTX_SetIORecv(svc->sslCtx, wolfsslRecvCb);
+    wolfSSL_CTX_SetIOSend(svc->sslCtx, wolfsslSendCb);
 
     ret = wolfSSL_CTX_use_certificate_buffer(svc->sslCtx, svc->certBuffer,
         svc->certBufferSz, WOLFSSL_FILETYPE_ASN1);

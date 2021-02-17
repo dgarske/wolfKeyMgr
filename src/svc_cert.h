@@ -59,13 +59,13 @@ enum CertMessageTypes {
 
 
 
-svcInfo* wolfCertSvc_Init(struct event_base* mainBase, word32 timeoutSec);
-void wolfCertSvc_Cleanup(svcInfo* svc);
+WOLFKM_LOCAL svcInfo* wolfCertSvc_Init(struct event_base* mainBase, word32 timeoutSec);
+WOLFKM_LOCAL void wolfCertSvc_Cleanup(svcInfo* svc);
 
-int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcCtx);
-void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcCtx);
+WOLFKM_LOCAL int wolfCertSvc_WorkerInit(svcInfo* svc, void** svcThreadCtx);
+WOLFKM_LOCAL void wolfCertSvc_WorkerFree(svcInfo* svc, void* svcThreadCtx);
 
-int wolfCertSvc_DoRequest(svcConn* conn);
+WOLFKM_LOCAL int wolfCertSvc_DoRequest(svcConn* conn);
 
 
 #ifdef __cplusplus
