@@ -27,7 +27,7 @@ Based on:
 * keymanager.c: The main entry point
 * sock_mgr.c: The libevent socket manager
 * svc_[]: Services exposed (ETSI or CERT)
-* mod_[]: Modules for support (HTTPS)
+* mod_[]: Modules for support (HTTP, TLS, Socket, ETSI)
 * wkm_[]: Generic wolfKeyManager functions
 
 ## ETSI Design
@@ -148,11 +148,11 @@ $ sudo make install
 
 Note: A custom install location can be specified using: `./configure --prefix=/opt/local`
 
-## Running
+## Running ETSI Example
 
 ```
 $ ./src/wolfkeymgr
-$ ./examples/cert_client/cert_client
+$ ./examples/etsi_client/etsi_client
 ```
 
 ## Server Certificate Visibility

@@ -30,7 +30,7 @@
 /* Key Manager Headers */
 #include "wkm_types.h"
 #include "wkm_utils.h"
-#include "mod_https.h"
+#include "mod_http.h"
 #include "mod_cert.h"
 #include "mod_etsi.h"
 #include "sock_mgr.h"

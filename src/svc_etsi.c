@@ -20,7 +20,7 @@
  */
 
 #include "keymanager.h"
-#include "mod_https.h"
+#include "mod_http.h"
 
 #ifdef WOLFKM_ETSI_SERVICE
 

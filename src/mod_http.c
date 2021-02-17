@@ -1,4 +1,4 @@
-/* mod_https.c
+/* mod_http.c
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include "mod_https.h"
+#include "mod_http.h"
 #include "wkm_utils.h"
 #include <string.h>
 
