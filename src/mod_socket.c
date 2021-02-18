@@ -116,9 +116,11 @@ static int tcp_socket(WKM_SOCKET_T* sockfd)
     return 0;
 }
 
-int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port)
+/* if timeoutSec == 0 then no timeout and using blocking mode */
+int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port,
+    int timeoutSec)
 {
-    int ret;
+    int ret, err;
     SOCKADDR_IN_T addr;
     
     ret = build_addr(&addr, ip, port);
@@ -128,10 +130,30 @@ int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port)
     
     ret = tcp_socket(sockfd);
     if (ret == 0) {
+        if (timeoutSec > 0) {
+            /* enable non-blocking */
+            wolfKeyMgr_SockSetBlockingMode(*sockfd, 1);
+        }
+
         ret = connect(*sockfd, (const struct sockaddr*)&addr, sizeof(addr));
+        if (ret < 0) {
+            err = wolfKeyMgr_SocketLastError(ret);
+            if (err == EINPROGRESS && timeoutSec > 0) {
+                /* wait on send or error */
+                ret = wolfKeyMgr_SockSelect(*sockfd, timeoutSec, 0);
+                if (ret == WKM_SOCKET_SELECT_SEND_READY) {
+                    ret = 0; /* completed successfully */
+                }
+                else {
+                    ret = WOLFKM_BAD_TIMEOUT;
+                }
+            }
+        }
     }
     if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "tcp connect failed: %s", strerror(errno));
+        err = wolfKeyMgr_SocketLastError(ret);
+        XLOG(WOLFKM_LOG_ERROR, "tcp connect failed: %d (%s)", 
+            err, strerror(err));
     }
 
     return ret;
@@ -201,7 +223,10 @@ int wolfKeyMgr_SockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking)
     }
 #endif
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "wolfIO_SetBlockingMode failed %d\n", ret);
+        int err = wolfKeyMgr_SocketLastError(ret);
+        XLOG(WOLFKM_LOG_ERROR,
+            "wolfKeyMgr_SockSetBlockingMode failed %d (errno %d: %s)\n",
+            ret, err, strerror(err));
     }
     return ret;
 }
@@ -211,7 +236,8 @@ int wolfKeyMgr_SocketRead(WKM_SOCKET_T sockfd, byte* buffer, word32 length)
     return (int)recv(sockfd, buffer, length, 0);
 }
 
-int wolfKeyMgr_SocketWrite(WKM_SOCKET_T sockfd, const byte* buffer, word32 length)
+int wolfKeyMgr_SocketWrite(WKM_SOCKET_T sockfd, const byte* buffer,
+    word32 length)
 {
     return (int)send(sockfd, buffer, length, 0);
 }
@@ -239,4 +265,3 @@ int wolfKeyMgr_SocketLastError(int err)
     return errno;
 #endif
 }
-

@@ -36,19 +36,21 @@ extern "C" {
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/ssl.h>
 
-typedef struct wkmTlsCtx {
-    WOLFSSL_CTX*   sslCtx;
-    WOLFSSL*       ssl;
-    WKM_SOCKET_T   sockfd;
-    int            noTLS;
-} wkmTlsCtx;
 
-WOLFKM_API int  wolfKeyMgr_TlsClientInit(wkmTlsCtx* client, 
-    const char* ca, const char* key, const char* cert);
-WOLFKM_API int  wolfKeyMgr_TlsConnect(wkmTlsCtx* client, const char* host, word16 port);
-WOLFKM_API int  wolfKeyMgr_TlsRead(wkmTlsCtx* client, byte* p, int len);
-WOLFKM_API int  wolfKeyMgr_TlsWrite(wkmTlsCtx* client, byte* p, int len);
-WOLFKM_API void wolfKeyMgr_TlsClose(wkmTlsCtx* client, int sendShutdown);
+WOLFKM_API WOLFSSL_CTX* wolfKeyMgr_TlsClientNew(void);
+WOLFKM_API int wolfKeyMgr_TlsAddCA(WOLFSSL_CTX* ctx, const char* caFile);
+WOLFKM_API int wolfKeyMgr_TlsSetKey(WOLFSSL_CTX* ctx, const char* keyFile, 
+    const char* keyPassword, const char* certFile, int fileType);
+WOLFKM_API int wolfKeyMgr_TlsConnect(WOLFSSL_CTX* ctx, WOLFSSL** ssl,
+    const char* host, word16 port, int timeoutSec);
+WOLFKM_API int  wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, 
+    int timeoutSec);
+WOLFKM_API int  wolfKeyMgr_TlsWrite(WOLFSSL* ssl, byte* p, int len);
+WOLFKM_API int  wolfKeyMgr_TlsClose(WOLFSSL* ssl, int sendShutdown);
+WOLFKM_API void wolfKeyMgr_TlsFree(WOLFSSL_CTX* ctx);
+
+/* TODO: TLS Server / Accept */
+
 
 #ifdef __cplusplus
 }

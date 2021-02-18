@@ -22,10 +22,13 @@
 #include "etsi_client.h"
 #include "mod_etsi.h"
 
+#define WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC 10
+
 static pthread_t*  tids;          /* our threads */
 static int         poolSize = 0;  /* number of threads */
 static word16      port;          /* peer port */
 static const char* host =  WOLFKM_DEFAULT_HOST;  /* peer host */
+static int         timeoutSec = WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC;
 
 #ifndef EX_USAGE
 #define EX_USAGE 2
@@ -34,6 +37,9 @@ static const char* host =  WOLFKM_DEFAULT_HOST;  /* peer host */
 #ifndef EXIT_FAILURE
 #define EXIT_FAILURE 1
 #endif
+
+/* Certificate for ETSI server or signer CA */
+#define WOLFKM_ETSISVC_CERT    "./certs/test-cert.pem"
 
 /* for error response in errorMode, 0 on success */
 static int DoErrorMode(void)
@@ -48,7 +54,7 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp)
 {
     int     ret;
     EtsiClientType type;
-    byte    response[4096]; /* buffer large enough for private keys */
+    byte    response[ETSI_MAX_RESPONSE_SZ];
     word32  responseSz;
     ecc_key key;
 
@@ -93,19 +99,19 @@ static void* DoRequests(void* arg)
     int i;
     int ret = -1;
     WorkThreadInfo* info = (WorkThreadInfo*)arg;
-
     EtsiClientCtx* client = wolfKeyMgr_EtsiClientNew();
     if (client == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Error creating ETSI client!\n");
-        return NULL;
+        XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
     }
-    ret = wolfKeyMgr_EtsiClientConnect(client, host, port);
 
-    for (i = 0; i < info->requests; i++) {
-        ret = DoKeyRequest(client, info->useGet, info->saveResp);
-        if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
-            exit(EXIT_FAILURE);
+    ret = wolfKeyMgr_EtsiClientConnect(client, host, port, timeoutSec);
+    if (ret == 0) {
+        for (i = 0; i < info->requests; i++) {
+            ret = DoKeyRequest(client, info->useGet, info->saveResp);
+            if (ret != 0) {
+                XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
+                break;
+            }
         }
     }
 
@@ -130,6 +136,7 @@ static void Usage(void)
                                                           WOLFKM_DEFAULT_REQUESTS);
     printf("-f <file>   <file> to store ETSI response\n");
     printf("-g          Use HTTP GET (default is Push with HTTP PUT)\n");
+    printf("-s <sec>    Timeout seconds (default %d)\n", WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC);
 
 }
 
@@ -152,7 +159,7 @@ int main(int argc, char** argv)
 #endif
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:g")) != -1) {
+    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gs:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -185,6 +192,9 @@ int main(int argc, char** argv)
             case 'g':
                 useGet = 1;
                 break;
+            case 's' :
+                timeoutSec = atoi(optarg);
+                break;
 
             default:
                 Usage();
@@ -205,7 +215,11 @@ int main(int argc, char** argv)
             XLOG(WOLFKM_LOG_ERROR, "Error creating ETSI client!\n");
             exit(EXIT_FAILURE);
         }
-        ret = wolfKeyMgr_EtsiClientConnect(client, host, port);
+        ret = wolfKeyMgr_EtsiClientAddCA(client, WOLFKM_ETSISVC_CERT);
+        if (ret != 0) {
+            XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
+        }
+        ret = wolfKeyMgr_EtsiClientConnect(client, host, port, timeoutSec);
         if (ret != 0) {
             wolfKeyMgr_EtsiClientFree(client);
             XLOG(WOLFKM_LOG_ERROR, "Failure connecting to ETSI service\n");

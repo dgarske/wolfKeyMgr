@@ -24,10 +24,6 @@
 
 #ifdef WOLFKM_ETSI_SERVICE
 
-#ifndef HAVE_ECC
-    #error This service requires ECC support
-#endif
-
 /* shared context for worker threads */
 typedef struct etsiSvcCtx {
     ecc_key         key;  /* last generated key */
@@ -280,7 +276,8 @@ int wolfEtsiSvc_HandleTimeout(svcConn* conn)
 
     etsiConn = (etsiSvcConn*)conn->svcConnCtx;
 
-    if (etsiConn->req.type == HTTP_METHOD_PUT) {
+    /* if we received an HTTP request then keep open */
+    if (etsiConn->req.type != HTTP_METHOD_UNKNOWN) {
         return 0; /* keep open (return non-zero value to close connection) */
     }
     return 1; /* close connection */

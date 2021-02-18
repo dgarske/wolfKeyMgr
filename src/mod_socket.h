@@ -68,7 +68,7 @@ enum {
 };
 
 
-WOLFKM_API int  wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port);
+WOLFKM_API int  wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port, int timeoutSec);
 WOLFKM_API int  wolfKeyMgr_SockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking);
 WOLFKM_API int  wolfKeyMgr_SocketRead(WKM_SOCKET_T sockfd, byte* buffer, word32 length);
 WOLFKM_API int  wolfKeyMgr_SockSelect(WKM_SOCKET_T sockfd, int timeoutSec, int rx);

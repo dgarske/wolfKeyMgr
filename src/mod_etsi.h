@@ -37,15 +37,30 @@ typedef enum EtsiClientType {
     ETSI_CLIENT_PUSH,
 } EtsiClientType;
 
+#ifndef ETSI_MAX_REQUEST_SZ
+#define ETSI_MAX_REQUEST_SZ  1024
+#endif
+#ifndef ETSI_MAX_RESPONSE_SZ
+#define ETSI_MAX_RESPONSE_SZ 1024
+#endif
 
 WOLFKM_API EtsiClientCtx* wolfKeyMgr_EtsiClientNew(void);
 
+WOLFKM_API int wolfKeyMgr_EtsiClientSetKey(EtsiClientCtx* client,
+    const char* keyFile,  const char* keyPassword, const char* certFile,
+    int fileType);
+
+WOLFKM_API int wolfKeyMgr_EtsiClientAddCA(EtsiClientCtx* client,
+    const char* caFile);
+
 WOLFKM_API int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, 
-    const char* host, word16 port);
+    const char* host, word16 port, int timeoutSec);
 
 WOLFKM_API int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client, 
     EtsiClientType type, const char* fingerprint, int timeoutSec,
     byte* response, word32* responseSz);
+
+WOLFKM_API int wolfKeyMgr_EtsiClientClose(EtsiClientCtx* client);
 
 WOLFKM_API void wolfKeyMgr_EtsiClientFree(EtsiClientCtx* client);
 
