@@ -28,7 +28,6 @@ struct EtsiClientCtx {
     WOLFSSL_CTX*   sslCtx;
     WOLFSSL*       ssl;
     EtsiClientType type;
-    const char*    fingerprint;
 };
 
 static const char* kEtsiGet1 = "GET /.well-known/enterprise-transport-security/keys?fingerprints=%s HTTP/1.1\r\nAccept: application/pkcs8\r\n";
@@ -93,6 +92,20 @@ int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, const char* host,
     return ret;
 }
 
+static int EtsiClientMakeRequest(EtsiClientType type, const char* fingerprint,
+    char* request, word32* requestSz)
+{
+    /* Build HTTP ETSI request */
+    if (type == ETSI_CLIENT_PUSH) {
+        *requestSz = strlen(kEtsiPush);
+        strncpy(request, kEtsiPush, *requestSz+1);
+    }
+    else {
+        *requestSz = snprintf(request, *requestSz, kEtsiGet1, fingerprint);
+    }
+    return 0;
+}
+
 int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client, 
     EtsiClientType type, const char* fingerprint, int timeoutSec,
     byte* response, word32* responseSz)
@@ -106,59 +119,56 @@ int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client,
         return WOLFKM_BAD_ARGS;
     }
 
-    /* Build HTTP ETSI request */
-    if (type == ETSI_CLIENT_PUSH) {
-        requestSz = strlen(kEtsiPush);
-        strncpy(request, kEtsiPush, requestSz+1);
-    }
-    else {
-        requestSz = snprintf(request, sizeof(request), kEtsiGet1, fingerprint);
-    }
-
-    /* TODO: Do something with fingerprint */
-    client->fingerprint = fingerprint;
-
-    /* send key request */
-    pos = 0;
-    while (pos < requestSz) {
-        ret = wolfKeyMgr_TlsWrite(client->ssl, (byte*)request + pos,
-            requestSz - pos);
-        if (ret < 0) {
-            XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
+    /* only send request if we need to */
+    if (type != ETSI_CLIENT_PUSH || client->type != type) {
+        ret = EtsiClientMakeRequest(type, fingerprint, request, &requestSz);
+        if (ret != 0) {
+            XLOG(WOLFKM_LOG_INFO, "EtsiClientMakeRequest failed: %d\n", ret);
             return ret;
         }
-        pos += ret;
-    }
-    XLOG(WOLFKM_LOG_INFO, "Sent %s request\n", 
-        type == ETSI_CLIENT_PUSH ? "push" : "single get");
-    client->type = type;
 
-    /* get key response */
-    ret = wolfKeyMgr_TlsRead(client->ssl, response, *responseSz, timeoutSec);
-    if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
-        return ret;
+        /* send key request */
+        pos = 0;
+        while (pos < requestSz) {
+            ret = wolfKeyMgr_TlsWrite(client->ssl, (byte*)request + pos,
+                requestSz - pos);
+            if (ret < 0) {
+                XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
+                return ret;
+            }
+            pos += ret;
+        }
+        XLOG(WOLFKM_LOG_INFO, "Sent %s request\n", 
+            type == ETSI_CLIENT_PUSH ? "push" : "single get");
+        client->type = type;
     }
-    else if (ret == 0) {
-        XLOG(WOLFKM_LOG_ERROR, "peer closed: %d\n", ret);
-        return -1;
+
+    do {
+        /* get key response */
+        ret = wolfKeyMgr_TlsRead(client->ssl, response, *responseSz, timeoutSec);
+        if (ret < 0) {
+            XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
+            break;
+        }
+        /* zero respnse means try again */
+    } while (ret == 0);
+    
+    if (ret > 0) {
+        /* asymmetric key package response */
+        *responseSz = ret;
+        XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", *responseSz);
+        ret = 0;
     }
-        
-    /* asymmetric key package response */
-    *responseSz = ret;
-    XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", *responseSz);
 
     /* TODO: Parse HTTP headers and just return PKCS8 key */
 
-    return 0;
+    return ret;
 }
 
 int wolfKeyMgr_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
 {
     int ret;
     word32 idx = 0;
-    byte pubX[32*2+1], pubY[32*2+1];
-    word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
 
     if (key == NULL || buffer == NULL || length == 0) {
         return WOLFKM_BAD_ARGS;
@@ -166,17 +176,6 @@ int wolfKeyMgr_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
 
     /* Parsing key package */
     ret = wc_EccPrivateKeyDecode(buffer, &idx, key, length);
-    if (ret == 0) {
-        ret = wc_ecc_export_ex(key, pubX, &pubXLen, pubY, &pubYLen, 
-            NULL, NULL, WC_TYPE_HEX_STR);
-    }
-    if (ret == 0) {
-        XLOG(WOLFKM_LOG_INFO, "Pub X: %s\n", pubX);
-        XLOG(WOLFKM_LOG_INFO, "Pub Y: %s\n", pubY);
-    }
-    else {
-        XLOG(WOLFKM_LOG_INFO, "ECC Key Parse Failed %d\n", ret);
-    }
 
     return ret;
 }

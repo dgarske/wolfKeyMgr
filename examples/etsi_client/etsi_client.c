@@ -68,19 +68,30 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp)
     /* for push run until error */
     do {
         responseSz = sizeof(response);
-        ret = wolfKeyMgr_EtsiClientGet(client, type, NULL, 60, response, &responseSz);
+        ret = wolfKeyMgr_EtsiClientGet(client, type, NULL, timeoutSec,
+            response, &responseSz);
         if (ret == 0) {
             ret = wc_ecc_init(&key);
             if (ret == 0) {
                 ret = wolfKeyMgr_EtsiLoadKey(&key, response, responseSz);
+                if (ret == 0) {
+                    byte pubX[32*2+1], pubY[32*2+1];
+                    word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
+                    ret = wc_ecc_export_ex(&key,
+                        pubX, &pubXLen,
+                        pubY, &pubYLen, 
+                        NULL, NULL, WC_TYPE_HEX_STR);
+                    if (ret == 0) {
+                        XLOG(WOLFKM_LOG_INFO, "Pub X: %s\n", pubX);
+                        XLOG(WOLFKM_LOG_INFO, "Pub Y: %s\n", pubY);
+                    }
+                }
                 wc_ecc_free(&key);
             }
-            if (ret != 0) {
-                XLOG(WOLFKM_LOG_INFO, "ECC Key Parse Failed %d\n", ret);
-            }
-            if (saveResp) {
-                ret = wolfKeyMgr_SaveFile(saveResp, response, responseSz);
-            }
+        }
+
+        if (ret != 0) {
+            XLOG(WOLFKM_LOG_INFO, "ECC Key Parse Failed %d\n", ret);
         }
     } while (!useGet && ret == 0);
 
@@ -102,8 +113,12 @@ static void* DoRequests(void* arg)
     EtsiClientCtx* client = wolfKeyMgr_EtsiClientNew();
     if (client == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
+        return NULL;
     }
-
+    ret = wolfKeyMgr_EtsiClientAddCA(client, WOLFKM_ETSISVC_CERT);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
+    }
     ret = wolfKeyMgr_EtsiClientConnect(client, host, port, timeoutSec);
     if (ret == 0) {
         for (i = 0; i < info->requests; i++) {
@@ -209,32 +224,13 @@ int main(int argc, char** argv)
     if (errorMode)
         return DoErrorMode();
 
+    /* setup worker thread info */
+    info.requests = requests;
+    info.useGet = useGet;
+    info.saveResp = saveResp;
+    
     if (poolSize == 0) {
-        EtsiClientCtx* client = wolfKeyMgr_EtsiClientNew();
-        if (client == NULL) {
-            XLOG(WOLFKM_LOG_ERROR, "Error creating ETSI client!\n");
-            exit(EXIT_FAILURE);
-        }
-        ret = wolfKeyMgr_EtsiClientAddCA(client, WOLFKM_ETSISVC_CERT);
-        if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
-        }
-        ret = wolfKeyMgr_EtsiClientConnect(client, host, port, timeoutSec);
-        if (ret != 0) {
-            wolfKeyMgr_EtsiClientFree(client);
-            XLOG(WOLFKM_LOG_ERROR, "Failure connecting to ETSI service\n");
-            exit(EXIT_FAILURE);
-        }
-
-        /* Do an ETSI request */
-        ret = DoKeyRequest(client, useGet, saveResp);
-        if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
-            exit(EXIT_FAILURE);
-        }
-        XLOG(WOLFKM_LOG_INFO, "First ETSI test worked!\n");
-
-        wolfKeyMgr_EtsiClientFree(client);
+        DoRequests(&info);
     }
     else {
         /* stress testing with a thread pool */
@@ -245,11 +241,6 @@ int main(int argc, char** argv)
             XLOG(WOLFKM_LOG_ERROR, "calloc tids failed");
             exit(EXIT_FAILURE);
         }
-
-        /* setup worker thread info */
-        info.requests = requests;
-        info.useGet = useGet;
-        info.saveResp = saveResp;
 
         /* create workers */
         for (i = 0; i < poolSize; i++) {

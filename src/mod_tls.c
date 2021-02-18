@@ -35,13 +35,14 @@ static int wkmTlsReadCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     ret = wolfKeyMgr_SocketRead(sockfd, (byte*)buf, sz);
     if (ret < 0) {
         int err = wolfKeyMgr_SocketLastError(ret);
-        XLOG(WOLFKM_LOG_ERROR, "wkmTlsReadCb error %d (errno %d: %s)\n",
-            ret, err, strerror(err));
-
         if (err == SOCKET_EWOULDBLOCK || err == SOCKET_EAGAIN) {
             return WOLFSSL_CBIO_ERR_WANT_READ;
         }
-        else if (err == SOCKET_ECONNRESET) {
+        
+        XLOG(WOLFKM_LOG_ERROR, "wkmTlsReadCb error %d (errno %d: %s)\n",
+            ret, err, strerror(err));
+
+        if (err == SOCKET_ECONNRESET) {
             return WOLFSSL_CBIO_ERR_CONN_RST;
         }
         else if (err == SOCKET_EINTR) {
@@ -71,13 +72,15 @@ static int wkmTlsWriteCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     ret = wolfKeyMgr_SocketWrite(sockfd, (byte*)buf, sz);
     if (ret < 0) {
         int err = wolfKeyMgr_SocketLastError(ret);
-        XLOG(WOLFKM_LOG_ERROR, "wkmTlsWriteCb error %d (errno %d: %s)\n",
-            ret, err, strerror(err));
 
         if (err == SOCKET_EWOULDBLOCK || err == SOCKET_EAGAIN) {
             return WOLFSSL_CBIO_ERR_WANT_WRITE;
         }
-        else if (err == SOCKET_ECONNRESET) {
+
+        XLOG(WOLFKM_LOG_ERROR, "wkmTlsWriteCb error %d (errno %d: %s)\n",
+            ret, err, strerror(err));
+
+        if (err == SOCKET_ECONNRESET) {
             return WOLFSSL_CBIO_ERR_CONN_RST;
         }
         else if (err == SOCKET_EINTR) {
@@ -196,7 +199,7 @@ int wolfKeyMgr_TlsConnect(WOLFSSL_CTX* ctx, WOLFSSL** ssl, const char* host,
 /* return bytes read or < 0 on error */
 int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
 {
-    int ret = 0, pos = 0;
+    int ret;
     SOCKET_T sockfd;
 
     if (ssl == NULL || (p == NULL && len < 0)) {
@@ -204,14 +207,16 @@ int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
     }
     sockfd = (SOCKET_T)wolfSSL_get_fd(ssl);
 
-    while (ret == 0 && pos < len) {
-        ret = wolfSSL_read(ssl, p + pos, len - pos);
+    do {
+        ret = wolfSSL_read(ssl, p, len);
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
             if (err == WOLFSSL_ERROR_WANT_READ) {
-                ret = wolfKeyMgr_SockSelect(sockfd, timeoutSec, 1);
-                if (ret == WKM_SOCKET_SELECT_RECV_READY) {
-                    ret = 0; /* do read again */
+                ret = wolfKeyMgr_SockSelect(sockfd, 1, 1);
+                if (ret == WKM_SOCKET_SELECT_RECV_READY  ||
+                    ret == WKM_SOCKET_SELECT_TIMEOUT) {
+                    ret = 0; /* try again */
+                    timeoutSec--;
                 }
                 else {
                     ret = WOLFKM_BAD_TIMEOUT;
@@ -224,11 +229,7 @@ int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
                     ret = err;
             }
         }
-        else {
-            pos += ret;
-        }
-    }
-
+    } while (ret == 0 && timeoutSec > 0);
     return ret;
 }
 
@@ -236,19 +237,32 @@ int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
 int wolfKeyMgr_TlsWrite(WOLFSSL* ssl, byte* p, int len)
 {
     int ret;
+    SOCKET_T sockfd;
 
     if (ssl == NULL || (p == NULL && len < 0)) {
         return WOLFKM_BAD_ARGS;
     }
-
-    ret = wolfSSL_write(ssl, p, len);
-    if (ret < 0) {
-        int err = wolfSSL_get_error(ssl, 0);
-        XLOG(WOLFKM_LOG_ERROR, "wolfKeyMgr_TlsWrite error %d: %s\n",
-                                err, wolfSSL_ERR_reason_error_string(err));
-        if (err < 0)
-            ret = err;
-    }
+    sockfd = (SOCKET_T)wolfSSL_get_fd(ssl);
+    
+    do {
+        ret = wolfSSL_write(ssl, p, len);
+        if (ret < 0) {
+            int err = wolfSSL_get_error(ssl, 0);
+            if (err == WOLFSSL_ERROR_WANT_READ) {
+                ret = wolfKeyMgr_SockSelect(sockfd, 1, 0);
+                if (ret == WKM_SOCKET_SELECT_SEND_READY ||
+                    ret == WKM_SOCKET_SELECT_TIMEOUT) {
+                    ret = 0; /* try again */
+                }
+            }
+            else {
+                XLOG(WOLFKM_LOG_ERROR, "wolfKeyMgr_TlsWrite error %d: %s\n",
+                                    err, wolfSSL_ERR_reason_error_string(err));
+                if (err < 0)
+                    ret = err;
+            }
+        }
+    } while (ret == 0);
     return ret;
 }
 
