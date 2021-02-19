@@ -31,10 +31,8 @@
 #include "wkm_types.h"
 #include "wkm_utils.h"
 #include "mod_http.h"
-#include "mod_cert.h"
 #include "mod_etsi.h"
 #include "sock_mgr.h"
-#include "svc_cert.h"
 #include "svc_etsi.h"
 
 
@@ -47,7 +45,7 @@
 
 /* string constants */
 #define WOLFKM_DEFAULT_LOG_NAME     NULL
-#define WOLFKM_DEFAULT_PID          "./cert.pid"
+#define WOLFKM_DEFAULT_PID          "./wolfkeymgr.pid"
 
 
 /* program constants */

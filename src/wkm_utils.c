@@ -32,8 +32,6 @@ static enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
 const char* wolfKeyMgr_GetError(int err)
 {
     switch (err) {
-        case WOLFKM_BAD_VERIFY_SIZE:
-            return "Bad VerifyRequest size parameter";
         case WOLFKM_BAD_ARGS:
             return "Bad Function arguments";
         case WOLFKM_BAD_MEMORY:
@@ -46,28 +44,14 @@ const char* wolfKeyMgr_GetError(int err)
             return "Error loading cert";
         case WOLFKM_BAD_SEND:
             return "Error sending data";
-        case WOLFKM_BAD_LISTENER:
-            return "Error setting up listener";
         case WOLFKM_NOT_COMPILED_IN:
             return "Option not compiled in";
         case WOLFKM_BAD_HOST:
             return "Error resolving host name";
         case WOLFKM_BAD_TIMEOUT:
             return "Timeout error";
-        case WOLFKM_BAD_HEADER_SZ:
-            return "Bad Header size parameter";
-        case WOLFKM_BAD_VERSION:
-            return "Bad Header Version";
         case WOLFKM_BAD_REQUEST_TYPE:
             return "Bad Header Request Type";
-        case WOLFKM_BAD_X509_D2I:
-            return "Bad X509 d2i conversion";
-        case WOLFKM_BAD_X509_GET_NAME:
-            return "Bad X509 get name";
-        case WOLFKM_BAD_X509_ONELINE:
-            return "Bad X509 get name oneline";
-        case WOLFKM_BAD_X509_MATCH:
-            return "Bad X509 issuer name mismatch";
 
         default:
             XLOG(WOLFKM_LOG_ERROR, "Unknown error %d\n", err); 

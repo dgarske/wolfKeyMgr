@@ -26,7 +26,6 @@ ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST += README test-key.pem test-cert.pem
 
 include src/include.am
-include examples/cert_client/include.am
 include examples/etsi_client/include.am
 include scripts/include.am
 

@@ -122,18 +122,6 @@ esac
 LIB_SOCKET_NSL
 
 
-# Certificate Service
-AC_ARG_ENABLE([certsvc],
-    [AS_HELP_STRING([--enable-certsvc],[Enable the Certificate service (default: disabled)])],
-    [ ENABLED_CERT_SERVICE=$enableval ],
-    [ ENABLED_CERT_SERVICE=no ]
-    )
-
-if test "x$ENABLED_CERT_SERVICE" = "xyes"
-then
-    CFLAGS="$CFLAGS -DWOLFKM_CERT_SERVICE"
-fi
-
 # ETSI Service
 AC_ARG_ENABLE([etsisvc],
     [AS_HELP_STRING([--enable-etsisvc],[Enable the ETSI key service (default: enabled)])],
@@ -151,7 +139,7 @@ fi
 # The following AM_CONDITIONAL statements set flags for use in the Makefiles.
 # Some of these affect build targets and objects, some trigger different
 # test scripts for make check.
-AM_CONDITIONAL([BUILD_CERT_SERVICE],[test "x$ENABLED_CERT_SERVICE" = "xyes"])
+AM_CONDITIONAL([BUILD_ETSI_SERVICE],[test "x$ENABLED_ETSI_SERVICE" = "xyes"])
 
 
 # FINAL
@@ -250,5 +238,4 @@ echo "   * CPP Flags:                 $CPPFLAGS"
 echo "   * LIB Flags:                 $LIB"
 echo "   * Debug enabled:             $ax_enable_debug"
 
-echo "   * Certificate Service        $ENABLED_CERT_SERVICE"
 echo "   * ETSI Service               $ENABLED_ETSI_SERVICE"

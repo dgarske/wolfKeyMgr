@@ -152,7 +152,7 @@ int wolfTlsAddCA(WOLFSSL_CTX* ctx, const char* caFile)
 int wolfTlsSetKey(WOLFSSL_CTX* ctx, const char* keyFile, 
     const char* keyPassword, const char* certFile, int fileType)
 {
-    int ret;
+    int ret = WOLFSSL_FAILURE;
     if (ctx == NULL) {
         return WOLFKM_BAD_ARGS;
     }
@@ -169,6 +169,10 @@ int wolfTlsSetKey(WOLFSSL_CTX* ctx, const char* keyFile,
 
     if (ret != WOLFSSL_SUCCESS) {
         XLOG(WOLFKM_LOG_ERROR, "error loading key / cert\n");
+        ret = WOLFKM_BAD_CERT;
+    }
+    else {
+        return 0; /* convert to zero = success */
     }
     return ret;
 }

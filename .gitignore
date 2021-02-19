@@ -31,14 +31,13 @@ aminclude.am
 
 # misc
 tags
-cert.pid
+wolfkeymgr.pid
 response.pem
 dump.der
 diff
 
 # applications
 src/wolfkeymgr
-examples/cert_client/cert_client
 examples/etsi_client/etsi_client
 libtool
 src/options.h

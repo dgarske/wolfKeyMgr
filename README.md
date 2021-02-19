@@ -1,6 +1,6 @@
 # wolf Key Manager
 
-This is a secure service for Key and Certificate management.
+This is a secure service for Key management.
 
 Based on:
 * ETSI TS 103 523-3 V1.3.1 (2019-08)
@@ -10,7 +10,6 @@ Based on:
 
 * Protection of key material / sensitive data
 * Provisioning keys using an asymmetric key package request
-* Provisioning a trusted certificate using a CSR.
 
 ## Design
 
@@ -26,7 +25,7 @@ Based on:
 
 * keymanager.c: The main entry point
 * sock_mgr.c: The libevent socket manager
-* svc_[]: Services exposed (ETSI or CERT)
+* svc_[]: Services exposed (ETSI)
 * mod_[]: Modules for support (HTTP, TLS, Socket, ETSI)
 * wkm_[]: Generic wolfKeyManager functions
 

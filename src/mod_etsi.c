@@ -49,12 +49,10 @@ EtsiClientCtx* wolfEtsiClientNew(void)
 int wolfEtsiClientSetKey(EtsiClientCtx* client, const char* keyFile, 
     const char* keyPassword, const char* certFile, int fileType)
 {
-    int ret;
     if (client == NULL) {
         return WOLFKM_BAD_ARGS;
     }
-    ret = wolfTlsSetKey(client->sslCtx, keyFile, keyPassword, certFile, fileType);
-    return ret;
+    return wolfTlsSetKey(client->sslCtx, keyFile, keyPassword, certFile, fileType);
 }
 
 int wolfEtsiClientAddCA(EtsiClientCtx* client, const char* caFile)
