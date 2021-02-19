@@ -24,12 +24,6 @@
 
 #define WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC 10
 
-static pthread_t*  tids;          /* our threads */
-static int         poolSize = 0;  /* number of threads */
-static word16      port;          /* peer port */
-static const char* host =  WOLFKM_DEFAULT_HOST;  /* peer host */
-static int         timeoutSec = WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC;
-
 #ifndef EX_USAGE
 #define EX_USAGE 2
 #endif
@@ -41,6 +35,17 @@ static int         timeoutSec = WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC;
 /* Certificate for ETSI server or signer CA */
 #define WOLFKM_ETSISVC_CERT    "./certs/test-cert.pem"
 
+
+typedef struct WorkThreadInfo {
+    const char* host;
+    int requests;
+    int timeoutSec;
+    int useGet;
+    char* saveResp;
+    word16 port;
+} WorkThreadInfo;
+
+
 /* for error response in errorMode, 0 on success */
 static int DoErrorMode(void)
 {
@@ -50,7 +55,8 @@ static int DoErrorMode(void)
 }
 
 /* ETSI Asymmetric Key Request */
-static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp)
+static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp,
+    int timeoutSec)
 {
     int     ret;
     EtsiClientType type;
@@ -68,12 +74,12 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp)
     /* for push run until error */
     do {
         responseSz = sizeof(response);
-        ret = wolfKeyMgr_EtsiClientGet(client, type, NULL, timeoutSec,
+        ret = wolfEtsiClientGet(client, type, NULL, timeoutSec,
             response, &responseSz);
         if (ret == 0) {
             ret = wc_ecc_init(&key);
             if (ret == 0) {
-                ret = wolfKeyMgr_EtsiLoadKey(&key, response, responseSz);
+                ret = wkm_EtsiLoadKey(&key, response, responseSz);
                 if (ret == 0) {
                     byte pubX[32*2+1], pubY[32*2+1];
                     word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
@@ -84,6 +90,10 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp)
                     if (ret == 0) {
                         XLOG(WOLFKM_LOG_INFO, "Pub X: %s\n", pubX);
                         XLOG(WOLFKM_LOG_INFO, "Pub Y: %s\n", pubY);
+
+                        if (saveResp) {
+                            wolfKeyMgr_SaveFile(saveResp, response, responseSz);
+                        }
                     }
                 }
                 wc_ecc_free(&key);
@@ -91,18 +101,12 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp)
         }
 
         if (ret != 0) {
-            XLOG(WOLFKM_LOG_INFO, "ECC Key Parse Failed %d\n", ret);
+            XLOG(WOLFKM_LOG_INFO, "ETSI Key Request Failed! %d\n", ret);
         }
     } while (!useGet && ret == 0);
 
     return ret;
 }
-
-typedef struct WorkThreadInfo {
-    int requests;
-    int useGet;
-    char* saveResp;
-} WorkThreadInfo;
 
 /* Do requests per thread, persistent connection */
 static void* DoRequests(void* arg)
@@ -110,19 +114,21 @@ static void* DoRequests(void* arg)
     int i;
     int ret = -1;
     WorkThreadInfo* info = (WorkThreadInfo*)arg;
-    EtsiClientCtx* client = wolfKeyMgr_EtsiClientNew();
+    EtsiClientCtx* client = wolfEtsiClientNew();
     if (client == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "Error creating ETSI client %d!\n", ret);
         return NULL;
     }
-    ret = wolfKeyMgr_EtsiClientAddCA(client, WOLFKM_ETSISVC_CERT);
+    ret = wolfEtsiClientAddCA(client, WOLFKM_ETSISVC_CERT);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
     }
-    ret = wolfKeyMgr_EtsiClientConnect(client, host, port, timeoutSec);
+    ret = wolfEtsiClientConnect(client, info->host, info->port, 
+        info->timeoutSec);
     if (ret == 0) {
         for (i = 0; i < info->requests; i++) {
-            ret = DoKeyRequest(client, info->useGet, info->saveResp);
+            ret = DoKeyRequest(client, info->useGet, info->saveResp,
+                info->timeoutSec);
             if (ret != 0) {
                 XLOG(WOLFKM_LOG_ERROR, "DoKeyRequest failed: %d\n", ret);
                 break;
@@ -130,7 +136,7 @@ static void* DoRequests(void* arg)
         }
     }
 
-    wolfKeyMgr_EtsiClientFree(client);
+    wolfEtsiClientFree(client);
 
     return NULL;
 }
@@ -140,7 +146,7 @@ static void* DoRequests(void* arg)
 /* usage help */
 static void Usage(void)
 {
-    printf("%s %s\n", "client", PACKAGE_VERSION);
+    printf("%s %s\n",  "etsi_client", PACKAGE_VERSION);
     printf("-?          Help, print this usage\n");
     printf("-e          Error mode, force error response\n");
     printf("-h <str>    Host to connect to, default %s\n", WOLFKM_DEFAULT_HOST);
@@ -160,14 +166,17 @@ int main(int argc, char** argv)
 {
     int         ch, i;
     int         ret;
-    char*       saveResp  = NULL;        /* save response */
-    int         requests = WOLFKM_DEFAULT_REQUESTS;
     int         errorMode = 0;
-    int         useGet = 0;
+    pthread_t*  tids;          /* our threads */
+    int         poolSize = 0;  /* number of threads */
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
     WorkThreadInfo info;
 
-    port       = atoi(WOLFKM_DEFAULT_ETSISVC_PORT);
+    memset(&info, 0, sizeof(info));
+    info.requests = WOLFKM_DEFAULT_REQUESTS;
+    info.host = WOLFKM_DEFAULT_HOST;
+    info.timeoutSec = WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC;
+    info.port = atoi(WOLFKM_DEFAULT_ETSISVC_PORT);
 
 #ifdef DISABLE_SSL
     usingTLS = 0;    /* can only disable at build time */
@@ -180,19 +189,19 @@ int main(int argc, char** argv)
                 Usage();
                 exit(EX_USAGE);
             case 'h' :
-                host = optarg;
+                info.host = optarg;
                 break;
             case 'f' :
-                saveResp = optarg;
+                info.saveResp = optarg;
                 break;
             case 'p' :
-                port = atoi(optarg);
+                info.port = atoi(optarg);
                 break;
             case 't' :
                 poolSize = atoi(optarg);
                 break;
             case 'r' :
-                requests = atoi(optarg);
+                info.requests = atoi(optarg);
                 break;
             case 'e' :
                 errorMode = 1;
@@ -205,10 +214,10 @@ int main(int argc, char** argv)
                 }
                 break;
             case 'g':
-                useGet = 1;
+                info.useGet = 1;
                 break;
             case 's' :
-                timeoutSec = atoi(optarg);
+                info.timeoutSec = atoi(optarg);
                 break;
 
             default:
@@ -223,13 +232,9 @@ int main(int argc, char** argv)
 
     if (errorMode)
         return DoErrorMode();
-
-    /* setup worker thread info */
-    info.requests = requests;
-    info.useGet = useGet;
-    info.saveResp = saveResp;
     
     if (poolSize == 0) {
+        info.requests = 1; /* only 1 request for this */
         DoRequests(&info);
     }
     else {

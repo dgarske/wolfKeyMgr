@@ -19,61 +19,133 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+/* HTTP 1.1 Client and Server Module */
+
 #include "mod_http.h"
 #include "wkm_utils.h"
 #include <string.h>
 
 static const char* kCrlf = "\r\n";
+static const char* kHTTPVer = "HTTP/1.1";
 
-static void HttpParseMethod(HttpReq* req, char* method)
+const char* wolfHttpGetMethodStr(HttpMethodType type, word32* strLen)
 {
-    if (strncmp(method, "GET", 3) == 0) {
-        req->type = HTTP_METHOD_GET;
+    const char* str = NULL;
+    switch (type) {
+        case HTTP_METHOD_GET:
+            str = "GET";
+            break;
+        case HTTP_METHOD_HEAD:
+            str = "HEAD";
+            break;
+        case HTTP_METHOD_POST:
+            str = "POST";
+            break;
+        case HTTP_METHOD_PUT:
+            str = "PUT";
+            break;
+        case HTTP_METHOD_DELETE:
+            str = "DELETE";
+            break;
+        case HTTP_METHOD_TRACE:
+            str = "DELETE";
+            break;
+        case HTTP_METHOD_CONNECT:
+            str = "CONNECT";
+            break;
+
+        default:
+            str = NULL;
     }
-    else if (strncmp(method, "HEAD", 4) == 0) {
-        req->type = HTTP_METHOD_HEAD;
+    if (str && strLen) {
+        *strLen = (word32)strlen(str);
     }
-    else if (strncmp(method, "POST", 4) == 0) {
-        req->type = HTTP_METHOD_POST;
-    }
-    else if (strncmp(method, "PUT", 3) == 0) {
-        req->type = HTTP_METHOD_PUT;
-    }
-    else if (strncmp(method, "DELETE", 6) == 0) {
-        req->type = HTTP_METHOD_DELETE;
-    }
-    else if (strncmp(method, "TRACE", 5) == 0) {
-        req->type = HTTP_METHOD_TRACE;
-    }
-    else if (strncmp(method, "CONNECT", 7) == 0) {
-        req->type = HTTP_METHOD_CONNECT;
-    }    
+    return str;
 }
 
-static void HttpParseHeader(HttpReq* req, char* hdrStr)
+const char* wolfHttpGetHeaderStr(HttpHeaderType type, word32* strLen)
+{
+    const char* str = NULL;
+    switch (type) {
+        case HTTP_HDR_ACCEPT:
+            str = "Accept: ";
+            break;
+        case HTTP_HDR_ACCEPT_RANGES:
+            str = "Accept-Ranges: ";
+            break;
+        case HTTP_HDR_CONNECTION:
+            str = "Connection: ";
+            break;
+        case HTTP_HDR_CONTENT_LENGTH:
+            str = "Content-Length: ";
+            break;
+        case HTTP_HDR_CONTENT_TYPE:
+            str = "Content-Type: ";
+            break;
+        case HTTP_HDR_HOST:
+            str = "Host: ";
+            break;
+        /* TODO: Add more header types */
+
+        default:
+            str = NULL;
+    }
+    if (str && strLen) {
+        *strLen = (word32)strlen(str);
+    }
+    return str;
+}
+
+static HttpMethodType HttpParseMethod(char* method)
+{
+    HttpMethodType type;
+    const char* str;
+    word32 len;
+    
+    /* loop through methods and find match */
+    for (type=HTTP_METHOD_UNKNOWN; type<HTTP_METHOD_LAST; type++) {
+        if ((str = wolfHttpGetMethodStr(type, &len))) {
+            if (strncmp(method, str, len) == 0) {
+                return type;
+            }
+        }
+    }
+    return HTTP_METHOD_UNKNOWN;
+}
+
+static void HttpParseHeader(HttpHeader* headers, word32* headerCount, char* hdrStr)
 {
     HttpHeader* hdr;
+    HttpHeaderType type;
+    const char* str;
+    word32 len;
     word32 itemSz = 0;
 
-    if (req->headerCount >= HTTP_HDR_MAX_ITEMS)
+    if (*headerCount >= HTTP_HDR_MAX_ITEMS)
         return;
     
-    hdr = &req->headers[req->headerCount];
+    hdr = &headers[*headerCount];
     memset(hdr, 0, sizeof(*hdr));
 
-    if (strncmp(hdrStr, "Accept: ", 8) == 0) {
-        hdr->type = HTTP_HDR_ACCEPT;
-        itemSz = 8;
+    hdr->type = HTTP_HDR_UNKNOWN;
+
+    /* loop through header types and find match */
+    for (type=HTTP_HDR_UNKNOWN; type<HTTP_HDR_LAST; type++) {
+        if ((str = wolfHttpGetHeaderStr(type, &len))) {
+            if (strncmp(hdrStr, str, len) == 0) {
+                itemSz = len;
+                hdr->type = type;
+                break;
+            }
+        }
     }
 
-    hdrStr[itemSz-2] = '\0'; /* null terminate */
-    hdr->header = hdrStr;
     hdr->string = hdrStr + itemSz;
-    req->headerCount++;
+    (*headerCount)++;
 }
 
-/* Parse incoming request into `HttpReq` struct */
-int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
+/* Parse incoming server request into `HttpReq` struct */
+int wolfHttpServer_ParseRequest(HttpReq* req, char* buf, word32 sz)
 {
     int ret = 0;
     char* sec = buf, *endline, *last;
@@ -90,7 +162,7 @@ int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
     endline = strchr(sec, ' ');
     if (endline) {
         *endline = '\0'; /* null terminate string */
-        HttpParseMethod(req, sec);
+        req->type = HttpParseMethod(sec);
     }
     if (req->type == HTTP_METHOD_UNKNOWN) {
         return HTTP_ERROR_EXPECTED_METHOD;
@@ -122,7 +194,7 @@ int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
     endline = strstr(sec, kCrlf); /* Find end of line */
     while (endline) {
         *endline = '\0'; /* null terminate line */
-        HttpParseHeader(req, sec);
+        HttpParseHeader(req->headers, &req->headerCount, sec);
         endline += 2; /* 2=length of CRLF */
         endline = strstr(endline, kCrlf); /* Find end of line */
     }
@@ -130,7 +202,182 @@ int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz)
     return ret;
 }
 
-void wolfKeyMgr_HttpReqDump(HttpReq* req)
+int wolfHttpServer_EncodeResponse(int rspCode, const char* message, 
+    char* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
+    const char* body, word32 bodySz)
+{
+    int i;
+    HttpHeader* hdr;
+    char* out = response;
+    word32 remain;
+
+    if (response == NULL || responseSz == NULL || *responseSz == 0 || 
+            (headers == NULL && headerCount > 0)) {
+        return WOLFKM_BAD_ARGS;
+    }
+    remain = *responseSz - 1; /* room for null term */
+
+    /* default to "200 OK" */
+    if (rspCode == 0) {
+        rspCode = 200;
+    }
+    if (message == NULL) {
+        message = "OK";
+    }
+
+    /* append version and response code / message */
+    i = snprintf(out, remain, "%s %d %s\r\n", kHTTPVer, rspCode, message);
+    if (i > 0) {
+        out += i;
+        remain -= i;
+    }
+
+    /* append headers */
+    for (i=0; i<headerCount && remain > 0; i++) {
+        hdr = &headers[i];
+
+        i = snprintf(out, remain, "%s%s\r\n", 
+            wolfHttpGetHeaderStr(hdr->type, NULL), hdr->string);
+        if (i > 0) {
+            out += i;
+            remain -= i;
+        }
+    }
+
+    /* append content length */
+    if (bodySz > 0) {
+        i = snprintf(out, remain, "%s%d\r\n", 
+            wolfHttpGetHeaderStr(HTTP_HDR_CONTENT_LENGTH, NULL), bodySz);
+        if (i > 0) {
+            out += i;
+            remain -= i;
+        }
+    }
+
+    /* add trailing crlf and body */
+    i = snprintf(out, remain, "\r\n");
+    if (i > 0) {
+        out += i;
+        remain -= i;
+    }
+
+    /* append body (optional) */
+    if (body && bodySz > 0) {
+        if (bodySz > remain)
+            bodySz = remain;
+        memcpy(out, body, bodySz);
+        out += bodySz;
+        remain -= bodySz;
+    }
+
+    /* calculate total length */
+    *responseSz = (word32)((size_t)out - (size_t)response);
+
+    /* null terminate */
+    response[*responseSz] = '\0';
+
+    return *responseSz + 1;
+}
+
+int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz)
+{
+    int ret = 0;
+    char* sec = buf, *endline;
+    word32 len = sz;
+    word32 itemSz;
+
+    if (rsp == NULL)  {
+        return WOLFKM_BAD_ARGS;
+    }
+    memset(rsp, 0, sizeof(*rsp));
+
+    /* HTTP Header Version */
+    /* find first space */
+    endline = strchr(sec, ' ');
+    if (endline) {
+        *endline = '\0'; /* null terminate string */
+    }
+    rsp->version = sec;
+    itemSz = strlen(sec) + 1; /* include space */    
+    sec += itemSz; len -= itemSz;
+
+    /* HTTP Response Code */
+    /* find next space */
+    endline = strchr(sec, ' ');
+    if (endline) {
+        *endline = '\0'; /* null terminate string */
+    }
+    rsp->code = atoi(sec);
+    itemSz = strlen(sec) + 1; /* include space */    
+    sec += itemSz; len -= itemSz;
+
+    /* HTTP Response Message */
+    /* find end of line */
+    endline = strstr(sec, kCrlf);
+    if (endline == NULL) {
+        return HTTP_ERROR_EXPECTED_CRLF;
+    }
+    *endline = '\0'; /* null terminate string */
+
+    rsp->message = sec;
+    sec = endline + 2; /* 2=length of CRLF */
+
+    /* Parse headers */
+    endline = strstr(sec, kCrlf); /* Find end of line */
+    while (endline) {
+        *endline = '\0'; /* null terminate line */
+        HttpParseHeader(rsp->headers, &rsp->headerCount, sec);
+        endline += 2; /* 2=length of CRLF */
+        endline = strstr(endline, kCrlf); /* Find end of line */
+    }
+
+    return ret;
+}
+
+int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
+    char* request, word32* requestSz, HttpHeader* headers, word32 headerCount)
+{
+    int i;
+    HttpHeader* hdr;
+    char* out = request;
+    word32 remain;
+
+    if (request == NULL || requestSz == NULL || *requestSz == 0 || 
+            uri == NULL || (headers == NULL && headerCount > 0)) {
+        return WOLFKM_BAD_ARGS;
+    }
+    remain = *requestSz - 1; /* room for null term */
+
+    /* append method */
+    i = snprintf(out, remain, "%s %s %s\r\n",
+        wolfHttpGetMethodStr(type, NULL), uri, kHTTPVer);
+    if (i > 0) {
+        out += i;
+        remain -= i;
+    }
+
+    /* append headers */
+    for (i=0; i<headerCount && remain > 0; i++) {
+        hdr = &headers[i];
+
+        i = snprintf(out, remain, "%s%s\r\n", 
+            wolfHttpGetHeaderStr(hdr->type, NULL), hdr->string);
+        if (i > 0) {
+            out += i;
+            remain -= i;
+        }
+    }
+
+    /* calculate total length */
+    *requestSz = (word32)((size_t)out - (size_t)request);
+
+    /* null terminate */
+    request[*requestSz] = '\0';
+
+    return *requestSz + 1;
+}
+
+void wolfHttpRequestPrint(HttpReq* req)
 {
     int i;
 
@@ -143,6 +390,25 @@ void wolfKeyMgr_HttpReqDump(HttpReq* req)
     XLOG(WOLFKM_LOG_DEBUG, "\tHeaders: %d\n", req->headerCount);
     for (i=0; i<req->headerCount; i++) {
         XLOG(WOLFKM_LOG_DEBUG, "\t\t%s: %s\n",
-            req->headers[i].header, req->headers[i].string);
+            req->headers[i].string,
+            wolfHttpGetHeaderStr(req->headers[i].type, NULL));
     }
+}
+
+void wolfHttpResponsePrint(HttpRsp* rsp)
+{
+    int i;
+
+    if (rsp == NULL)
+        return;
+
+    XLOG(WOLFKM_LOG_DEBUG, "HTTP %s\n", rsp->version);
+    XLOG(WOLFKM_LOG_DEBUG, "\tCode %d: %s\n", rsp->code, rsp->message);
+    XLOG(WOLFKM_LOG_DEBUG, "\tHeaders: %d\n", rsp->headerCount);
+    for (i=0; i<rsp->headerCount; i++) {
+        XLOG(WOLFKM_LOG_DEBUG, "\t\t%s: %s\n",
+            rsp->headers[i].string,
+            wolfHttpGetHeaderStr(rsp->headers[i].type, NULL));
+    }
+    XLOG(WOLFKM_LOG_DEBUG, "\tBody Size: %d\n", rsp->bodySz);
 }

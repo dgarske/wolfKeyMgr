@@ -44,6 +44,7 @@ typedef enum HttpMethodType {
     HTTP_METHOD_DELETE,
     HTTP_METHOD_TRACE,
     HTTP_METHOD_CONNECT,
+    HTTP_METHOD_LAST,
 } HttpMethodType;
 
 typedef enum HttpHeaderType {
@@ -96,6 +97,7 @@ typedef enum HttpHeaderType {
     HTTP_HDR_VIA,
     HTTP_HDR_WARNING,
     HTTP_HDR_WWW_AUTHENTICATE,
+    HTTP_HDR_LAST,
 } HttpHeaderType;
 
 typedef enum HttpErrorCodes {
@@ -106,7 +108,6 @@ typedef enum HttpErrorCodes {
 
 typedef struct HttpHeader {
     HttpHeaderType type;
-    char*          header;
     char*          string;
 } HttpHeader;
 
@@ -119,9 +120,30 @@ typedef struct HttpReq {
     HttpHeader     headers[HTTP_HDR_MAX_ITEMS];
 } HttpReq;
 
+typedef struct HttpRsp {
+    char*          version;
+    int            code;
+    char*          message;
+    word32         headerCount;
+    HttpHeader     headers[HTTP_HDR_MAX_ITEMS];
+    char*          body;
+    word32         bodySz;
+} HttpRsp;
 
-WOLFKM_API int wolfKeyMgr_HttpParse(HttpReq* req, char* buf, word32 sz);
-WOLFKM_API void wolfKeyMgr_HttpReqDump(HttpReq* req);
+WOLFKM_API const char* wolfHttpGetMethodStr(HttpMethodType type, word32* strLen);
+WOLFKM_API const char* wolfHttpGetHeaderStr(HttpHeaderType type, word32* strLen);
+
+WOLFKM_API int wolfHttpServer_EncodeResponse(int rspCode, const char* message, 
+    char* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
+    const char* body, word32 bodySz);
+WOLFKM_API int wolfHttpServer_ParseRequest(HttpReq* req, char* buf, word32 sz);
+
+WOLFKM_API int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz);
+WOLFKM_API int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
+    char* request, word32* requestSz, HttpHeader* headers, word32 headerCount);
+
+WOLFKM_API void wolfHttpRequestPrint(HttpReq* req);
+WOLFKM_API void wolfHttpResponsePrint(HttpRsp* rsp);
 
 
 #ifdef __cplusplus

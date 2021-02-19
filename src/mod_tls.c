@@ -32,9 +32,9 @@ static int wkmTlsReadCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     }
     sockfd = *(SOCKET_T*)ctx;
 
-    ret = wolfKeyMgr_SocketRead(sockfd, (byte*)buf, sz);
+    ret = wolfSocketRead(sockfd, (byte*)buf, sz);
     if (ret < 0) {
-        int err = wolfKeyMgr_SocketLastError(ret);
+        int err = wolfSocketLastError(ret);
         if (err == SOCKET_EWOULDBLOCK || err == SOCKET_EAGAIN) {
             return WOLFSSL_CBIO_ERR_WANT_READ;
         }
@@ -69,9 +69,9 @@ static int wkmTlsWriteCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     }
     sockfd = *(SOCKET_T*)ctx;
 
-    ret = wolfKeyMgr_SocketWrite(sockfd, (byte*)buf, sz);
+    ret = wolfSocketWrite(sockfd, (byte*)buf, sz);
     if (ret < 0) {
-        int err = wolfKeyMgr_SocketLastError(ret);
+        int err = wolfSocketLastError(ret);
 
         if (err == SOCKET_EWOULDBLOCK || err == SOCKET_EAGAIN) {
             return WOLFSSL_CBIO_ERR_WANT_WRITE;
@@ -113,7 +113,7 @@ static int wkmTlsPasswordCallBack(char* passwd, int sz, int rw, void* userdata)
 }
 #endif
 
-WOLFSSL_CTX* wolfKeyMgr_TlsClientNew(void)
+WOLFSSL_CTX* wolfTlsClientNew(void)
 {
     WOLFSSL_CTX* ctx = wolfSSL_CTX_new(wolfTLSv1_3_client_method());
     if (ctx == NULL) {
@@ -131,7 +131,7 @@ WOLFSSL_CTX* wolfKeyMgr_TlsClientNew(void)
     return ctx;
 }
 
-int wolfKeyMgr_TlsAddCA(WOLFSSL_CTX* ctx, const char* caFile)
+int wolfTlsAddCA(WOLFSSL_CTX* ctx, const char* caFile)
 {
     int ret;
     if (ctx == NULL || caFile == NULL) {
@@ -149,7 +149,7 @@ int wolfKeyMgr_TlsAddCA(WOLFSSL_CTX* ctx, const char* caFile)
     return 0;
 }
 
-int wolfKeyMgr_TlsSetKey(WOLFSSL_CTX* ctx, const char* keyFile, 
+int wolfTlsSetKey(WOLFSSL_CTX* ctx, const char* keyFile, 
     const char* keyPassword, const char* certFile, int fileType)
 {
     int ret;
@@ -173,7 +173,7 @@ int wolfKeyMgr_TlsSetKey(WOLFSSL_CTX* ctx, const char* keyFile,
     return ret;
 }
 
-int wolfKeyMgr_TlsConnect(WOLFSSL_CTX* ctx, WOLFSSL** ssl, const char* host,
+int wolfTlsConnect(WOLFSSL_CTX* ctx, WOLFSSL** ssl, const char* host,
     word16 port, int timeoutSec)
 {
     int ret;
@@ -183,7 +183,7 @@ int wolfKeyMgr_TlsConnect(WOLFSSL_CTX* ctx, WOLFSSL** ssl, const char* host,
         return WOLFKM_BAD_ARGS;
     }
 
-    ret = wolfKeyMgr_SockConnect(&sockfd, host, port, timeoutSec);
+    ret = wolfSockConnect(&sockfd, host, port, timeoutSec);
     if (ret == 0) {
         *ssl = wolfSSL_new(ctx);
         if (*ssl == NULL) {
@@ -197,7 +197,7 @@ int wolfKeyMgr_TlsConnect(WOLFSSL_CTX* ctx, WOLFSSL** ssl, const char* host,
 }
 
 /* return bytes read or < 0 on error */
-int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
+int wolfTlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
 {
     int ret;
     SOCKET_T sockfd;
@@ -212,7 +212,7 @@ int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
             if (err == WOLFSSL_ERROR_WANT_READ) {
-                ret = wolfKeyMgr_SockSelect(sockfd, 1, 1);
+                ret = wolfSockSelect(sockfd, 1, 1);
                 if (ret == WKM_SOCKET_SELECT_RECV_READY  ||
                     ret == WKM_SOCKET_SELECT_TIMEOUT) {
                     ret = 0; /* try again */
@@ -223,7 +223,7 @@ int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
                 }
             }
             else {
-                XLOG(WOLFKM_LOG_ERROR, "wolfKeyMgr_TlsRead error %d: %s\n",
+                XLOG(WOLFKM_LOG_ERROR, "wolfTlsRead error %d: %s\n",
                                     err, wolfSSL_ERR_reason_error_string(err));
                 if (err < 0)
                     ret = err;
@@ -234,7 +234,7 @@ int wolfKeyMgr_TlsRead(WOLFSSL* ssl, byte* p, int len, int timeoutSec)
 }
 
 /* return sent bytes or < 0 on error */
-int wolfKeyMgr_TlsWrite(WOLFSSL* ssl, byte* p, int len)
+int wolfTlsWrite(WOLFSSL* ssl, byte* p, int len)
 {
     int ret;
     SOCKET_T sockfd;
@@ -249,14 +249,14 @@ int wolfKeyMgr_TlsWrite(WOLFSSL* ssl, byte* p, int len)
         if (ret < 0) {
             int err = wolfSSL_get_error(ssl, 0);
             if (err == WOLFSSL_ERROR_WANT_READ) {
-                ret = wolfKeyMgr_SockSelect(sockfd, 1, 0);
+                ret = wolfSockSelect(sockfd, 1, 0);
                 if (ret == WKM_SOCKET_SELECT_SEND_READY ||
                     ret == WKM_SOCKET_SELECT_TIMEOUT) {
                     ret = 0; /* try again */
                 }
             }
             else {
-                XLOG(WOLFKM_LOG_ERROR, "wolfKeyMgr_TlsWrite error %d: %s\n",
+                XLOG(WOLFKM_LOG_ERROR, "wolfTlsWrite error %d: %s\n",
                                     err, wolfSSL_ERR_reason_error_string(err));
                 if (err < 0)
                     ret = err;
@@ -266,7 +266,7 @@ int wolfKeyMgr_TlsWrite(WOLFSSL* ssl, byte* p, int len)
     return ret;
 }
 
-int wolfKeyMgr_TlsClose(WOLFSSL* ssl, int sendShutdown)
+int wolfTlsClose(WOLFSSL* ssl, int sendShutdown)
 {
     int ret = 0;
     SOCKET_T sockfd;
@@ -281,13 +281,13 @@ int wolfKeyMgr_TlsClose(WOLFSSL* ssl, int sendShutdown)
     sockfd = (SOCKET_T)wolfSSL_get_fd(ssl);
 
     if (sockfd != WKM_SOCKET_INVALID) {
-        wolfKeyMgr_SocketClose(sockfd);
+        wolfSocketClose(sockfd);
     }
     wolfSSL_free(ssl);
     return ret;
 }
 
-void wolfKeyMgr_TlsFree(WOLFSSL_CTX* ctx)
+void wolfTlsFree(WOLFSSL_CTX* ctx)
 {
     if (ctx) {
         wolfSSL_CTX_free(ctx);

@@ -44,27 +44,27 @@ typedef enum EtsiClientType {
 #define ETSI_MAX_RESPONSE_SZ 1024
 #endif
 
-WOLFKM_API EtsiClientCtx* wolfKeyMgr_EtsiClientNew(void);
+WOLFKM_API EtsiClientCtx* wolfEtsiClientNew(void);
 
-WOLFKM_API int wolfKeyMgr_EtsiClientSetKey(EtsiClientCtx* client,
+WOLFKM_API int wolfEtsiClientSetKey(EtsiClientCtx* client,
     const char* keyFile,  const char* keyPassword, const char* certFile,
     int fileType);
 
-WOLFKM_API int wolfKeyMgr_EtsiClientAddCA(EtsiClientCtx* client,
+WOLFKM_API int wolfEtsiClientAddCA(EtsiClientCtx* client,
     const char* caFile);
 
-WOLFKM_API int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, 
+WOLFKM_API int wolfEtsiClientConnect(EtsiClientCtx* client, 
     const char* host, word16 port, int timeoutSec);
 
-WOLFKM_API int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client, 
+WOLFKM_API int wolfEtsiClientGet(EtsiClientCtx* client, 
     EtsiClientType type, const char* fingerprint, int timeoutSec,
     byte* response, word32* responseSz);
 
-WOLFKM_API int wolfKeyMgr_EtsiClientClose(EtsiClientCtx* client);
+WOLFKM_API int wolfEtsiClientClose(EtsiClientCtx* client);
 
-WOLFKM_API void wolfKeyMgr_EtsiClientFree(EtsiClientCtx* client);
+WOLFKM_API void wolfEtsiClientFree(EtsiClientCtx* client);
 
-WOLFKM_API int wolfKeyMgr_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length);
+WOLFKM_API int wkm_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length);
 
 #ifdef __cplusplus
 }

@@ -697,7 +697,7 @@ static int InitClientTLS(void)
 /* usage help */
 static void Usage(void)
 {
-    printf("%s %s\n", "client", PACKAGE_VERSION);
+    printf("%s %s\n",  "cert_client", PACKAGE_VERSION);
     printf("-?          Help, print this usage\n");
     printf("-s          Do signature request instead of cert request\n");
     printf("-e          Error mode, force error response\n");

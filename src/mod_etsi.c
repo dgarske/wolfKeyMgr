@@ -22,6 +22,7 @@
 #ifdef WOLFKM_ETSI_SERVICE
 
 #include "mod_etsi.h"
+#include "mod_http.h"
 #include "mod_tls.h"
 
 struct EtsiClientCtx {
@@ -30,17 +31,12 @@ struct EtsiClientCtx {
     EtsiClientType type;
 };
 
-static const char* kEtsiGet1 = "GET /.well-known/enterprise-transport-security/keys?fingerprints=%s HTTP/1.1\r\nAccept: application/pkcs8\r\n";
-//static const char* kEtsiGet2 = "GET /.well-known/enterprise-transport-security/keys?groups=%s&certs=%s HTTP/1.1\r\nAccept: application/pkcs8\r\n";
-static const char* kEtsiPush = "PUT /enterprise-transport-security/keys HTTP/1.1\r\nAccept: application/pkcs8\r\n";
-
-
-EtsiClientCtx* wolfKeyMgr_EtsiClientNew(void)
+EtsiClientCtx* wolfEtsiClientNew(void)
 {
     EtsiClientCtx* client = (EtsiClientCtx*)malloc(sizeof(EtsiClientCtx));
     if (client) {
         memset(client, 0, sizeof(EtsiClientCtx));
-        client->sslCtx = wolfKeyMgr_TlsClientNew();
+        client->sslCtx = wolfTlsClientNew();
         if (client->sslCtx == NULL) {
             XLOG(WOLFKM_LOG_ERROR, "Error creating TLS client!\n");
             free(client);
@@ -50,29 +46,29 @@ EtsiClientCtx* wolfKeyMgr_EtsiClientNew(void)
     return client;
 }
 
-int wolfKeyMgr_EtsiClientSetKey(EtsiClientCtx* client, const char* keyFile, 
+int wolfEtsiClientSetKey(EtsiClientCtx* client, const char* keyFile, 
     const char* keyPassword, const char* certFile, int fileType)
 {
     int ret;
     if (client == NULL) {
         return WOLFKM_BAD_ARGS;
     }
-    ret = wolfKeyMgr_TlsSetKey(client->sslCtx, keyFile, keyPassword, certFile, fileType);
+    ret = wolfTlsSetKey(client->sslCtx, keyFile, keyPassword, certFile, fileType);
     return ret;
 }
 
-int wolfKeyMgr_EtsiClientAddCA(EtsiClientCtx* client, const char* caFile)
+int wolfEtsiClientAddCA(EtsiClientCtx* client, const char* caFile)
 {
     int ret;
     if (client == NULL) {
         return WOLFKM_BAD_ARGS;
     }
 
-    ret = wolfKeyMgr_TlsAddCA(client->sslCtx, caFile);
+    ret = wolfTlsAddCA(client->sslCtx, caFile);
     return ret;
 }
 
-int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, const char* host,
+int wolfEtsiClientConnect(EtsiClientCtx* client, const char* host,
     word16 port, int timeoutSec)
 {
     int ret;
@@ -81,7 +77,7 @@ int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, const char* host,
         return WOLFKM_BAD_ARGS;
     }
 
-    ret = wolfKeyMgr_TlsConnect(client->sslCtx, &client->ssl, host, port, timeoutSec);
+    ret = wolfTlsConnect(client->sslCtx, &client->ssl, host, port, timeoutSec);
     if (ret == 0) {
         XLOG(WOLFKM_LOG_INFO, "Connected to ETSI service\n");
     }
@@ -95,18 +91,31 @@ int wolfKeyMgr_EtsiClientConnect(EtsiClientCtx* client, const char* host,
 static int EtsiClientMakeRequest(EtsiClientType type, const char* fingerprint,
     char* request, word32* requestSz)
 {
+    int ret;
+    HttpHeader headers[1];
+    headers[0].type = HTTP_HDR_ACCEPT;
+    headers[0].string = "application/pkcs8";
+    
     /* Build HTTP ETSI request */
     if (type == ETSI_CLIENT_PUSH) {
-        *requestSz = strlen(kEtsiPush);
-        strncpy(request, kEtsiPush, *requestSz+1);
+        const char* uri = "/enterprise-transport-security/keys";
+        ret = wolfHttpClient_EncodeRequest(HTTP_METHOD_PUT, uri, request,
+            requestSz, headers, sizeof(headers)/sizeof(HttpHeader));
     }
     else {
-        *requestSz = snprintf(request, *requestSz, kEtsiGet1, fingerprint);
+        char uri[128]; /* 62 + fingerprint */
+        snprintf(uri, sizeof(uri), 
+            "/.well-known/enterprise-transport-security/keys?fingerprints=%s",
+            fingerprint);
+        ret = wolfHttpClient_EncodeRequest(HTTP_METHOD_GET, uri, request, 
+            requestSz, headers, sizeof(headers)/sizeof(HttpHeader));
     }
-    return 0;
+    if (ret > 0)
+        ret = 0;
+    return ret;
 }
 
-int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client, 
+int wolfEtsiClientGet(EtsiClientCtx* client, 
     EtsiClientType type, const char* fingerprint, int timeoutSec,
     byte* response, word32* responseSz)
 {
@@ -130,7 +139,7 @@ int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client,
         /* send key request */
         pos = 0;
         while (pos < requestSz) {
-            ret = wolfKeyMgr_TlsWrite(client->ssl, (byte*)request + pos,
+            ret = wolfTlsWrite(client->ssl, (byte*)request + pos,
                 requestSz - pos);
             if (ret < 0) {
                 XLOG(WOLFKM_LOG_INFO, "DoClientSend failed: %d\n", ret);
@@ -145,7 +154,7 @@ int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client,
 
     do {
         /* get key response */
-        ret = wolfKeyMgr_TlsRead(client->ssl, response, *responseSz, timeoutSec);
+        ret = wolfTlsRead(client->ssl, response, *responseSz, timeoutSec);
         if (ret < 0) {
             XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
             break;
@@ -165,7 +174,7 @@ int wolfKeyMgr_EtsiClientGet(EtsiClientCtx* client,
     return ret;
 }
 
-int wolfKeyMgr_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
+int wkm_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
 {
     int ret;
     word32 idx = 0;
@@ -180,21 +189,21 @@ int wolfKeyMgr_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
     return ret;
 }
 
-int wolfKeyMgr_EtsiClientClose(EtsiClientCtx* client)
+int wolfEtsiClientClose(EtsiClientCtx* client)
 {
     int ret = 0;
     if (client) {
         /* send shutdown */
-        ret = wolfKeyMgr_TlsClose(client->ssl, 1);
+        ret = wolfTlsClose(client->ssl, 1);
         client->ssl = NULL;
     }
     return ret;
 }
 
-void wolfKeyMgr_EtsiClientFree(EtsiClientCtx* client)
+void wolfEtsiClientFree(EtsiClientCtx* client)
 {
     if (client) {
-        wolfKeyMgr_TlsFree(client->sslCtx);
+        wolfTlsFree(client->sslCtx);
         client->sslCtx = NULL;
         free(client);
     }

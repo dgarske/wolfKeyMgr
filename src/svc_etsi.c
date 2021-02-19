@@ -211,13 +211,13 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
     }
     etsiConn = (etsiSvcConn*)conn->svcConnCtx;
 
-    ret = wolfKeyMgr_HttpParse(&etsiConn->req, (char*)conn->request,
+    ret = wolfHttpServer_ParseRequest(&etsiConn->req, (char*)conn->request,
         conn->requestSz);
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "ETSI HTTP Parse failed: %d\n", ret);
+        XLOG(WOLFKM_LOG_ERROR, "ETSI HTTP Server Parse failed: %d\n", ret);
         return WOLFKM_BAD_REQUEST_TYPE;
     }
-    wolfKeyMgr_HttpReqDump(&etsiConn->req);
+    wolfHttpRequestPrint(&etsiConn->req);
 
     /* Perform URI decode? */
     wolfKeyMgr_UriDecode(etsiConn->req.uri, (byte*)etsiConn->req.uri);

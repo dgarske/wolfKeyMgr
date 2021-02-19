@@ -68,13 +68,13 @@ enum {
 };
 
 
-WOLFKM_API int  wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port, int timeoutSec);
-WOLFKM_API int  wolfKeyMgr_SockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking);
-WOLFKM_API int  wolfKeyMgr_SocketRead(WKM_SOCKET_T sockfd, byte* buffer, word32 length);
-WOLFKM_API int  wolfKeyMgr_SockSelect(WKM_SOCKET_T sockfd, int timeoutSec, int rx);
-WOLFKM_API int  wolfKeyMgr_SocketWrite(WKM_SOCKET_T sockfd, const byte* buffer, word32 length);
-WOLFKM_API void wolfKeyMgr_SocketClose(WKM_SOCKET_T sockfd);
-WOLFKM_API int  wolfKeyMgr_SocketLastError(int err);
+WOLFKM_API int  wolfSockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port, int timeoutSec);
+WOLFKM_API int  wolfSockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking);
+WOLFKM_API int  wolfSocketRead(WKM_SOCKET_T sockfd, byte* buffer, word32 length);
+WOLFKM_API int  wolfSockSelect(WKM_SOCKET_T sockfd, int timeoutSec, int rx);
+WOLFKM_API int  wolfSocketWrite(WKM_SOCKET_T sockfd, const byte* buffer, word32 length);
+WOLFKM_API void wolfSocketClose(WKM_SOCKET_T sockfd);
+WOLFKM_API int  wolfSocketLastError(int err);
 
 #ifdef __cplusplus
 }

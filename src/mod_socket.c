@@ -117,7 +117,7 @@ static int tcp_socket(WKM_SOCKET_T* sockfd)
 }
 
 /* if timeoutSec == 0 then no timeout and using blocking mode */
-int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port,
+int wolfSockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port,
     int timeoutSec)
 {
     int ret, err;
@@ -132,15 +132,15 @@ int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port,
     if (ret == 0) {
         if (timeoutSec > 0) {
             /* enable non-blocking */
-            wolfKeyMgr_SockSetBlockingMode(*sockfd, 1);
+            wolfSockSetBlockingMode(*sockfd, 1);
         }
 
         ret = connect(*sockfd, (const struct sockaddr*)&addr, sizeof(addr));
         if (ret < 0) {
-            err = wolfKeyMgr_SocketLastError(ret);
+            err = wolfSocketLastError(ret);
             if (err == EINPROGRESS && timeoutSec > 0) {
                 /* wait on send or error */
-                ret = wolfKeyMgr_SockSelect(*sockfd, timeoutSec, 0);
+                ret = wolfSockSelect(*sockfd, timeoutSec, 0);
                 if (ret == WKM_SOCKET_SELECT_SEND_READY) {
                     ret = 0; /* completed successfully */
                 }
@@ -151,7 +151,7 @@ int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port,
         }
     }
     if (ret != 0) {
-        err = wolfKeyMgr_SocketLastError(ret);
+        err = wolfSocketLastError(ret);
         XLOG(WOLFKM_LOG_ERROR, "tcp connect failed: %d (%s)", 
             err, strerror(err));
     }
@@ -159,7 +159,7 @@ int wolfKeyMgr_SockConnect(WKM_SOCKET_T* sockfd, const char* ip, word16 port,
     return ret;
 }
 
-int wolfKeyMgr_SockSelect(WKM_SOCKET_T sockfd, int timeoutSec, int rx)
+int wolfSockSelect(WKM_SOCKET_T sockfd, int timeoutSec, int rx)
 {
     int res;
     fd_set fds, errfds;
@@ -203,7 +203,7 @@ int wolfKeyMgr_SockSelect(WKM_SOCKET_T sockfd, int timeoutSec, int rx)
     return WKM_SOCKET_SELECT_FAIL;
 }
 
-int wolfKeyMgr_SockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking)
+int wolfSockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking)
 {
     int ret = 0;
 
@@ -223,26 +223,26 @@ int wolfKeyMgr_SockSetBlockingMode(WKM_SOCKET_T sockfd, int nonBlocking)
     }
 #endif
     if (ret < 0) {
-        int err = wolfKeyMgr_SocketLastError(ret);
+        int err = wolfSocketLastError(ret);
         XLOG(WOLFKM_LOG_ERROR,
-            "wolfKeyMgr_SockSetBlockingMode failed %d (errno %d: %s)\n",
+            "wolfSockSetBlockingMode failed %d (errno %d: %s)\n",
             ret, err, strerror(err));
     }
     return ret;
 }
 
-int wolfKeyMgr_SocketRead(WKM_SOCKET_T sockfd, byte* buffer, word32 length)
+int wolfSocketRead(WKM_SOCKET_T sockfd, byte* buffer, word32 length)
 {
     return (int)recv(sockfd, buffer, length, 0);
 }
 
-int wolfKeyMgr_SocketWrite(WKM_SOCKET_T sockfd, const byte* buffer,
+int wolfSocketWrite(WKM_SOCKET_T sockfd, const byte* buffer,
     word32 length)
 {
     return (int)send(sockfd, buffer, length, 0);
 }
 
-void wolfKeyMgr_SocketClose(WKM_SOCKET_T sockfd)
+void wolfSocketClose(WKM_SOCKET_T sockfd)
 {
     if (WKM_SOCKET_IS_INVALID(sockfd)) {
     #ifdef USE_WINDOWS_API
@@ -253,7 +253,7 @@ void wolfKeyMgr_SocketClose(WKM_SOCKET_T sockfd)
     }
 }
 
-int wolfKeyMgr_SocketLastError(int err)
+int wolfSocketLastError(int err)
 {
     (void)err; /* Suppress unused arg */
 
