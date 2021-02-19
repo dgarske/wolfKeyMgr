@@ -134,13 +134,13 @@ WOLFKM_API const char* wolfHttpGetMethodStr(HttpMethodType type, word32* strLen)
 WOLFKM_API const char* wolfHttpGetHeaderStr(HttpHeaderType type, word32* strLen);
 
 WOLFKM_API int wolfHttpServer_EncodeResponse(int rspCode, const char* message, 
-    char* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
-    const char* body, word32 bodySz);
-WOLFKM_API int wolfHttpServer_ParseRequest(HttpReq* req, char* buf, word32 sz);
+    byte* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
+    const byte* body, word32 bodySz);
+WOLFKM_API int wolfHttpServer_ParseRequest(HttpReq* req, byte* buf, word32 sz);
 
-WOLFKM_API int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz);
+WOLFKM_API int wolfHttpClient_ParseResponse(HttpRsp* rsp, byte* buf, word32 sz);
 WOLFKM_API int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
-    char* request, word32* requestSz, HttpHeader* headers, word32 headerCount);
+    byte* request, word32* requestSz, HttpHeader* headers, word32 headerCount);
 
 WOLFKM_API void wolfHttpRequestPrint(HttpReq* req);
 WOLFKM_API void wolfHttpResponsePrint(HttpRsp* rsp);

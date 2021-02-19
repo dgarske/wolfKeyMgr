@@ -56,6 +56,8 @@ static char kCancel = 'c'; /* cancel */
 static char kWake   = 'w'; /* send wakeup flag */
 static char kNotify = 'n'; /* notify */
 
+static void StatsPrint(stats* local);
+
 /* --- INLINE LOCAL FUNCTIONS --- */
 /* turn on TCP NODELAY for socket */
 static inline void TcpNoDelay(int fd)
@@ -839,11 +841,37 @@ void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
     }
 }
 
+static void StatsPrint(stats* local)
+{
+    double avgResponse = 0.0f;
+
+    if (local->responseTime > 0.0f && local->completedRequests > 0) {
+        avgResponse = local->responseTime / local->completedRequests;
+        avgResponse *= 1000; /* convert to ms */
+    }
+
+    /* always show stats */
+    XLOG(WOLFKM_LOG_ERROR, "Current stats:\n"
+             "total   connections  = %19llu\n"
+             "completed            = %19llu\n"
+             "timeouts             = %19u\n"
+             "current connections  = %19u\n"
+             "max     concurrent   = %19u\n"
+             "uptime  in seconds   = %19lu\n"
+             "average response(ms) = %19.3f\n",
+             (unsigned long long)local->totalConnections,
+             (unsigned long long)local->completedRequests,
+             local->timeouts,
+             local->currentConnections,
+             local->maxConcurrent,
+             time(NULL) - local->began,
+             avgResponse);
+}
+
 /* Show our statistics */
 void wolfKeyMgr_ShowStats(svcInfo* svc)
 {
     stats  local;
-    double avgResponse = 0.0f;
 
     if (svc == NULL)
         return;
@@ -858,27 +886,7 @@ void wolfKeyMgr_ShowStats(svcInfo* svc)
     else 
         local.maxConcurrent -= svc->threadPoolSize - 1;
 
-    if (local.responseTime > 0.0f && local.completedRequests > 0) {
-        avgResponse = local.responseTime / local.completedRequests;
-        avgResponse *= 1000; /* convert to ms */
-    }
-
-    /* always show stats */
-    XLOG(WOLFKM_LOG_ERROR, "Current stats:\n"
-             "total   connections  = %19llu\n"
-             "completed            = %19llu\n"
-             "timeouts             = %19u\n"
-             "current connections  = %19u\n"
-             "max     concurrent   = %19u\n"
-             "uptime  in seconds   = %19lu\n"
-             "average response(ms) = %19.3f\n",
-             (unsigned long long)local.totalConnections,
-             (unsigned long long)local.completedRequests,
-             local.timeouts,
-             local.currentConnections,
-             local.maxConcurrent,
-             time(NULL) - local.began,
-             avgResponse);
+    StatsPrint(&local);
 }
 
 

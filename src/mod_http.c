@@ -145,10 +145,9 @@ static void HttpParseHeader(HttpHeader* headers, word32* headerCount, char* hdrS
 }
 
 /* Parse incoming server request into `HttpReq` struct */
-int wolfHttpServer_ParseRequest(HttpReq* req, char* buf, word32 sz)
+int wolfHttpServer_ParseRequest(HttpReq* req, byte* buf, word32 sz)
 {
-    int ret = 0;
-    char* sec = buf, *endline, *last;
+    char* sec = (char*)buf, *endline, *last;
     word32 len = sz;
     word32 itemSz;
 
@@ -199,16 +198,16 @@ int wolfHttpServer_ParseRequest(HttpReq* req, char* buf, word32 sz)
         endline = strstr(endline, kCrlf); /* Find end of line */
     }
 
-    return ret;
+    return 0;
 }
 
 int wolfHttpServer_EncodeResponse(int rspCode, const char* message, 
-    char* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
-    const char* body, word32 bodySz)
+    byte* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
+    const byte* body, word32 bodySz)
 {
     int i;
     HttpHeader* hdr;
-    char* out = response;
+    char* out = (char*)response;
     word32 remain;
 
     if (response == NULL || responseSz == NULL || *responseSz == 0 || 
@@ -276,13 +275,12 @@ int wolfHttpServer_EncodeResponse(int rspCode, const char* message,
     /* null terminate */
     response[*responseSz] = '\0';
 
-    return *responseSz;
+    return 0;
 }
 
-int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz)
+int wolfHttpClient_ParseResponse(HttpRsp* rsp, byte* buf, word32 sz)
 {
-    int ret = 0;
-    char* sec = buf, *endline;
+    char* sec = (char*)buf, *endline;
     word32 len = sz;
     word32 itemSz;
 
@@ -325,21 +323,34 @@ int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz)
     /* Parse headers */
     endline = strstr(sec, kCrlf); /* Find end of line */
     while (endline) {
+        /* if next characters are CRLF then we've reached end */
+        if (strlen(sec) >= 2 && sec[0] == '\r' && sec[1] == '\n') {
+            endline += 2;
+            break;
+        }
         *endline = '\0'; /* null terminate line */
         HttpParseHeader(rsp->headers, &rsp->headerCount, sec);
         endline += 2; /* 2=length of CRLF */
-        endline = strstr(endline, kCrlf); /* Find end of line */
+        sec = endline;
+        endline = strstr(sec, kCrlf); /* Find end of line */
     }
 
-    return ret;
+    /* calculate total length */
+    itemSz = (word32)((size_t)endline - (size_t)buf);
+
+    /* Set Body */
+    rsp->body = endline;
+    rsp->bodySz = sz - itemSz;
+
+    return 0;
 }
 
 int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
-    char* request, word32* requestSz, HttpHeader* headers, word32 headerCount)
+    byte* request, word32* requestSz, HttpHeader* headers, word32 headerCount)
 {
     int i;
     HttpHeader* hdr;
-    char* out = request;
+    char* out = (char*)request;
     word32 remain;
 
     if (request == NULL || requestSz == NULL || *requestSz == 0 || 
@@ -374,7 +385,7 @@ int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
     /* null terminate */
     request[*requestSz] = '\0';
 
-    return *requestSz;
+    return 0;
 }
 
 void wolfHttpRequestPrint(HttpReq* req)
@@ -390,8 +401,8 @@ void wolfHttpRequestPrint(HttpReq* req)
     XLOG(WOLFKM_LOG_DEBUG, "\tHeaders: %d\n", req->headerCount);
     for (i=0; i<req->headerCount; i++) {
         XLOG(WOLFKM_LOG_DEBUG, "\t\t%s: %s\n",
-            req->headers[i].string,
-            wolfHttpGetHeaderStr(req->headers[i].type, NULL));
+            wolfHttpGetHeaderStr(req->headers[i].type, NULL),
+            req->headers[i].string);
     }
 }
 
@@ -407,8 +418,8 @@ void wolfHttpResponsePrint(HttpRsp* rsp)
     XLOG(WOLFKM_LOG_DEBUG, "\tHeaders: %d\n", rsp->headerCount);
     for (i=0; i<rsp->headerCount; i++) {
         XLOG(WOLFKM_LOG_DEBUG, "\t\t%s: %s\n",
-            rsp->headers[i].string,
-            wolfHttpGetHeaderStr(rsp->headers[i].type, NULL));
+            wolfHttpGetHeaderStr(rsp->headers[i].type, NULL),
+            rsp->headers[i].string);
     }
     XLOG(WOLFKM_LOG_DEBUG, "\tBody Size: %d\n", rsp->bodySz);
 }

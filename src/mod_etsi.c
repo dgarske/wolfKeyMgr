@@ -87,7 +87,7 @@ int wolfEtsiClientConnect(EtsiClientCtx* client, const char* host,
 }
 
 static int EtsiClientMakeRequest(EtsiClientType type, const char* fingerprint,
-    char* request, word32* requestSz)
+    byte* request, word32* requestSz)
 {
     int ret;
     HttpHeader headers[1];
@@ -104,7 +104,7 @@ static int EtsiClientMakeRequest(EtsiClientType type, const char* fingerprint,
         char uri[128]; /* 62 + fingerprint */
         snprintf(uri, sizeof(uri), 
             "/.well-known/enterprise-transport-security/keys?fingerprints=%s",
-            fingerprint);
+            fingerprint == NULL ? "" : fingerprint);
         ret = wolfHttpClient_EncodeRequest(HTTP_METHOD_GET, uri, request, 
             requestSz, headers, sizeof(headers)/sizeof(HttpHeader));
     }
@@ -118,9 +118,10 @@ int wolfEtsiClientGet(EtsiClientCtx* client,
     byte* response, word32* responseSz)
 {
     int    ret;
-    char   request[ETSI_MAX_REQUEST_SZ];
+    byte   request[ETSI_MAX_REQUEST_SZ];
     word32 requestSz = ETSI_MAX_REQUEST_SZ;
     int    pos;
+    HttpRsp rsp;
 
     if (client == NULL || response == NULL || responseSz == NULL) {
         return WOLFKM_BAD_ARGS;
@@ -145,8 +146,8 @@ int wolfEtsiClientGet(EtsiClientCtx* client,
             }
             pos += ret;
         }
-        XLOG(WOLFKM_LOG_INFO, "Sent %s request\n", 
-            type == ETSI_CLIENT_PUSH ? "push" : "single get");
+        XLOG(WOLFKM_LOG_INFO, "Sent %s request (%d bytes)\n", 
+            type == ETSI_CLIENT_PUSH ? "push" : "single get", requestSz);
         client->type = type;
     }
 
@@ -161,13 +162,25 @@ int wolfEtsiClientGet(EtsiClientCtx* client,
     } while (ret == 0);
     
     if (ret > 0) {
-        /* asymmetric key package response */
+        /* parse HTTP server response */
         *responseSz = ret;
-        XLOG(WOLFKM_LOG_INFO, "Got ETSI response sz = %d\n", *responseSz);
-        ret = 0;
+        ret = wolfHttpClient_ParseResponse(&rsp, response, *responseSz);
+        if (ret == 0 && rsp.body && rsp.bodySz > 0) {
+            wolfHttpResponsePrint(&rsp);
+
+            /* move payload (body) to response */
+            memcpy(response, rsp.body, rsp.bodySz);
+            *responseSz = rsp.bodySz;
+        }
+        else {
+            XLOG(WOLFKM_LOG_ERROR, "Error parsing HTTP response! %d\n", ret);
+        }
     }
 
-    /* TODO: Parse HTTP headers and just return PKCS8 key */
+    if (ret == 0) {
+        /* asymmetric key package response */
+        XLOG(WOLFKM_LOG_INFO, "Got ETSI response (%d bytes)\n", *responseSz);
+    }
 
     return ret;
 }
