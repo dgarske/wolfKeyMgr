@@ -79,7 +79,7 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp,
         if (ret == 0) {
             ret = wc_ecc_init(&key);
             if (ret == 0) {
-                ret = wkm_EtsiLoadKey(&key, response, responseSz);
+                ret = wolfEtsiLoadKey(&key, response, responseSz);
                 if (ret == 0) {
                     byte pubX[32*2+1], pubY[32*2+1];
                     word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
@@ -92,7 +92,7 @@ static int DoKeyRequest(EtsiClientCtx* client, int useGet, char* saveResp,
                         XLOG(WOLFKM_LOG_INFO, "Pub Y: %s\n", pubY);
 
                         if (saveResp) {
-                            wolfKeyMgr_SaveFile(saveResp, response, responseSz);
+                            wolfSaveFile(saveResp, response, responseSz);
                         }
                     }
                 }
@@ -239,6 +239,7 @@ int main(int argc, char** argv)
     }
     else {
         /* stress testing with a thread pool */
+        wolfEtsiClientInit();
 
         /* thread id holder */
         tids = calloc(poolSize, sizeof(pthread_t));
@@ -262,6 +263,7 @@ int main(int argc, char** argv)
         }
 
         free(tids);
+        wolfEtsiClientCleanup();
     }
 
     return 0;

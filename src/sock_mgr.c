@@ -101,7 +101,7 @@ static inline void IncrementTotalConnections(svcConn* conn)
 static inline void IncrementCompleted(svcConn* conn)
 {
     threadStats.completedRequests++;
-    threadStats.responseTime += wolfKeyMgr_GetCurrentTime() - conn->start;
+    threadStats.responseTime += wolfGetCurrentTime() - conn->start;
 }
 
 
@@ -508,7 +508,7 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
 
         /* handle request with callback */
         if (conn->svc && conn->svc->requestCb) {
-            conn->start = wolfKeyMgr_GetCurrentTime();
+            conn->start = wolfGetCurrentTime();
             ret = conn->svc->requestCb(conn);
             if (ret < 0) {
                 /* error */
@@ -1258,7 +1258,7 @@ int wolfKeyMgr_LoadKeyFile(svcInfo* svc, const char* fileName, int fileType,
 {
     int ret;
 
-    ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->keyBuffer, &svc->keyBufferSz);
+    ret = wolfLoadFileBuffer(fileName, &svc->keyBuffer, &svc->keyBufferSz);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_INFO, "error loading key file %s\n", fileName);
         return ret;
@@ -1287,7 +1287,7 @@ int wolfKeyMgr_LoadCertFile(svcInfo* svc, const char* fileName, int fileType)
 {
     int ret;
     
-    ret = wolfKeyMgr_LoadFileBuffer(fileName, &svc->certBuffer, &svc->certBufferSz);
+    ret = wolfLoadFileBuffer(fileName, &svc->certBuffer, &svc->certBufferSz);
     if (ret != 0) {
         XLOG(WOLFKM_LOG_INFO, "error loading certificate file %s\n", fileName);
         return ret;

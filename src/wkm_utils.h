@@ -38,13 +38,11 @@ WOLFKM_API const char* wolfKeyMgr_GetLogLevel(enum log_level_t level);
 WOLFKM_API void wolfKeyMgr_Log(enum log_level_t, const char* fmt, ...) ATT_STRFUNC;
 WOLFKM_API void wolfKeyMgr_SetLogFile(const char* fileName, int daemon, enum log_level_t level);
 
-WOLFKM_API char* wolfKeyMgr_UriEncode(const byte *s, char *enc);
-WOLFKM_API byte* wolfKeyMgr_UriDecode(const char *s, byte *dec);
-WOLFKM_API double wolfKeyMgr_GetCurrentTime(void);
+WOLFKM_API double wolfGetCurrentTime(void);
 
-WOLFKM_API int wolfKeyMgr_LoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
-WOLFKM_API void wolfKeyMgr_PrintBin(const byte* buffer, word32 length);
-WOLFKM_API int wolfKeyMgr_SaveFile(const char* file, byte* buffer, word32 length);
+WOLFKM_API int wolfLoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
+WOLFKM_API void wolfPrintBin(const byte* buffer, word32 length);
+WOLFKM_API int wolfSaveFile(const char* file, byte* buffer, word32 length);
 
 
 /* misc functions */

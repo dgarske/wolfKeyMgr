@@ -276,7 +276,7 @@ int wolfHttpServer_EncodeResponse(int rspCode, const char* message,
     /* null terminate */
     response[*responseSz] = '\0';
 
-    return *responseSz + 1;
+    return *responseSz;
 }
 
 int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz)
@@ -374,7 +374,7 @@ int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
     /* null terminate */
     request[*requestSz] = '\0';
 
-    return *requestSz + 1;
+    return *requestSz;
 }
 
 void wolfHttpRequestPrint(HttpReq* req)
@@ -411,4 +411,56 @@ void wolfHttpResponsePrint(HttpRsp* rsp)
             wolfHttpGetHeaderStr(rsp->headers[i].type, NULL));
     }
     XLOG(WOLFKM_LOG_DEBUG, "\tBody Size: %d\n", rsp->bodySz);
+}
+
+
+char* wolfHttpUriEncode(const byte *s, char *enc)
+{
+    for (; *s; s++){
+        if (*s == '*' || *s == '-' || *s == '.' || *s == '_') {
+            char a = (char)(*s >> 4), b = (char)(*s & 0xff);
+            *enc++ = '%';
+            *enc++ = (a < 10) ? '0' + a : 'A' + a - 10;
+            *enc++ = (b < 10) ? '0' + b : 'A' + b - 10;
+        }
+        else if (*s == ' ')
+            *enc++ = '+';
+        else
+            *enc++ = *s;
+    }
+    return enc;
+}
+
+static int hex_to_char(char a, byte* out)
+{
+    if (a >= '0' && a <= '9')
+        a -= '0';
+    else if (a >= 'A' && a <= 'F')
+        a -= 'A' - 10;
+    else if (a >= 'a' && a <= 'f')
+        a -= 'a' - 'A' - 10;
+    else
+        return 0;
+    *out = (byte)a;
+    return 1;
+}
+
+byte* wolfHttpUriDecode(const char *s, byte *dec)
+{
+    byte a, b;
+    for (; *s; s++){
+        if (*s == '%' && 
+                hex_to_char((char)s[1], &a) && 
+                hex_to_char((char)s[2], &b)) {
+            *dec++ = (a << 4 | b);
+            s+=2;
+        }
+        else if (*s == '+') {
+            *dec++ = ' ';
+        }
+        else {
+            *dec++ = *s;
+        }
+    }
+    return dec;
 }

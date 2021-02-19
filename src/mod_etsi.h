@@ -64,7 +64,11 @@ WOLFKM_API int wolfEtsiClientClose(EtsiClientCtx* client);
 
 WOLFKM_API void wolfEtsiClientFree(EtsiClientCtx* client);
 
-WOLFKM_API int wkm_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length);
+WOLFKM_API int wolfEtsiLoadKey(ecc_key* key, byte* buffer, word32 length);
+
+/* these are required if using multiple threads sharing the wolfSSL library for init mutex protection */
+WOLFKM_API int  wolfEtsiClientInit(void);
+WOLFKM_API void wolfEtsiClientCleanup(void);
 
 #ifdef __cplusplus
 }

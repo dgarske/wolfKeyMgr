@@ -21,6 +21,7 @@
 
 #include "keymanager.h"
 #include "mod_http.h"
+#include "mod_etsi.h"
 
 #ifdef WOLFKM_ETSI_SERVICE
 
@@ -84,7 +85,7 @@ static int GenNewKey(etsiSvcCtx* svcCtx)
         /* TODO: Support other key sizes and curves */
         ret = wc_ecc_make_key_ex(&svcCtx->rng, 32, &svcCtx->key, ECC_SECP256R1);
         if (ret == 0) {
-            svcCtx->last = wolfKeyMgr_GetCurrentTime();
+            svcCtx->last = wolfGetCurrentTime();
             svcCtx->index++;
         }
         else {
@@ -104,7 +105,7 @@ static int GenNewKey(etsiSvcCtx* svcCtx)
 static int SetupKeyPackage(etsiSvcCtx* svcCtx, etsiSvcThread* etsiThread)
 {
     int ret = 0;
-    byte tmp[4096];
+    byte tmp[ETSI_MAX_RESPONSE_SZ];
     word32 tmpSz = sizeof(tmp);
 
     pthread_mutex_lock(&svcCtx->lock);
@@ -220,7 +221,7 @@ int wolfEtsiSvc_DoRequest(svcConn* conn)
     wolfHttpRequestPrint(&etsiConn->req);
 
     /* Perform URI decode? */
-    wolfKeyMgr_UriDecode(etsiConn->req.uri, (byte*)etsiConn->req.uri);
+    wolfHttpUriDecode(etsiConn->req.uri, (byte*)etsiConn->req.uri);
 
     /* Send Response */
     return wolfEtsiSvc_DoResponse(conn);

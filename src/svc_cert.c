@@ -481,7 +481,7 @@ static int VerifyHeader(svcConn* conn, int* type)
 /* Response message handler by type, 0 on success */
 static int DoResponse(svcConn* conn, int type)
 {
-    conn->start = wolfKeyMgr_GetCurrentTime();  /* response start time */
+    conn->start = wolfGetCurrentTime();  /* response start time */
 
     switch (type) {
         case CERT_REQUEST:

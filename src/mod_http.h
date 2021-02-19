@@ -145,6 +145,9 @@ WOLFKM_API int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri
 WOLFKM_API void wolfHttpRequestPrint(HttpReq* req);
 WOLFKM_API void wolfHttpResponsePrint(HttpRsp* rsp);
 
+WOLFKM_API char* wolfHttpUriEncode(const byte *s, char *enc);
+WOLFKM_API byte* wolfHttpUriDecode(const char *s, byte *dec);
+
 
 #ifdef __cplusplus
 }

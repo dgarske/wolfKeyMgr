@@ -174,7 +174,7 @@ int wolfEtsiClientGet(EtsiClientCtx* client,
     return ret;
 }
 
-int wkm_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
+int wolfEtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
 {
     int ret;
     word32 idx = 0;
@@ -192,7 +192,7 @@ int wkm_EtsiLoadKey(ecc_key* key, byte* buffer, word32 length)
 int wolfEtsiClientClose(EtsiClientCtx* client)
 {
     int ret = 0;
-    if (client) {
+    if (client && client->ssl) {
         /* send shutdown */
         ret = wolfTlsClose(client->ssl, 1);
         client->ssl = NULL;
@@ -203,11 +203,25 @@ int wolfEtsiClientClose(EtsiClientCtx* client)
 void wolfEtsiClientFree(EtsiClientCtx* client)
 {
     if (client) {
-        wolfTlsFree(client->sslCtx);
-        client->sslCtx = NULL;
+        if (client->ssl) {
+            wolfTlsClose(client->ssl, 0);
+            client->ssl = NULL;
+        }
+        if (client->sslCtx) {
+            wolfTlsFree(client->sslCtx);
+            client->sslCtx = NULL;
+        }
         free(client);
     }
+}
 
+int wolfEtsiClientInit(void)
+{
+    return wolfSSL_Init();
+}
+
+void wolfEtsiClientCleanup(void)
+{
     wolfSSL_Cleanup();
 }
 
