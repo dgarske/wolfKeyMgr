@@ -98,6 +98,7 @@ struct svcInfo {
     byte*           certBuffer;
     word32          keyBufferSz;
     word32          certBufferSz;
+    int             disableMutalAuth;
 
     /* Shared context for all threads */
     void*           svcCtx;

@@ -39,6 +39,7 @@ static void Usage(void)
     printf("-t <num>    Thread pool size, default  %ld\n",
                                                  sysconf(_SC_NPROCESSORS_CONF));
     printf("-v <num>    Log Level, default %d\n", WOLFKM_DEFAULT_LOG_LEVEL);
+    printf("-a          Disable Mutual Authentication\n");
 }
 
 
@@ -59,9 +60,10 @@ int main(int argc, char** argv)
     FILE*                   pidF = 0;
     svcInfo* etsiSvc = NULL;
     word32 timeoutSec  = WOLFKM_DEFAULT_TIMEOUT;
+    int disableMutualAuth = 0; /* on by default */
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?dcns:t:m:l:f:v:")) != -1) {
+    while ((ch = getopt(argc, argv, "?dcns:t:m:l:f:v:a")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -101,6 +103,8 @@ int main(int argc, char** argv)
                     exit(EX_USAGE);
                 }
                 break;
+            case 'a':
+                disableMutualAuth = 1;
 
             default:
                 Usage();
@@ -168,7 +172,7 @@ int main(int argc, char** argv)
     wolfKeyMgr_SetMaxFiles(maxFiles);
 
     /********** ETSI Service **********/
-    etsiSvc = wolfEtsiSvc_Init(mainBase, timeoutSec);
+    etsiSvc = wolfEtsiSvc_Init(mainBase, timeoutSec, disableMutualAuth);
     if (etsiSvc) {
         /* thread setup - cleanup handled in sigint handler */
         wolfKeyMgr_ServiceInit(etsiSvc, poolSize);

@@ -340,7 +340,8 @@ void wolfEtsiSvc_WorkerFree(svcInfo* svc, void* svcThreadCtx)
 #endif /* WOLFKM_ETSI_SERVICE */
 
 
-svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec)
+svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec,
+    int disableMutalAuth)
 {
 #ifdef WOLFKM_ETSI_SERVICE
     int ret;
@@ -383,6 +384,8 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec)
         return NULL;
     }
 
+    svc->disableMutalAuth = disableMutalAuth;
+
     /* setup listening events */
     ret = wolfKeyMgr_AddListeners(svc, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
     if (ret < 0)
@@ -396,6 +399,9 @@ svcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, word32 timeoutSec)
 
     return svc;
 #else
+    (void)mainBase;
+    (void)timeoutSec;
+    (void)disableMutalAuth;
     return NULL;
 #endif
 }

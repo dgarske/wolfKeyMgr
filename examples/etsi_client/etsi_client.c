@@ -123,6 +123,11 @@ static void* DoRequests(void* arg)
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI server CA %d!\n", ret);
     }
+    ret = wolfEtsiClientSetKey(client, WOLFKM_ETSICLIENT_KEY, WOLFKM_ETSICLIENT_PASS,
+        WOLFKM_ETSICLIENT_CERT, WOLFSSL_FILETYPE_PEM);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI client key/cert %d!\n", ret);
+    }
     ret = wolfEtsiClientConnect(client, info->host, info->port, 
         info->timeoutSec);
     if (ret == 0) {

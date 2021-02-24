@@ -764,6 +764,12 @@ static int InitServerTLS(svcInfo* svc)
         wolfSSL_CTX_free(svc->sslCtx); svc->sslCtx = NULL;
         return ret;
     }
+
+    /* mutual authentication */
+    if (!svc->disableMutalAuth) {
+        wolfSSL_CTX_set_verify(svc->sslCtx, WOLFSSL_VERIFY_PEER |
+                                WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+    }
     return 0;
 }
 
