@@ -138,6 +138,16 @@ void wolfKeyMgr_Log(enum log_level_t level, const char* fmt, ...)
         timeStr, wolfKeyMgr_GetLogLevel(level), msgStr);
 }
 
+void wolfKeyMgr_CloseLog(void)
+{
+    if (logFile != NULL) {
+        fflush(logFile);
+        if (logFile != stderr) {
+            fclose(logFile);
+        }
+    }
+}
+
 /* generic API's for loading a file buffer */
 int wolfLoadFileBuffer(const char* fileName, byte** buffer, word32* sz)
 {

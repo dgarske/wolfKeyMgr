@@ -859,6 +859,8 @@ void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
     for (i=0; i< MAX_SERVICES; i++) {
         wolfKeyMgr_ServiceCleanup(sigArg->svc[i]);
     }
+
+    wolfKeyMgr_CloseLog();    
 }
 
 static void StatsPrint(stats* local)

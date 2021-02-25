@@ -51,7 +51,7 @@ extern "C" {
 /* program constants */
 #define MAX_SOCKADDR_SZ   32
 #define MAX_REQUEST_SIZE (16*1024)
-#define MAX_SERVICES      2
+#define MAX_SERVICES      1
 
 /* program types */
 
