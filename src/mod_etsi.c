@@ -23,6 +23,8 @@
 
 #include "wolfkeymgr/mod_etsi.h"
 
+#include <signal.h>
+
 struct EtsiClientCtx {
     WOLFSSL_CTX*   sslCtx;
     WOLFSSL*       ssl;
@@ -227,6 +229,9 @@ void wolfEtsiClientFree(EtsiClientCtx* client)
 
 int wolfEtsiClientInit(void)
 {
+    /* Ignore SIGPIPE */
+    wolfSigIgnore(SIGPIPE);
+
 #if 0
     wolfSSL_Debugging_ON();
 #endif

@@ -185,7 +185,7 @@ int main(int argc, char** argv)
     }
 
     /* setup signal stuff */
-    if (wolfKeyMgr_SigIgnore(SIGPIPE) == -1) {
+    if (wolfSigIgnore(SIGPIPE) == -1) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to ignore SIGPIPE\n");
         ret = EX_OSERR; goto exit;
     }
