@@ -174,7 +174,7 @@ int wolfEtsiClientGet(EtsiClientCtx* client,
             XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
             break;
         }
-        /* zero respnse means try again */
+        /* zero response means try again */
     } while (ret == 0);
     
     if (ret > 0) {
