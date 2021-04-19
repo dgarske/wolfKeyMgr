@@ -23,10 +23,19 @@
 
 int wolfVaultOpen(wolfVault_t* ctx, const char* file, const char* password)
 {
-
+    (void)ctx;
+    (void)file;
+    (void)password;
+    return 0;
 }
+
+int wolfVaultAdd()
+int wolfVaultDel()
+int wolfVaultGetFirst()
+int wolfVaultGetNext()
 
 int wolfVaultClose(wolfVault_t* ctx)
 {
-
+    (void)ctx;
+    return 0;
 }

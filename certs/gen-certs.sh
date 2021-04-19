@@ -76,4 +76,4 @@ if [ -f ./certs/test-key.pem ]; then
     openssl ecparam -name prime256v1 -genkey -outform pem -out ./certs/test-key.pem
 fi
 
-openssl req -new -x509 -nodes -key ./certs/test-key.pem -out ./certs/test-cert.pem -sha256 -days 7300 -batch -subj "/C=US/ST=CA/L=Seattle/O=wolfSSL/OU=Development/CN=localhost/emailAddress=info@wolfssl.com"
+openssl req -new -x509 -nodes -key ./certs/test-key.pem -out ./certs/test-cert.pem -sha256 -days 7300 -batch -subj "/C=US/ST=CA/L=Seattle/O=wolfSSL/OU=Development/CN=etsitest.com/emailAddress=info@wolfssl.com"
