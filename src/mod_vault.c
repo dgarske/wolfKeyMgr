@@ -29,10 +29,12 @@ int wolfVaultOpen(wolfVault_t* ctx, const char* file, const char* password)
     return 0;
 }
 
+#if 0
 int wolfVaultAdd()
 int wolfVaultDel()
 int wolfVaultGetFirst()
 int wolfVaultGetNext()
+#endif
 
 int wolfVaultClose(wolfVault_t* ctx)
 {
