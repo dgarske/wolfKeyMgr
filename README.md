@@ -250,6 +250,7 @@ See Recommendation ITU-T X.509 (10/2016) | ISO/IEC 9594-8: "Information technolo
 ## Outstanding Features
 
 1) Add example for HTTP server "VisibilityInformation" extension.
+2) Add API Unit and "make check" tests.
 
 ## Support
 
