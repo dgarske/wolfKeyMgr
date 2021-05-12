@@ -138,10 +138,14 @@ WOLFKM_API void wolfEtsiClientFree(EtsiClientCtx* client);
 /* allocate ETSI key dynamically from heap */
 /* The EtsiKey can come from stack, but must be memset to zero */
 WOLFKM_API EtsiKey* wolfEtsiKeyNew(void);
+/* Returns the wolf PK type (enum wc_PkType) */
+WOLFKM_API int wolfEtsiKeyGetPkType(EtsiKey* key);
 /* Load key to WOLFSSL_CTX directly */
 WOLFKM_API int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx);
 /* Load key to WOLFSSL session directly */
 WOLFKM_API int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl);
+/* Get pointer to PKCS8 key response */
+WOLFKM_API int wolfEtsiKeyGet(EtsiKey* key, byte** response, word32* responseSz);
 /* print ETSI key data - for debugging / testing */
 WOLFKM_API int  wolfEtsiKeyPrint(EtsiKey* key);
 /* release ETSI key resources */

@@ -31,6 +31,9 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#define __USE_XOPEN /* enables strptime */
+#include <time.h>
+
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/types.h>

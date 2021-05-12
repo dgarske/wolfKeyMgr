@@ -293,10 +293,83 @@ int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKeyType keyType,
     return WOLFKM_NOT_COMPILED_IN;
 }
 
+int wolfEtsiKeyGet(EtsiKey* key, byte** response, word32* responseSz)
+{
+    if (key == NULL)
+        return WOLFKM_BAD_ARGS;
+    if (response)
+        *response = (byte*)key->response;
+    if (responseSz)
+        *responseSz = key->responseSz;
+    return 0;
+}
+
+EtsiKey* wolfEtsiKeyNew(void)
+{
+    EtsiKey* key = (EtsiKey*)malloc(sizeof(EtsiKey));
+    if (key) {
+        memset(key, 0, sizeof(EtsiKey));
+        key->isDynamic = 1;
+    }
+    return key;
+}
+
+int wolfEtsiKeyGetPkType(EtsiKey* key)
+{
+    if (key == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    if (key->type >= ETSI_KEY_TYPE_SECP160K1 && 
+        key->type <= ETSI_KEY_TYPE_BRAINPOOLP512R1) {
+        return WC_PK_TYPE_ECDH;
+    }
+    if (key->type >= ETSI_KEY_TYPE_FFDHE_2048 && 
+        key->type <= ETSI_KEY_TYPE_FFDHE_8192) {
+        return WC_PK_TYPE_DH;
+    }
+    if (key->type == ETSI_KEY_TYPE_X25519) {
+        return WC_PK_TYPE_CURVE25519;
+    }
+#ifdef HAVE_CURVE448
+    if (key->type == ETSI_KEY_TYPE_X448) {
+        return WC_PK_TYPE_CURVE448
+    }
+#endif
+    return WC_PK_TYPE_NONE;
+}
+
+int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx)
+{
+    int keyAlgo;
+
+    if (key == NULL || ctx == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    /* determine key algo */
+    keyAlgo = wolfEtsiKeyGetPkType(key);
+
+    return wolfSSL_CTX_set_ephemeral_key(ctx, keyAlgo, 
+        key->response, key->responseSz, WOLFSSL_FILETYPE_ASN1);
+}
+
+int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl)
+{
+    int keyAlgo;
+
+    if (key == NULL || ssl == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    /* determine key algo */
+    keyAlgo = wolfEtsiKeyGetPkType(key);
+
+    return wolfSSL_set_ephemeral_key(ssl, keyAlgo, 
+        key->response, key->responseSz, WOLFSSL_FILETYPE_ASN1);
+}
 
 int wolfEtsiKeyPrint(EtsiKey* key)
 {
     int ret = WOLFKM_NOT_COMPILED_IN;
+    int keyAlgo;
 
     if (key == NULL) {
         return WOLFKM_BAD_ARGS;
@@ -306,10 +379,10 @@ int wolfEtsiKeyPrint(EtsiKey* key)
         return 0;
     }
 
+    keyAlgo = wolfEtsiKeyGetPkType(key);
+
 #ifdef HAVE_ECC
-    if (key->type >= ETSI_KEY_TYPE_SECP160K1 && 
-        key->type <= ETSI_KEY_TYPE_BRAINPOOLP512R1)
-    {
+    if (keyAlgo == WC_PK_TYPE_ECDH) {
         /* example for loading ECC key */
         ecc_key ecKey;
         ret = wc_ecc_init(&ecKey);
@@ -334,29 +407,36 @@ int wolfEtsiKeyPrint(EtsiKey* key)
     }
 #endif
 #ifndef NO_DH
-    if (key->type >= ETSI_KEY_TYPE_FFDHE_2048 && 
-        key->type <= ETSI_KEY_TYPE_FFDHE_8192)
-    {
+    if (keyAlgo == WC_PK_TYPE_DH) {
         /* TODO: add example for loading DHE key and print */
         //DhKey dh;
         XLOG(WOLFKM_LOG_INFO, "DH Pub: TODO\n");
     }
 #endif
 #ifdef HAVE_CURVE25519
-    if (key->type == ETSI_KEY_TYPE_X25519) {
+    if (keyAlgo == WC_PK_TYPE_CURVE25519) {
         /* TODO: add example for loading X25519 key and print */
         //curve25519_key x25519;
-        XLOG(WOLFKM_LOG_INFO, "X25519 Pub: TODO\n";
+        XLOG(WOLFKM_LOG_INFO, "X25519 Pub: TODO\n");
     }
 #endif
 #ifdef HAVE_CURVE448
-    if (key->type == ETSI_KEY_TYPE_X448) {
+    if (keyAlgo == WC_PK_TYPE_CURVE448) {
         /* TODO: add example for loading X448 key and print */
         //curve448_key x448;
         XLOG(WOLFKM_LOG_INFO, "X448 Pub: TODO\n");
     }
 #endif
     return ret;
+}
+
+void wolfEtsiKeyFree(EtsiKey* key)
+{
+    if (key) {
+        if (key->isDynamic) {
+            free(key);
+        }
+    }
 }
 
 int wolfEtsiClientClose(EtsiClientCtx* client)
