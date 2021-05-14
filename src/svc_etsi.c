@@ -285,13 +285,13 @@ int wolfEtsiSvc_DoNotify(svcConn* conn)
     etsiThread = (etsiSvcThread*)conn->svcThreadCtx;
     etsiConn = (etsiSvcConn*)conn->svcConnCtx;
 
-    if (etsiConn->req.type == HTTP_METHOD_PUT) {
-        /* updated key */
-        ret = SetupKeyPackage(svcCtx, etsiThread);
-        if (ret == 0) {
-            /* send updated key */
-            ret = wolfEtsiSvc_DoResponse(conn);
-        }
+    /* updated key */
+    ret = SetupKeyPackage(svcCtx, etsiThread);
+
+    /* push key to active push threads */
+    if (ret == 0 && etsiConn->req.type == HTTP_METHOD_PUT) {
+        /* send updated key */
+        ret = wolfEtsiSvc_DoResponse(conn);
     }
 
     return ret;

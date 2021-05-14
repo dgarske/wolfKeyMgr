@@ -199,6 +199,10 @@ int wolfHttpServer_ParseRequest(HttpReq* req, byte* buf, word32 sz)
         *endline = '\0'; /* null terminate line */
         HttpParseHeader(req->headers, &req->headerCount, sec);
         endline += 2; /* 2=length of CRLF */
+
+        /* check if we have reached end of incoming buffer */
+        if (endline >= (char*)buf + sz)
+            break;
         endline = strstr(endline, kCrlf); /* Find end of line */
     }
 
