@@ -109,16 +109,25 @@ static int SetupKeyPackage(etsiSvcCtx* svcCtx, etsiSvcThread* etsiThread)
     int ret = 0;
     byte rsp[ETSI_MAX_RESPONSE_SZ], keyBuf[ECC_BUFSIZE];
     word32 rspSz = (word32)sizeof(rsp), keyBufSz = (word32)sizeof(keyBuf);
-    HttpHeader headers[2];
+    char expiresStr[100];
+    HttpHeader headers[3];
     headers[0].type = HTTP_HDR_CONTENT_TYPE;
     headers[0].string = "application/pkcs8";
     headers[1].type = HTTP_HDR_CONNECTION;
     headers[1].string = "Keep-Alive";
-    /* TODO: Add key expiration using HTTP_HDR_EXPIRES */
-    /* Example "Expires: Wed, 21 Oct 2015 07:28:00 GMT" */
+    headers[2].type = HTTP_HDR_EXPIRES;
+    headers[2].string = expiresStr;
+    memset(expiresStr, 0, sizeof(expiresStr));
 
     pthread_mutex_lock(&svcCtx->lock);
     if (etsiThread->index != svcCtx->index) {
+        /* Format Expires Time */
+        time_t t = wolfGetCurrentTimeT();
+        struct tm tm;
+        t += svcCtx->renewSec; /* offset by key renewal period */
+        localtime_r(&t, &tm);
+        strftime(expiresStr, sizeof(expiresStr), HTTP_DATE_FMT, &tm);
+
         /* Export as DER IETF RFC 5915 */
         ret = wc_EccKeyToDer(&svcCtx->key, keyBuf, keyBufSz);
         if (ret < 0) {

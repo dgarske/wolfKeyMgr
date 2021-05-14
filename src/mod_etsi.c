@@ -237,8 +237,7 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
                     memset(&tm, 0, sizeof(tm));
                     /* Convert string to time_t */
                     /* HTTP expires example: "Wed, 21 Oct 2015 07:28:00 GMT" */
-                    if (strptime(rsp.headers[i].string, 
-                        "%a, %d %b %Y %H:%M:%s %Z", &tm) != NULL) {
+                    if (strptime(rsp.headers[i].string, HTTP_DATE_FMT, &tm) != NULL) {
                         key->expires = mktime(&tm);
                     }
                     break;

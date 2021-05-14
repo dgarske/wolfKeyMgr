@@ -209,7 +209,7 @@ int wolfHttpServer_EncodeResponse(int rspCode, const char* message,
     byte* response, word32* responseSz, HttpHeader* headers, word32 headerCount,
     const byte* body, word32 bodySz)
 {
-    int i;
+    int i, c;
     HttpHeader* hdr;
     char* out = (char*)response;
     word32 remain;
@@ -236,8 +236,8 @@ int wolfHttpServer_EncodeResponse(int rspCode, const char* message,
     }
 
     /* append headers */
-    for (i=0; i<headerCount && remain > 0; i++) {
-        hdr = &headers[i];
+    for (c=0; c<headerCount && remain > 0; c++) {
+        hdr = &headers[c];
 
         i = snprintf(out, remain, "%s%s\r\n", 
             wolfHttpGetHeaderStr(hdr->type, NULL), hdr->string);
@@ -352,7 +352,7 @@ int wolfHttpClient_ParseResponse(HttpRsp* rsp, char* buf, word32 sz)
 int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
     byte* request, word32* requestSz, HttpHeader* headers, word32 headerCount)
 {
-    int i;
+    int i, c;
     HttpHeader* hdr;
     char* out = (char*)request;
     word32 remain;
@@ -372,8 +372,8 @@ int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
     }
 
     /* append headers */
-    for (i=0; i<headerCount && remain > 0; i++) {
-        hdr = &headers[i];
+    for (c=0; c<headerCount && remain > 0; c++) {
+        hdr = &headers[c];
 
         i = snprintf(out, remain, "%s%s\r\n", 
             wolfHttpGetHeaderStr(hdr->type, NULL), hdr->string);
