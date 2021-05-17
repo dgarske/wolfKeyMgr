@@ -35,7 +35,7 @@ typedef struct etsiSvcCtx {
     pthread_mutex_t lock; /* queue lock */
     pthread_t       thread; /* key gen worker */
 } etsiSvcCtx;
-static etsiSvcCtx svcCtx;
+static etsiSvcCtx gSvcCtx;
 
 /* the top level service */
 static svcInfo etsiService = {
@@ -57,14 +57,14 @@ static svcInfo etsiService = {
     .caBuffer = NULL,
     .caBufferSz = 0,
 
-    .svcCtx = &svcCtx,
+    .svcCtx = &gSvcCtx,
 };
 
 /* worker thread objects */
 typedef struct etsiSvcThread {
-    word32  index;
-    byte*   httpRspBuf;
-    word32  httpRspSz;
+    word32 index;
+    byte*  httpRspBuf;
+    word32 httpRspSz;
 } etsiSvcThread;
 
 typedef struct etsiSvcConn {
@@ -120,6 +120,7 @@ static int SetupKeyPackage(etsiSvcCtx* svcCtx, etsiSvcThread* etsiThread)
     memset(expiresStr, 0, sizeof(expiresStr));
 
     pthread_mutex_lock(&svcCtx->lock);
+    XLOG(WOLFKM_LOG_DEBUG, "Synchronizing key to worker thread\n"); 
     if (etsiThread->index != svcCtx->index) {
         /* Format Expires Time */
         time_t t = wolfGetCurrentTimeT();
@@ -268,14 +269,13 @@ void wolfEtsiSvc_ConnClose(svcConn* conn)
 
 int wolfEtsiSvc_DoNotify(svcConn* conn)
 {
-    int ret = 0;
+    int ret;
     svcInfo* svc;
     etsiSvcCtx* svcCtx;
     etsiSvcThread* etsiThread;
     etsiSvcConn* etsiConn;
 
-    if (conn == NULL || conn->stream == NULL || conn->svc == NULL || 
-            conn->svcThreadCtx == NULL || conn->svcConnCtx == NULL) {
+    if (conn == NULL || conn->svc == NULL || conn->svcThreadCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Bad ETSI notify pointers\n");
         return WOLFKM_BAD_ARGS;
     }
@@ -285,11 +285,12 @@ int wolfEtsiSvc_DoNotify(svcConn* conn)
     etsiThread = (etsiSvcThread*)conn->svcThreadCtx;
     etsiConn = (etsiSvcConn*)conn->svcConnCtx;
 
-    /* updated key */
+    /* update key */
     ret = SetupKeyPackage(svcCtx, etsiThread);
 
     /* push key to active push threads */
-    if (ret == 0 && etsiConn->req.type == HTTP_METHOD_PUT) {
+    if (ret == 0 && etsiConn != NULL && 
+            etsiConn->req.type == HTTP_METHOD_PUT) {
         /* send updated key */
         ret = wolfEtsiSvc_DoResponse(conn);
     }

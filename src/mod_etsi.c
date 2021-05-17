@@ -249,8 +249,8 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
                             expired or is invalid */
                         if (key->expires < now) {
                             XLOG(WOLFKM_LOG_WARN,
-                                "Key expires time invalid %lu\n",
-                                key->expires);
+                                "Key expires time invalid %lu < %lu\n",
+                                key->expires, now);
                             key->expires = 0;
                         }
                     }
