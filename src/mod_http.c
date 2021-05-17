@@ -206,6 +206,9 @@ int wolfHttpServer_ParseRequest(HttpReq* req, byte* buf, word32 sz)
         endline = strstr(endline, kCrlf); /* Find end of line */
     }
 
+    /* Perform URI decode */
+    wolfHttpUriDecode(req->uri, (byte*)req->uri);
+
     return 0;
 }
 

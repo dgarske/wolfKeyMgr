@@ -353,6 +353,57 @@ int wolfEtsiKeyGetPkType(EtsiKey* key)
     return WC_PK_TYPE_NONE;
 }
 
+const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type)
+{
+    switch (type) {
+        case ETSI_KEY_TYPE_SECP160K1:
+            return "SECP160K1";
+        case ETSI_KEY_TYPE_SECP160R1:
+            return "SECP160R1";
+        case ETSI_KEY_TYPE_SECP160R2:
+            return "SECP160R2";
+        case ETSI_KEY_TYPE_SECP192K1:
+            return "SECP192K1";
+        case ETSI_KEY_TYPE_SECP192R1:
+            return "SECP192R1";
+        case ETSI_KEY_TYPE_SECP224K1:
+            return "SECP224K1";
+        case ETSI_KEY_TYPE_SECP224R1:
+            return "SECP224R1";
+        case ETSI_KEY_TYPE_SECP256K1:
+            return "SECP256K1";
+        case ETSI_KEY_TYPE_SECP256R1:
+            return "SECP256R1";
+        case ETSI_KEY_TYPE_SECP384R1:
+            return "SECP384R1";
+        case ETSI_KEY_TYPE_SECP521R1:
+            return "SECP521R1";
+        case ETSI_KEY_TYPE_BRAINPOOLP256R1:
+            return "BRAINPOOLP256R1";
+        case ETSI_KEY_TYPE_BRAINPOOLP384R1:
+            return "BRAINPOOLP384R1";
+        case ETSI_KEY_TYPE_BRAINPOOLP512R1:
+            return "BRAINPOOLP512R1";
+        case ETSI_KEY_TYPE_X25519:
+            return "X25519";
+        case ETSI_KEY_TYPE_X448:
+            return "X448";
+        case ETSI_KEY_TYPE_FFDHE_2048:
+            return "FFDHE_2048";
+        case ETSI_KEY_TYPE_FFDHE_3072:
+            return "FFDHE_3072";
+        case ETSI_KEY_TYPE_FFDHE_4096:
+            return "FFDHE_4096";
+        case ETSI_KEY_TYPE_FFDHE_6144:
+            return "FFDHE_6144";
+        case ETSI_KEY_TYPE_FFDHE_8192:
+            return "FFDHE_8192";
+        default:
+            break;
+    }
+    return NULL;
+}
+
 int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx)
 {
     int keyAlgo;

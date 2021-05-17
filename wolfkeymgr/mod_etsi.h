@@ -72,6 +72,9 @@ typedef enum EtsiKeyType {
     ETSI_KEY_TYPE_FFDHE_4096 = 258,
     ETSI_KEY_TYPE_FFDHE_6144 = 259,
     ETSI_KEY_TYPE_FFDHE_8192 = 260,
+
+    ETSI_KEY_TYPE_MIN = ETSI_KEY_TYPE_SECP160K1,
+    ETSI_KEY_TYPE_MAX = ETSI_KEY_TYPE_FFDHE_8192,
 } EtsiKeyType;
 
 typedef struct EtsiKey {
@@ -156,7 +159,7 @@ WOLFKM_API int  wolfEtsiKeyPrint(EtsiKey* key);
 WOLFKM_API void wolfEtsiKeyFree(EtsiKey* key);
 
 WOLFKM_API const char* wolfEtsiKeyNamedGroupStr(EtsiKey* key);
-
+WOLFKM_API const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type);
 
 /* these are required if using multiple threads sharing the wolfSSL library for init mutex protection */
 WOLFKM_API int wolfEtsiClientInit(void);
