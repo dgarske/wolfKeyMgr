@@ -483,7 +483,8 @@ int wolfEtsiKeyPrint(EtsiKey* key)
             ret = wc_EccPrivateKeyDecode((byte*)key->response, &idx, &ecKey,
                 key->responseSz);
             if (ret == 0) {
-                byte pubX[32*2+1], pubY[32*2+1];
+                byte pubX[MAX_ECC_BYTES*2+1];
+                byte pubY[MAX_ECC_BYTES*2+1];
                 word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
                 ret = wc_ecc_export_ex(&ecKey,
                     pubX, &pubXLen,
@@ -500,9 +501,22 @@ int wolfEtsiKeyPrint(EtsiKey* key)
 #endif
 #ifndef NO_DH
     if (keyAlgo == WC_PK_TYPE_DH) {
-        /* TODO: add example for loading DHE key and print */
-        //DhKey dh;
-        XLOG(WOLFKM_LOG_INFO, "DH Pub: TODO\n");
+        /* example for loading DHE key */
+        DhKey dhKey;
+        ret = wc_InitDhKey(&dhKey);
+        if (ret == 0) {
+            word32 idx = 0;
+            ret = wc_DhKeyDecode((byte*)key->response, &idx, &dhKey, key->responseSz);
+            if (ret == 0) {
+                byte pubKey[MAX_DH_PUB_SZ];
+                word32 pubKeyLen = sizeof(pubKey);
+                ret = wc_DhExportKeyPair(&dhKey, NULL, NULL, pubKey, &pubKeyLen);
+                if (ret == 0) {
+                    XLOG(WOLFKM_LOG_INFO, "DH Pub: %d\n", pubKeyLen);
+                }
+            }
+            wc_FreeDhKey(&dhKey);
+        }
     }
 #endif
 #ifdef HAVE_CURVE25519

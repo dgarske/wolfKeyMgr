@@ -62,11 +62,12 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
 {
     int ret = 0;
     WorkThreadInfo* info = (WorkThreadInfo*)userCtx;
+    int keyAlgo = wolfEtsiKeyGetPkType(key);
 
     /* test use-case setting static ephemeral key */
     if (info->ctx) {
         ret = wolfSSL_CTX_set_ephemeral_key(info->ctx,
-            WC_PK_TYPE_ECDH, key->response, key->responseSz,
+            keyAlgo, key->response, key->responseSz,
             WOLFSSL_FILETYPE_ASN1);
     }
     wolfEtsiKeyPrint(key);

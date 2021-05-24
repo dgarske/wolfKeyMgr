@@ -167,26 +167,6 @@ static int GenNewKeyEcc(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
 
 #if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
 
-/* Determine max build-time DH key sizes */
-#if defined(HAVE_FFDHE_8192)
-    #define MAX_DH_PRIV_SZ 52
-    #define MAX_DH_PUB_SZ  1024
-#elif defined(HAVE_FFDHE_6144)
-    #define MAX_DH_PRIV_SZ 46
-    #define MAX_DH_PUB_SZ  768
-#elif defined(HAVE_FFDHE_4096)
-    #define MAX_DH_PRIV_SZ 39
-    #define MAX_DH_PUB_SZ  512
-#elif defined(HAVE_FFDHE_3072)
-    #define MAX_DH_PRIV_SZ 34
-    #define MAX_DH_PUB_SZ  384
-#elif defined(HAVE_FFDHE_2048)
-    #define MAX_DH_PRIV_SZ 29
-    #define MAX_DH_PUB_SZ  256
-#else
-    #error No DH FFDHE parameters enabled!
-#endif
-
 static int GenNewKeyDh(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
 {
     int ret;
