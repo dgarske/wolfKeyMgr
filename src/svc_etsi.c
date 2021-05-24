@@ -252,9 +252,11 @@ static int GenNewKeyDh(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
 
     if (ret == 0) {
         /* export DH key as DER */
-        /* Note: wc_DhKeyToDer was added v4.8.0 or later (see PR 3832) */
+        /* Note: Proper support for wc_DhPrivKeyToDer was added v4.8.0 or later (see PR 3832) */
         svcCtx->keyBufSz = sizeof(svcCtx->keyBuf);
-        ret = wc_DhKeyToDer(&svcCtx->key.dh, svcCtx->keyBuf, &svcCtx->keyBufSz);
+        ret = wc_DhPrivKeyToDer(&svcCtx->key.dh, svcCtx->keyBuf, &svcCtx->keyBufSz);
+        if (ret >= 0)
+            ret = 0; /* size is returned in keyBufSz */
     }
 
     if (ret != 0) {
