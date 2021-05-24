@@ -459,7 +459,7 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
 {
     int ret;
     etsiSvcConn* etsiConn;
-    char *fingerprint, *groups;
+    char uriItem[HTTP_MAX_URI];
 
     if (conn == NULL || conn->stream == NULL || conn->svcThreadCtx == NULL) {
         XLOG(WOLFKM_LOG_ERROR, "Bad ETSI Request pointers\n");
@@ -487,10 +487,14 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     wolfHttpRequestPrint(&etsiConn->req);
 
     /* Get fingerprint and groups */
-    fingerprint = wolfHttpUriGetItem(etsiConn->req.uri, "fingerprint=");
-    groups = wolfHttpUriGetItem(etsiConn->req.uri, "groups=");
-    printf("Fingerprint %s\n", fingerprint);
-    printf("Groups %s\n", groups);
+    ret = wolfHttpUriGetItem(etsiConn->req.uri, "fingerprints=",
+        uriItem, sizeof(uriItem));
+    if (ret > 0)
+        XLOG(WOLFKM_LOG_DEBUG, "Fingerprint %s\n", uriItem);
+    ret = wolfHttpUriGetItem(etsiConn->req.uri, "groups=",
+        uriItem, sizeof(uriItem));
+    if (ret > 0)
+        XLOG(WOLFKM_LOG_DEBUG, "Groups %s\n", uriItem);
 
     /* TODO: Get key based on parameters */
 

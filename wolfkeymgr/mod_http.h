@@ -160,12 +160,12 @@ WOLFKM_API int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri
 WOLFKM_API void wolfHttpRequestPrint(HttpReq* req);
 WOLFKM_API void wolfHttpResponsePrint(HttpRsp* rsp);
 
-WOLFKM_API int wolfHttpUriEncode(const char *s, char *enc, size_t encSz);
-WOLFKM_API int wolfHttpUriDecode(const char *s, char *dec, size_t decSz);
+WOLFKM_API int wolfHttpUriEncode(const char *s, size_t sSz, char *enc, size_t encSz);
+WOLFKM_API int wolfHttpUriDecode(const char *s, size_t sSz, char *dec, size_t decSz);
 
 WOLFKM_API int wolfHttpUrlDecode(HttpUrl* url, char* s);
 
-WOLFKM_API char* wolfHttpUriGetItem(char* uri, const char* item);
+WOLFKM_API int wolfHttpUriGetItem(const char* uri, const char* itemName, char* item, size_t itemSz);
 
 #ifdef __cplusplus
 }

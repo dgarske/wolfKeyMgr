@@ -130,7 +130,8 @@ int wolfEtsiClientMakeRequest(EtsiClientType type, const char* fingerprint,
     const char* groups, const char* contextstr, byte* request, word32* requestSz)
 {
     int ret;
-    char uri[256];
+    char uri[HTTP_MAX_URI*3]; /* fingerprint, groups, contextStr */
+    size_t uriLen;
     HttpHeader headers[1];
     HttpMethodType httpType;
     headers[0].type = HTTP_HDR_ACCEPT;
@@ -145,11 +146,36 @@ int wolfEtsiClientMakeRequest(EtsiClientType type, const char* fingerprint,
     else {
         /* use GET with either fingerprint (with optional groups/context) */
         httpType = HTTP_METHOD_GET;
-        snprintf(uri, sizeof(uri), 
-            "/.well-known/enterprise-transport-security/keys?fingerprints=%s%s%s%s%s",
-            fingerprint == NULL ? "" : fingerprint,
-            groups == NULL ? "" : "&groups=", groups == NULL ? "" : groups,
-            contextstr == NULL ? "" : "&contextstr=", contextstr == NULL ? "" : contextstr);
+        strncpy(uri,
+            "/.well-known/enterprise-transport-security/keys?fingerprints=",
+            sizeof(uri));
+        uriLen = strlen(uri);
+        if (fingerprint != NULL) {
+            ret = wolfHttpUriEncode(fingerprint, strlen(fingerprint),
+                uri+uriLen, sizeof(uri)-uriLen);
+            if (ret < 0)
+                return WOLFKM_BAD_ARGS;
+            uriLen += ret;
+        }
+        if (groups != NULL) {
+            strncpy(uri+uriLen, "&groups=", sizeof(uri)-uriLen);
+            uriLen = strlen(uri);
+            ret = wolfHttpUriEncode(groups, strlen(groups),
+                uri+uriLen, sizeof(uri)-uriLen);
+            if (ret < 0)
+                return WOLFKM_BAD_ARGS;
+            uriLen += ret;
+        }
+        if (contextstr != NULL) {
+            strncpy(uri+uriLen, "&contextstr=", sizeof(uri)-uriLen);
+            uriLen = strlen(uri);
+            ret = wolfHttpUriEncode(contextstr, strlen(contextstr),
+                uri+uriLen, sizeof(uri)-uriLen);
+            if (ret < 0)
+                return WOLFKM_BAD_ARGS;
+            uriLen += ret;
+        }
+        uri[uriLen] = '\0'; /* null term */
     }
     ret = wolfHttpClient_EncodeRequest(httpType, uri, request,
             requestSz, headers, sizeof(headers)/sizeof(HttpHeader));

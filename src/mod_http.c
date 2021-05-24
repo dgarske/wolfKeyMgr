@@ -206,9 +206,6 @@ int wolfHttpServer_ParseRequest(HttpReq* req, byte* buf, word32 sz)
         endline = strstr(endline, kCrlf); /* Find end of line */
     }
 
-    /* Perform URI decode */
-    wolfHttpUriDecode(req->uri, req->uri, sizeof(req->uri));
-
     return 0;
 }
 
@@ -361,7 +358,6 @@ int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
 {
     int i, c;
     HttpHeader* hdr;
-    char uriEnc[HTTP_MAX_URI];
     char* out = (char*)request;
     word32 remain;
 
@@ -371,13 +367,9 @@ int wolfHttpClient_EncodeRequest(HttpMethodType type, const char* uri,
     }
     remain = *requestSz - 1; /* room for null term */
 
-    i = wolfHttpUriEncode(uri, uriEnc, sizeof(uriEnc));
-    if (i < 0)
-        return WOLFKM_BAD_ARGS;
-
     /* append method */
     i = snprintf(out, remain, "%s %s %s\r\n",
-        wolfHttpGetMethodStr(type, NULL), uriEnc, kHTTPVer);
+        wolfHttpGetMethodStr(type, NULL), uri, kHTTPVer);
     if (i > 0) {
         out += i;
         remain -= i;
@@ -441,10 +433,10 @@ void wolfHttpResponsePrint(HttpRsp* rsp)
 }
 
 
-int wolfHttpUriEncode(const char *s, char *enc, size_t encSz)
+int wolfHttpUriEncode(const char *s, size_t sSz, char *enc, size_t encSz)
 {
     int idx = 0;
-    for (; *s; s++){
+    for (; idx < sSz && *s; s++){
         if (idx + 3 > encSz)
             return -1;
         if (*s == '*' || *s == '-' || *s == '.' || *s == '_') {
@@ -477,11 +469,11 @@ static int hex_to_char(char a, byte* out)
     return 1;
 }
 
-int wolfHttpUriDecode(const char *s, char *dec, size_t decSz)
+int wolfHttpUriDecode(const char *s, size_t sSz, char *dec, size_t decSz)
 {
     int idx = 0;
     byte a, b;
-    for (; *s; s++){
+    for (; idx < sSz && *s; s++){
         if (idx + 1 > decSz)
             return -1;
         if (*s == '%' &&
@@ -537,18 +529,26 @@ int wolfHttpUrlDecode(HttpUrl* url, char* s)
 }
 
 /* item should include equal sign. Example: "fingerprint=" */
-char* wolfHttpUriGetItem(char* uri, const char* item)
+int wolfHttpUriGetItem(const char* uri, const char* itemName, char* item,
+    size_t itemSz)
 {
-    char *begin, *end;
+    int ret = -1; /* not found */
+    const char *begin, *end;
+    size_t len = 0;
     /* find item= */
-    begin = strstr(uri, item);
+    begin = strstr(uri, itemName);
     if (begin) {
-        begin += strlen(item);
+        begin += strlen(itemName);
 
         /* find next & or null term */
         end = strstr(begin, "&");
-        if (end)
-            end[0] = '\0'; /* null term */
+        if (end != NULL)
+            len = (size_t)end - (size_t)begin;
+        else
+            len = strlen(begin);
+
+        /* perform URI decode */
+        ret = wolfHttpUriDecode(begin, len, item, itemSz); 
     }
-    return begin;
+    return ret;
 }
