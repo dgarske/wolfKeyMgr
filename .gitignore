@@ -39,6 +39,8 @@ diff
 # applications
 src/wolfkeymgr
 examples/etsi_client/etsi_client
+examples/tls/client
+examples/tls/server
 libtool
 wolfkeymgr/options.h
 

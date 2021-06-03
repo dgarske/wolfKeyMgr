@@ -1,4 +1,4 @@
-/* etsi_client.c
+/* mod_etsi.c
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -241,7 +241,7 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     /* TODO: Integrate HTTP processing with read to handle larger payloads */
     key->responseSz = sizeof(key->response);
     do {
-        ret = wolfTlsRead(client->ssl, (byte*)key->response, key->responseSz,
+        ret = wolfTlsRead(client->ssl, (byte*)key->response, (int*)&key->responseSz,
             timeoutSec);
         if (ret < 0) {
             XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
@@ -253,7 +253,6 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     
     if (ret > 0) {
         /* parse HTTP server response */
-        key->responseSz = ret;
         key->expires = 0;
         ret = wolfHttpClient_ParseResponse(&rsp,
             key->response, key->responseSz);

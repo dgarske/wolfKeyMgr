@@ -28,6 +28,7 @@ EXTRA_DIST += LICENSE
 
 include src/include.am
 include examples/etsi_client/include.am
+include examples/tls/include.am
 include scripts/include.am
 include certs/include.am
 

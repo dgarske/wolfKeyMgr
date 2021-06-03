@@ -68,7 +68,7 @@ openssl ca -config ./certs/ca-ecc.cnf -extensions server_cert -days 3650 -notext
 rm ./certs/server-cert.csr
 
 
-# Script to generated a self-signed TLS server certificate for Apache
+# Script to generate a self-signed TLS server certificate for Apache
 # No key password
 
 if [ -f ./certs/test-key.pem ]; then

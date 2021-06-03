@@ -1,4 +1,4 @@
-/* etsi_client.h
+/* tls_config.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,28 +19,26 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef ETSI_CLIENT_H
-#define ETSI_CLIENT_H
+#ifndef TLS_CONFIG_H
+#define TLS_CONFIG_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* for client tests only */
-#define WOLFKM_DEFAULT_HOST         "localhost"
-#define WOLFKM_DEFAULT_ETSISVC_PORT "8119"
-#define WOLFKM_DEFAULT_REQUESTS     1       /* per thread */
+#define TLS_TEST_HOST        "localhost"
+#define TLS_TEST_PORT        11111
+#define TLS_TEST_TIMEOUT_SEC 30
+#define TLS_TEST_MAX_DATA    512
 
-/* example certificate and key for mutual authentication to key manager */
 /* see ./certs/test-cert.sh for generation and signing */
-#define WOLFKM_ETSICLIENT_CA       "certs/ca-cert.pem"
-#define WOLFKM_ETSICLIENT_KEY      "certs/client-key.pem"
-#define WOLFKM_ETSICLIENT_PASS     "wolfssl"
-#define WOLFKM_ETSICLIENT_CERT     "certs/client-cert.pem"
-
+/* this is a self signed test cert server presents */
+#define TLS_TEST_CA          "certs/test-cert.pem"
+#define TLS_TEST_CERT        "certs/test-cert.pem"
+#define TLS_TEST_KEY         "certs/test-key.pem"
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* ETSI_CLIENT_H */
+#endif /* TLS_CONFIG_H */
