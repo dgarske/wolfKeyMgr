@@ -1,4 +1,4 @@
-/* etsi_client.c
+/* etsi_test.c
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *
@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include "etsi_client.h"
+#include "etsi_test.h"
 #include "mod_etsi.h"
 
 #define WOLFKM_ETST_CLIENT_DEF_TIMEOUT_SEC 10
@@ -161,7 +161,7 @@ static void* DoRequests(void* arg)
 /* usage help */
 static void Usage(void)
 {
-    printf("%s %s\n",  "etsi_client", PACKAGE_VERSION);
+    printf("%s %s\n",  "etsi_test", PACKAGE_VERSION);
     printf("-?          Help, print this usage\n");
     printf("-e          Error mode, force error response\n");
     printf("-h <str>    Host to connect to, default %s\n", WOLFKM_DEFAULT_HOST);

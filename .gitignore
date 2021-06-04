@@ -38,7 +38,8 @@ diff
 
 # applications
 src/wolfkeymgr
-examples/etsi_client/etsi_client
+examples/middlebox/decrypt
+examples/etsi_test/etsi_test
 examples/tls/client
 examples/tls/server
 libtool

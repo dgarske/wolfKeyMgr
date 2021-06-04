@@ -23,6 +23,17 @@
 #include "mod_http.h"
 #include "tls_config.h"
 
+static volatile int mStop = 0;
+static WKM_SOCKET_T listenFd = WKM_SOCKET_INVALID;
+
+static void sig_handler(const int sig)
+{
+    printf("SIGINT handled = %d.\n", sig);
+    wolfSocketClose(listenFd);
+    listenFd = WKM_SOCKET_INVALID;
+    mStop = 1;
+}
+
 int main(int argc, char* argv[])
 {
     int ret;
@@ -32,9 +43,10 @@ int main(int argc, char* argv[])
     byte data[TLS_TEST_MAX_DATA];
     int dataSz;
     HttpHeader headers[2];
-    const char* body = "<html><body><h1>It works!</h1></body></html>";
-    WKM_SOCKET_T listenFd = WKM_SOCKET_INVALID;
+    const char* body = TEST_HTTP_RESPONSE;
     SOCKADDR_IN_T clientAddr;
+
+    signal(SIGINT, sig_handler);
 
     printf("TLS Server: Port %d\n", TLS_TEST_PORT);
 
@@ -50,7 +62,8 @@ int main(int argc, char* argv[])
     ret = wolfTlsAddCA(ctx, TLS_TEST_CA);
     if (ret != 0) goto exit;
 
-    ret = wolfTlsSetKey(ctx, TLS_TEST_KEY, NULL, TLS_TEST_CERT, WOLFSSL_FILETYPE_PEM);
+    ret = wolfTlsSetKey(ctx, TLS_TEST_KEY, NULL, TLS_TEST_CERT,
+        WOLFSSL_FILETYPE_PEM);
     if (ret != 0) goto exit;
 
     /* setup listener */
@@ -58,7 +71,8 @@ int main(int argc, char* argv[])
     if (ret != 0) goto exit;
 
     do {
-        ret = wolfTlsAccept(ctx, listenFd, &ssl, &clientAddr, TLS_TEST_TIMEOUT_SEC);
+        ret = wolfTlsAccept(ctx, listenFd, &ssl, &clientAddr,
+            TLS_TEST_TIMEOUT_SEC);
         if (ret != 0) goto exit;
         printf("TLS Accept %s\n", wolfSocketAddrStr(&clientAddr));
 
@@ -69,10 +83,9 @@ int main(int argc, char* argv[])
 
         ret = wolfHttpServer_ParseRequest(&req, data, dataSz);
         if (ret < 0) goto exit;
-
         wolfHttpRequestPrint(&req);
 
-        /* build response */
+        /* Build response */
         headers[0].type = HTTP_HDR_CONTENT_TYPE;
         headers[0].string = "text/html";
         headers[1].type = HTTP_HDR_CONNECTION;
@@ -87,19 +100,17 @@ int main(int argc, char* argv[])
         ret = wolfTlsWrite(ssl, data, dataSz);
         if (ret < 0) goto exit;
 
-        /* Done - send TLS shutdown message */
-        wolfTlsClose(ssl, 1);
-        ssl = NULL;
-    } while (ret >= 0);
-
 exit:
+        if (ret < 0)
+            printf("TLS Server Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
 
-    if (ret < 0) {
-        printf("TLS Server Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
-    }
+        /* Done - send TLS shutdown message */
+        if (ssl) {
+            (void)wolfTlsClose(ssl, ret == 0 ? 1 : 0);
+            ssl = NULL;
+        }
+    } while (mStop == 0);
 
-    if (ssl)
-        (void)wolfTlsClose(ssl, ret == 0 ? 1 : 0);
     if (listenFd != WKM_SOCKET_INVALID)
         wolfSocketClose(listenFd);
     if (ctx)

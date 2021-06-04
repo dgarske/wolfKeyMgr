@@ -1,4 +1,4 @@
-/* etsi_client.h
+/* etsi_test.h
  *
  * Copyright (C) 2006-2021 wolfSSL Inc.
  *

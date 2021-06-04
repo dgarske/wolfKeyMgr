@@ -205,8 +205,8 @@ wolfKeyManager 0.3
 ```
 
 ```sh
-$ ./examples/etsi_client/etsi_client -?
-etsi_client 0.3
+$ ./examples/etsi_test/etsi_test -?
+etsi_test 0.3
 -?          Help, print this usage
 -e          Error mode, force error response
 -h <str>    Host to connect to, default localhost
@@ -266,7 +266,7 @@ Feb 24 16:24:15 2021: [INFO] Exit Key Manager (ret 0)
 
 
 # Start ETSI client with single GET request
-$ ./examples/etsi_client/etsi_client -l 3
+$ ./examples/etsi_test/etsi_test -l 3
 Feb 24 16:24:11 2021: [INFO] Starting client
 Feb 24 16:24:11 2021: [INFO] Connected to ETSI service
 Feb 24 16:24:11 2021: [INFO] Sent single get request (103 bytes)

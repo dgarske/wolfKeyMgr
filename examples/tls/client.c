@@ -23,8 +23,6 @@
 #include "mod_http.h"
 #include "tls_config.h"
 
-#define TEST_HTTP_GET_REQUEST "/index.html"
-
 int main(int argc, char* argv[])
 {
     int ret;

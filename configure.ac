@@ -121,7 +121,6 @@ esac
 # Checks for library functions.
 LIB_SOCKET_NSL
 
-
 # ETSI Service
 AC_ARG_ENABLE([etsisvc],
     [AS_HELP_STRING([--enable-etsisvc],[Enable the ETSI key service (default: enabled)])],
@@ -134,6 +133,20 @@ then
     CFLAGS="$CFLAGS -DWOLFKM_ETSI_SERVICE"
 fi
 
+
+# SNIFFER
+AC_ARG_ENABLE([sniffer],
+   [AS_HELP_STRING([--enable-sniffer],[Enable wolfSSL sniffer support (default: disabled)])],
+   [ ENABLED_SNIFFER=$enableval ],
+   [ ENABLED_SNIFFER=no ]
+   )
+AS_IF([ test "x$ENABLED_SNIFFER" = "xyes" ],
+      [
+          AC_CHECK_HEADERS([pcap/pcap.h],
+              [ ENABLED_SNIFFTEST=yes ],
+              [ AC_MSG_WARN([cannot enable sniffer test without having libpcap available.]) ]
+          )
+      ])
 
 
 # The following AM_CONDITIONAL statements set flags for use in the Makefiles.

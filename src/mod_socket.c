@@ -200,16 +200,29 @@ int wolfSockAccept(WKM_SOCKET_T listenFd, WKM_SOCKET_T* clientFd,
         return WOLFKM_BAD_ARGS;
     }
 
-    /* TODO: timeoutSec */
-    
-    *clientFd = accept(listenFd, (struct sockaddr*)clientAddr, &clientAddrLen);
-    if (WKM_SOCKET_IS_INVALID(*clientFd)) {
-        int err = wolfSocketLastError(ret);
-        XLOG(WOLFKM_LOG_ERROR, "tcp accept failed: %d (%s)\n", 
-            err, strerror(err));
-        ret = err;
+    if (timeoutSec > 0) {
+        /* enable non-blocking */
+        wolfSockSetBlockingMode(listenFd, 1);
     }
 
+    /* use select to indicate connection is ready */
+    /* wait on recv or error */
+    ret = wolfSockSelect(listenFd, timeoutSec, 1);
+    if (ret == WKM_SOCKET_SELECT_RECV_READY) {
+        *clientFd = accept(listenFd, (struct sockaddr*)clientAddr, &clientAddrLen);
+        if (WKM_SOCKET_IS_INVALID(*clientFd)) {
+            int err = wolfSocketLastError(ret);
+            XLOG(WOLFKM_LOG_ERROR, "tcp accept failed: %d (%s)\n", 
+                err, strerror(err));
+            ret = err;
+        }
+        else {
+            ret = 0;
+        }
+    }
+    else {
+        ret = WOLFKM_BAD_TIMEOUT;
+    }
     return ret;
 }
 
