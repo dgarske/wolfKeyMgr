@@ -34,14 +34,14 @@ static int build_addr(SOCKADDR_IN_T* addr, const char* peer, word16 port)
         return WOLFKM_BAD_ARGS;
     }
 
-    XMEMSET(addr, 0, sizeof(SOCKADDR_IN_T));
+    memset(addr, 0, sizeof(SOCKADDR_IN_T));
 
 #ifndef USE_IPV6
     /* peer could be in human readable form */
     if ( ((size_t)peer != INADDR_ANY) && isalpha((int)peer[0])) {
         struct hostent* entry = gethostbyname(peer);
         if (entry) {
-            XMEMCPY(&addr->sin_addr.s_addr, entry->h_addr_list[0],
+            memcpy(&addr->sin_addr.s_addr, entry->h_addr_list[0],
                    entry->h_length);
             useLookup = 1;
         }
@@ -71,7 +71,7 @@ static int build_addr(SOCKADDR_IN_T* addr, const char* peer, word16 port)
         int    ret;
         char   strPort[80];
 
-        XMEMSET(&hints, 0, sizeof(hints));
+        memset(&hints, 0, sizeof(hints));
 
         hints.ai_family   = AF_INET_V;
         hints.ai_socktype = SOCK_STREAM;
@@ -86,7 +86,7 @@ static int build_addr(SOCKADDR_IN_T* addr, const char* peer, word16 port)
             return WOLFKM_BAD_HOST;
         }
 
-        XMEMCPY(addr, answer->ai_addr, answer->ai_addrlen);
+        memcpy(addr, answer->ai_addr, answer->ai_addrlen);
         freeaddrinfo(answer);
     }
 #endif
@@ -348,6 +348,6 @@ char* wolfSocketAddrStr(SOCKADDR_IN_T* addr)
     return output;
 #else
     static char output[42];
-    return inet_ntop(AF_INET6, addr, output, 42);
+    return (char*)inet_ntop(AF_INET6, addr, output, 42);
 #endif
 }

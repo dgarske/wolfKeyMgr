@@ -19,14 +19,20 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <wolfssl/options.h>
-#include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/types.h>
-#include <wolfssl/wolfcrypt/logging.h>
-#include <wolfssl/wolfcrypt/error-crypt.h>
-#include <wolfssl/wolfcrypt/memory.h>
+/* Support for ETSI Key Manager */
+
+#include "wolfkeymgr/options.h"
+#include "wolfkeymgr/mod_etsi.h"
+#include "examples/test_config.h"
 
 #ifdef WOLFKM_SNIFFER
+
+#include "wolfssl/sniffer.h"
+
+#ifdef _MSC_VER
+    /* builds on *nix too, for scanf device and port */
+    #define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include <pcap/pcap.h>     /* pcap stuff */
 #include <stdio.h>         /* printf */
@@ -35,14 +41,12 @@
 #include <signal.h>        /* signal */
 #include <ctype.h>         /* isprint */
 
-#include <cyassl/sniffer.h>
-
-
 #ifndef _WIN32
     #include <sys/socket.h>    /* AF_INET */
     #include <arpa/inet.h>
     #include <netinet/in.h>
 #endif
+
 
 typedef unsigned char byte;
 
@@ -118,86 +122,67 @@ pcap_if_t* alldevs = NULL;
 
 
 
-#ifdef USE_ETSI_CLIENT
-    /* Support for ETSI Key Manager */
-    #include <wolfkeymgr/mod_etsi.h>
+static EtsiClientCtx* gEtsiClient;
+static HttpUrl gUrl;
 
-    static EtsiClientCtx* gEtsiClient;
-    static HttpUrl gUrl;
+static void etsi_client_cleanup(void)
+{
+    if (gEtsiClient) {
+        wolfEtsiClientFree(gEtsiClient);
+        gEtsiClient = NULL;
 
-    #ifndef ETSI_CLIENT_KEY_FILE
-    /* demo values */
-    #define ETSI_TIMEOUT_MS       2
-    #define ETSI_CLIENT_HOST      "localhost"
-    #define ETSI_CLIENT_PORT      8119
-    #define ETSI_CLIENT_PORT_STR  xstr(ETSI_CLIENT_PORT)
-    #define ETSI_CLIENT_KEY_FILE  "../../../wolfKeyMgr/certs/client-key.pem"
-    #define ETSI_CLIENT_KEY_PASS  "wolfssl"
-    #define ETSI_CLIENT_CERT_FILE "../../../wolfKeyMgr/certs/client-cert.pem"
-    #define ETSI_CLIENT_CA_FILE   "../../../wolfKeyMgr/certs/ca-cert.pem"
-
-    #define xstr(s) str(s)
-    #define str(s) #s
-    #endif
-
-    static void etsi_client_cleanup(void)
-    {
-        if (gEtsiClient) {
-            wolfEtsiClientFree(gEtsiClient);
-            gEtsiClient = NULL;
-
-            wolfEtsiClientCleanup();
-        }
+        wolfEtsiClientCleanup();
     }
+}
 
-    static int etsi_client_get(char* urlStr, EtsiKey* key)
-    {
-        int ret = -1;
-        
-        /* setup key manager connection */
-        if (gEtsiClient == NULL) {
-            wolfEtsiClientInit();
+static int etsi_client_get(char* urlStr, EtsiKey* key)
+{
+    int ret = -1;
+    
+    /* setup key manager connection */
+    if (gEtsiClient == NULL) {
+        wolfEtsiClientInit();
 
-            gEtsiClient = wolfEtsiClientNew();
-            if (gEtsiClient) {
-                wolfEtsiClientAddCA(gEtsiClient, ETSI_CLIENT_CA_FILE);
-                wolfEtsiClientSetKey(gEtsiClient,
-                    ETSI_CLIENT_KEY_FILE, ETSI_CLIENT_KEY_PASS,
-                    ETSI_CLIENT_CERT_FILE, WOLFSSL_FILETYPE_PEM);
+        gEtsiClient = wolfEtsiClientNew();
+        if (gEtsiClient) {
+            wolfEtsiClientAddCA(gEtsiClient, ETSI_TEST_CLIENT_CA);
+            wolfEtsiClientSetKey(gEtsiClient,
+                ETSI_TEST_CLIENT_KEY, ETSI_TEST_CLIENT_PASS,
+                ETSI_TEST_CLIENT_CERT, WOLFSSL_FILETYPE_PEM);
 
-                if (urlStr) {
-                    XMEMSET(&gUrl, 0, sizeof(gUrl));
-                    wolfHttpUrlDecode(&gUrl, urlStr);
-                }
-
-                ret = wolfEtsiClientConnect(gEtsiClient, gUrl.domain, gUrl.port,
-                    ETSI_TIMEOUT_MS);
-                if (ret != 0) {
-                    printf("Error connecting to ETSI server! %d\n", ret);
-                    
-                    etsi_client_cleanup();
-                }
+            if (urlStr) {
+                memset(&gUrl, 0, sizeof(gUrl));
+                wolfHttpUrlDecode(&gUrl, urlStr);
             }
-            else {
-                ret = MEMORY_E;
-            }
-        }
-        if (gEtsiClient && key) {
-            ret = wolfEtsiClientGet(gEtsiClient, key, ETSI_KEY_TYPE_SECP256R1, 
-                NULL, NULL, ETSI_TIMEOUT_MS);
+
+            ret = wolfEtsiClientConnect(gEtsiClient, gUrl.domain, gUrl.port,
+                ETSI_TEST_TIMEOUT_MS);
             if (ret != 0) {
-                printf("Error getting ETSI static ephemeral key! %d\n", ret);
-
-                /* cleanup */
+                printf("Error connecting to ETSI server! %d\n", ret);
+                
                 etsi_client_cleanup();
             }
-        #ifdef DEBUG_SNIFFER
-            printf("Got ETSI static ephemeral key (%d bytes)\n", *keySz);
-        #endif
         }
-        return ret;
+        else {
+            ret = MEMORY_E;
+        }
     }
-#endif
+    if (gEtsiClient && key) {
+        ret = wolfEtsiClientGet(gEtsiClient, key, ETSI_KEY_TYPE_SECP256R1, 
+            NULL, NULL, ETSI_TEST_TIMEOUT_MS);
+        /* positive return means new key returned */
+        /* zero means, same key is used */
+        /* negative means error */
+        if (ret < 0) {
+            printf("Error getting ETSI static ephemeral key! %d\n", ret);
+
+            /* cleanup */
+            etsi_client_cleanup();
+        }
+        printf("Got ETSI static ephemeral key (%d bytes)\n", key->responseSz);
+    }
+    return ret;
+}
 
 
 static void FreeAll(void)
@@ -319,20 +304,19 @@ static int myWatchCb(void* vSniffer,
     (void)ctx;
 
     if (certHashSz == sizeof(rsaHash) &&
-            XMEMCMP(certHash, rsaHash, certHashSz) == 0) {
+            memcmp(certHash, rsaHash, certHashSz) == 0) {
         certName = DEFAULT_SERVER_KEY_RSA;
     }
     else if (certHashSz == sizeof(eccHash) &&
-            XMEMCMP(certHash, eccHash, certHashSz) == 0) {
+            memcmp(certHash, eccHash, certHashSz) == 0) {
         certName = DEFAULT_SERVER_KEY_ECC;
     }
-#ifdef USE_ETSI_CLIENT
     else {
         int ret;
         EtsiKey key;
         memset(&key, 0, sizeof(key));
         ret = etsi_client_get(NULL, &key);
-        if (ret == 0) {
+        if (ret >= 0) {
             byte* keyBuf = NULL;
             word32 keySz = 0;
             wolfEtsiKeyGet(&key, &keyBuf, &keySz);
@@ -340,7 +324,6 @@ static int myWatchCb(void* vSniffer,
         }
         return ret;
     }
-#endif
 
     if (certName == NULL) {
         /* don't return error if key is not loaded */
@@ -370,17 +353,16 @@ static int myStoreDataCb(const unsigned char* decryptBuf,
 
     if (*data == NULL) {
         byte* tmpData;
-        tmpData = (byte*)XREALLOC(*data, decryptBufSz + 1,
-                NULL, DYNAMIC_TYPE_TMP_BUFFER);
+        tmpData = (byte*)realloc(*data, decryptBufSz + 1);
         if (tmpData == NULL) {
-            XFREE(*data, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            free(*data);
             *data = NULL;
             return -1;
         }
         *data = tmpData;
     }
 
-    XMEMCPY(*data + decryptBufOffset, decryptBuf + decryptBufOffset, qty);
+    memcpy(*data + decryptBufOffset, decryptBuf + decryptBufOffset, qty);
 
     return qty;
 }
@@ -396,23 +378,21 @@ static int load_key(const char* name, const char* server, int port,
     int loadCount = 0;
     char *keyFile, *ptr = NULL;
 
-    keyFile = XSTRTOK((char*)keyFiles, ",", &ptr);
+    keyFile = strtok_r((char*)keyFiles, ",", &ptr);
     while (keyFile != NULL) {
-    #ifdef USE_ETSI_CLIENT
         /* is URL? */
-        if (XSTRNCMP(keyFile, "https://", 8) == 0) {
+        if (strncmp(keyFile, "https://", 8) == 0) {
             EtsiKey key;
             memset(&key, 0, sizeof(key));
             /* setup connection */
             ret = etsi_client_get(keyFile, &key);
-            if (ret != 0) {
+            if (ret < 0) {
                 printf("Error connecting to ETSI server: %s\n", keyFile);
             }
             else {
-        #ifdef WOLFSSL_STATIC_EPHEMERAL
-            byte* keyBuf = NULL;
-            word32 keySz = 0;
-            wolfEtsiKeyGet(&key, &keyBuf, &keySz);
+                byte* keyBuf = NULL;
+                word32 keySz = 0;
+                wolfEtsiKeyGet(&key, &keyBuf, &keySz);
             #ifdef HAVE_SNI
                 ret = ssl_SetNamedEphemeralKeyBuffer(name, server, port,
                     (char*)keyBuf, keySz, FILETYPE_DER, passwd, err);
@@ -420,32 +400,10 @@ static int load_key(const char* name, const char* server, int port,
                 ret = ssl_SetEphemeralKeyBuffer(server, port,
                     (char*)keyBuf, keySz, FILETYPE_DER, passwd, err);
             #endif
-        #else
-            (void)key;
-        #endif
             }
             return ret;
         }
-    #endif
 
-#ifdef WOLFSSL_STATIC_EPHEMERAL
-    #ifdef HAVE_SNI
-        ret = ssl_SetNamedEphemeralKey(name, server, port, keyFile,
-                            FILETYPE_PEM, passwd, err);
-    #else
-        ret = ssl_SetEphemeralKey(server, port, keyFile,
-                            FILETYPE_PEM, passwd, err);
-    #endif
-        if (ret == 0)
-            loadCount++;
-#endif
-    #ifdef HAVE_SNI
-        ret = ssl_SetNamedPrivateKey(name, server, port, keyFile,
-                            FILETYPE_PEM, passwd, err);
-    #else
-        ret = ssl_SetPrivateKey(server, port, keyFile,
-                            FILETYPE_PEM, passwd, err);
-    #endif
         if (ret == 0)
             loadCount++;
         
@@ -458,7 +416,7 @@ static int load_key(const char* name, const char* server, int port,
             ret = 0;
         }
 
-        keyFile = XSTRTOK(NULL, ",", &ptr);
+        keyFile = strtok_r(NULL, ",", &ptr);
     }
 
     (void)name;
@@ -529,9 +487,9 @@ int main(int argc, char** argv)
                     " installed correctly and you have sufficient permissions");
 
         printf("Enter the interface number (1-%d) [default: %d]: ", i, defDev);
-        XMEMSET(cmdLineArg, 0, sizeof(cmdLineArg));
-        if (XFGETS(cmdLineArg, sizeof(cmdLineArg), stdin))
-            inum = XATOI(cmdLineArg);
+        memset(cmdLineArg, 0, sizeof(cmdLineArg));
+        if (fgets(cmdLineArg, sizeof(cmdLineArg), stdin))
+            inum = atoi(cmdLineArg);
         if (inum == 0)
             inum = defDev;
         else if (inum < 1 || inum > i)
@@ -577,15 +535,11 @@ int main(int argc, char** argv)
         ret = pcap_activate(pcap);
         if (ret != 0) printf("pcap_activate failed %s\n", pcap_geterr(pcap));
 
-    #ifdef USE_ETSI_CLIENT
-        portDef = 1443;
-    #else
-        portDef = 11111;
-    #endif
+        portDef = TLS_TEST_PORT;
         printf("Enter the port to scan [default: %d]: ", portDef);
-        XMEMSET(cmdLineArg, 0, sizeof(cmdLineArg));
-        if (XFGETS(cmdLineArg, sizeof(cmdLineArg), stdin)) {
-            port = XATOI(cmdLineArg);
+        memset(cmdLineArg, 0, sizeof(cmdLineArg));
+        if (fgets(cmdLineArg, sizeof(cmdLineArg), stdin)) {
+            port = atoi(cmdLineArg);
         }
         if (port <= 0) {
             port = portDef;
@@ -600,33 +554,27 @@ int main(int argc, char** argv)
         if (ret != 0) printf("pcap_setfilter failed %s\n", pcap_geterr(pcap));
 
         /* optionally enter the private key to use */
-    #ifdef USE_ETSI_CLIENT
-        keyFilesSrc = "https://" ETSI_CLIENT_HOST ":" ETSI_CLIENT_PORT_STR;
-    #elif defined(WOLFSSL_STATIC_EPHEMERAL) && defined(DEFAULT_SERVER_EPH_KEY)
-        keyFilesSrc = DEFAULT_SERVER_EPH_KEY;
-    #else
-        keyFilesSrc = DEFAULT_SERVER_KEY;
-    #endif
+        keyFilesSrc = "https://" ETSI_TEST_HOST ":" ETSI_TEST_PORT_STR;
         printf("Enter the server key [default: %s]: ", keyFilesSrc);
-        XMEMSET(keyFilesBuf, 0, sizeof(keyFilesBuf));
-        XMEMSET(keyFilesUser, 0, sizeof(keyFilesUser));
-        if (XFGETS(keyFilesUser, sizeof(keyFilesUser), stdin)) {
+        memset(keyFilesBuf, 0, sizeof(keyFilesBuf));
+        memset(keyFilesUser, 0, sizeof(keyFilesUser));
+        if (fgets(keyFilesUser, sizeof(keyFilesUser), stdin)) {
             word32 strSz;
             if (keyFilesUser[0] != '\r' && keyFilesUser[0] != '\n') {
                 keyFilesSrc = keyFilesUser;
             }
-            strSz = (word32)XSTRLEN(keyFilesUser);
+            strSz = (word32)strlen(keyFilesUser);
             if (keyFilesUser[strSz-1] == '\n')
                 keyFilesUser[strSz-1] = '\0';
         }
-        XSTRNCPY(keyFilesBuf, keyFilesSrc, sizeof(keyFilesBuf));
+        strncpy(keyFilesBuf, keyFilesSrc, sizeof(keyFilesBuf));
 
         /* optionally enter a named key (SNI) */
     #if !defined(WOLFSSL_SNIFFER_WATCH) && defined(HAVE_SNI)
         printf("Enter alternate SNI [default: none]: ");
-        XMEMSET(cmdLineArg, 0, sizeof(cmdLineArg));
-        if (XFGETS(cmdLineArg, sizeof(cmdLineArg), stdin)) {
-            if (XSTRLEN(cmdLineArg) > 0) {
+        memset(cmdLineArg, 0, sizeof(cmdLineArg));
+        if (fgets(cmdLineArg, sizeof(cmdLineArg), stdin)) {
+            if (strlen(cmdLineArg) > 0) {
                 sniName = cmdLineArg;
             }
         }
@@ -645,7 +593,7 @@ int main(int argc, char** argv)
             }
 
             if (server) {
-                XSTRNCPY(keyFilesBuf, keyFilesSrc, sizeof(keyFilesBuf));
+                strncpy(keyFilesBuf, keyFilesSrc, sizeof(keyFilesBuf));
                 ret = load_key(sniName, server, port, keyFilesBuf, NULL, err);
                 if (ret != 0) {
                     exit(EXIT_FAILURE);
@@ -672,7 +620,7 @@ int main(int argc, char** argv)
                 server = argv[3];
 
             if (argc >= 5)
-                port = XATOI(argv[4]);
+                port = atoi(argv[4]);
 
             if (argc >= 6)
                 passwd = argv[5];

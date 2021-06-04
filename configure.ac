@@ -142,7 +142,7 @@ AC_ARG_ENABLE([sniffer],
    )
 AS_IF([ test "x$ENABLED_SNIFFER" = "xyes" ],
       [
-          AM_CFLAGS="$AM_CFLAGS -DWOLFKM_SNIFFER"
+          CFLAGS="$CFLAGS -DWOLFKM_SNIFFER"
           AC_CHECK_HEADERS([pcap/pcap.h],
               [ ENABLED_SNIFFTEST=yes ],
               [ AC_MSG_WARN([cannot enable sniffer test without having libpcap available.]) ]

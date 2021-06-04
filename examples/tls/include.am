@@ -6,17 +6,11 @@ EXTRA_DIST += examples/tls/README.md
 
 noinst_PROGRAMS += examples/tls/client
 examples_tls_client_SOURCES      = examples/tls/client.c
-examples_tls_client_CFLAGS       = -Isrc
-examples_tls_client_LDFLAGS      = -Lsrc
 examples_tls_client_LDADD        = src/libwolfkeymgr.la $(LIB_STATIC_ADD)
 examples_tls_client_DEPENDENCIES = src/libwolfkeymgr.la
 
 
 noinst_PROGRAMS += examples/tls/server
 examples_tls_server_SOURCES      = examples/tls/server.c
-examples_tls_server_CFLAGS       = -Isrc
-examples_tls_server_LDFLAGS      = -Lsrc
 examples_tls_server_LDADD        = src/libwolfkeymgr.la $(LIB_STATIC_ADD)
 examples_tls_server_DEPENDENCIES = src/libwolfkeymgr.la
-
-EXTRA_DIST += examples/tls/tls_config.h

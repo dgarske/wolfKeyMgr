@@ -19,9 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include "mod_tls.h"
-#include "mod_http.h"
-#include "tls_config.h"
+#include "wolfkeymgr/mod_tls.h"
+#include "wolfkeymgr/mod_http.h"
+#include "examples/test_config.h"
 
 int main(int argc, char* argv[])
 {
