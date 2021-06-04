@@ -82,7 +82,7 @@ int main(int argc, char* argv[])
             data, (word32*)&dataSz,
             headers, sizeof(headers)/sizeof(HttpHeader),
             (const byte*)body, strlen(body));
-        if (ret < 0) goto exit;
+        if (ret != 0) goto exit;
 
         ret = wolfTlsWrite(ssl, data, dataSz);
         if (ret < 0) goto exit;
