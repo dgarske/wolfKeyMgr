@@ -2,6 +2,7 @@
 # included from Top Level Makefile.am
 # All paths should be given relative to the root
 
+EXTRA_DIST += examples/tls/README.md
 
 noinst_PROGRAMS += examples/tls/client
 examples_tls_client_SOURCES      = examples/tls/client.c

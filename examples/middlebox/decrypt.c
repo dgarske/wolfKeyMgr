@@ -24,33 +24,9 @@
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/logging.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/wolfcrypt/memory.h>
 
-#ifdef WOLFSSL_SNIFFER_STORE_DATA_CB
-    #include <wolfssl/wolfcrypt/memory.h>
-#endif
-
-#ifdef _WIN32
-    #define WOLFSSL_SNIFFER
-#endif
-
-#ifndef WOLFSSL_SNIFFER
-#ifndef NO_MAIN_DRIVER
-/* blank build */
-#include <stdio.h>
-#include <stdlib.h>
-int main(void)
-{
-    printf("do ./configure --enable-sniffer to enable build support\n");
-    return EXIT_SUCCESS;
-}
-#endif /* !NO_MAIN_DRIVER */
-#else
-/* do a full build */
-
-#ifdef _MSC_VER
-    /* builds on *nix too, for scanf device and port */
-    #define _CRT_SECURE_NO_WARNINGS
-#endif
+#ifdef WOLFKM_SNIFFER
 
 #include <pcap/pcap.h>     /* pcap stuff */
 #include <stdio.h>         /* printf */
@@ -806,4 +782,13 @@ int main(int argc, char** argv)
     return hadBadPacket ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
-#endif /* full build */
+#else
+/* blank build */
+#include <stdio.h>
+#include <stdlib.h>
+int main(void)
+{
+    printf("To enable sniffer use ./configure --enable-sniffer with wolfKeyMgr and wolfSSL\n");
+    return EXIT_SUCCESS;
+}
+#endif /* WOLFKM_SNIFFER */

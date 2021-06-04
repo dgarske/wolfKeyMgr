@@ -73,17 +73,20 @@ int main(int argc, char* argv[])
     do {
         ret = wolfTlsAccept(ctx, listenFd, &ssl, &clientAddr,
             TLS_TEST_TIMEOUT_SEC);
+        if (ret == WOLFKM_BAD_TIMEOUT) continue;
         if (ret != 0) goto exit;
+        
         printf("TLS Accept %s\n", wolfSocketAddrStr(&clientAddr));
 
         /* Get HTTP request and print */
         dataSz = (int)sizeof(data);
         ret = wolfTlsRead(ssl, data, &dataSz, TLS_TEST_TIMEOUT_SEC);
         if (ret < 0) goto exit;
-
+        
         ret = wolfHttpServer_ParseRequest(&req, data, dataSz);
-        if (ret < 0) goto exit;
-        wolfHttpRequestPrint(&req);
+        if (ret == 0) {
+            wolfHttpRequestPrint(&req);
+        }
 
         /* Build response */
         headers[0].type = HTTP_HDR_CONTENT_TYPE;
@@ -95,19 +98,20 @@ int main(int argc, char* argv[])
             data, (word32*)&dataSz,
             headers, sizeof(headers)/sizeof(HttpHeader),
             (const byte*)body, strlen(body));
-        if (ret != 0) goto exit;
-
-        ret = wolfTlsWrite(ssl, data, dataSz);
-        if (ret < 0) goto exit;
+        if (ret == 0) {
+            ret = wolfTlsWrite(ssl, data, dataSz);
+        }
 
 exit:
-        if (ret < 0)
-            printf("TLS Server Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
 
         /* Done - send TLS shutdown message */
         if (ssl) {
             (void)wolfTlsClose(ssl, ret == 0 ? 1 : 0);
             ssl = NULL;
+        }
+
+        if (ret < 0) {
+            printf("TLS Server Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
         }
     } while (mStop == 0);
 

@@ -136,12 +136,13 @@ fi
 
 # SNIFFER
 AC_ARG_ENABLE([sniffer],
-   [AS_HELP_STRING([--enable-sniffer],[Enable wolfSSL sniffer support (default: disabled)])],
+   [AS_HELP_STRING([--enable-sniffer],[Enable sniffer support (default: disabled)])],
    [ ENABLED_SNIFFER=$enableval ],
-   [ ENABLED_SNIFFER=no ]
+   [ ENABLED_SNIFFER=yes ]
    )
 AS_IF([ test "x$ENABLED_SNIFFER" = "xyes" ],
       [
+          AM_CFLAGS="$AM_CFLAGS -DWOLFKM_SNIFFER"
           AC_CHECK_HEADERS([pcap/pcap.h],
               [ ENABLED_SNIFFTEST=yes ],
               [ AC_MSG_WARN([cannot enable sniffer test without having libpcap available.]) ]

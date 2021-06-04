@@ -137,9 +137,6 @@ int wolfSockConnect(WKM_SOCKET_T* sockFd, const char* ip, word16 port,
                     /* make sure socket is not reporting an error */
                     ret = wolfSocketGetError(*sockFd, &err);
                 }
-                else {
-                    ret = WOLFKM_BAD_TIMEOUT;
-                }
             }
         }
     }
@@ -219,9 +216,6 @@ int wolfSockAccept(WKM_SOCKET_T listenFd, WKM_SOCKET_T* clientFd,
         else {
             ret = 0;
         }
-    }
-    else {
-        ret = WOLFKM_BAD_TIMEOUT;
     }
     return ret;
 }

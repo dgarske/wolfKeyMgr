@@ -52,6 +52,8 @@ const char* wolfKeyMgr_GetError(int err)
             return "Error resolving host name";
         case WOLFKM_BAD_TIMEOUT:
             return "Timeout error";
+        case WOLFKM_BAD_SOCKET:
+            return "Socket error";
         case WOLFKM_BAD_REQUEST_TYPE:
             return "Bad Header Request Type";
 

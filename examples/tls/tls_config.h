@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #define TLS_TEST_HOST         "localhost"
-#define TLS_TEST_PORT         11111
+#define TLS_TEST_PORT         443
 #define TLS_TEST_TIMEOUT_SEC  30
 #define TLS_TEST_MAX_DATA     512
 
