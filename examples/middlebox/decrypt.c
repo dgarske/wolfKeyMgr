@@ -401,18 +401,27 @@ static int load_key(const char* name, const char* server, int port,
                     (char*)keyBuf, keySz, FILETYPE_DER, passwd, err);
             #endif
             }
-            return ret;
         }
-
+        else {
+        #ifdef HAVE_SNI
+            ret = ssl_SetNamedEphemeralKey(name, server, port, keyFile,
+                                FILETYPE_PEM, passwd, err);
+        #else
+            ret = ssl_SetEphemeralKey(server, port, keyFile,
+                                FILETYPE_PEM, passwd, err);
+        #endif
+            if (ret == 0)
+                loadCount++;
+        }
         if (ret == 0)
             loadCount++;
         
         if (loadCount == 0) {
             printf("Failed loading private key %s: ret %d\n", keyFile, ret);
-            printf("Please run directly from sslSniffer/sslSnifferTest dir\n");
             ret = -1;
         }
         else {
+            printf("Loaded key for %s:%d\n", server, port);
             ret = 0;
         }
 
