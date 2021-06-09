@@ -335,7 +335,8 @@ int wolfTlsRead(WOLFSSL* ssl, byte* p, int* len, int timeoutSec)
                 if (ret == WKM_SOCKET_SELECT_RECV_READY  ||
                     ret == WKM_SOCKET_SELECT_TIMEOUT) {
                     ret = 0; /* try again */
-                    timeoutSec--;
+                    if (timeoutSec > 0)
+                        timeoutSec--;
                 }
                 else {
                     ret = WOLFKM_BAD_TIMEOUT;
@@ -349,10 +350,11 @@ int wolfTlsRead(WOLFSSL* ssl, byte* p, int* len, int timeoutSec)
             }
         }
     } while (ret == 0 && timeoutSec > 0);
-    if (timeoutSec <= 0)
-        ret = WOLFKM_BAD_TIMEOUT;
     if (ret > 0) {
         *len = ret;
+    }
+    else if (timeoutSec <= 0) {
+        ret = WOLFKM_BAD_TIMEOUT;
     }
     return ret;
 }
