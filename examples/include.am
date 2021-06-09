@@ -4,6 +4,6 @@
 
 include examples/etsi_test/include.am
 include examples/middlebox/include.am
-include examples/tls/include.am
+include examples/https/include.am
 
 EXTRA_DIST += examples/test_config.h

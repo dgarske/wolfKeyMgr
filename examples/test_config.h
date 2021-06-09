@@ -39,21 +39,21 @@ extern "C" {
 #define ETSI_TEST_CLIENT_PASS     "wolfssl"
 #define ETSI_TEST_CLIENT_CERT     "certs/client-cert.pem"
 
-/* TLS testing configuration */
-#define TLS_TEST_HOST             "localhost"
-#define TLS_TEST_PORT             443
-#define TLS_TEST_TIMEOUT_SEC      30
-#define TLS_TEST_MAX_DATA         512
+/* HTTPS testing configuration */
+#define HTTPS_TEST_HOST           "localhost"
+#define HTTPS_TEST_PORT           443
+#define HTTPS_TEST_TIMEOUT_SEC    30
+#define HTTPS_TEST_MAX_DATA       512
 
 /* see ./certs/test-cert.sh for generation and signing */
 /* this is a self signed test cert server presents */
-#define TLS_TEST_CA               "certs/test-cert.pem"
-#define TLS_TEST_CERT             "certs/test-cert.pem"
-#define TLS_TEST_KEY              "certs/test-key.pem"
+#define HTTPS_TEST_CA             "certs/test-cert.pem"
+#define HTTPS_TEST_CERT           "certs/test-cert.pem"
+#define HTTPS_TEST_KEY            "certs/test-key.pem"
 
 /* HTTP */
-#define TEST_HTTP_GET_REQUEST     "/index.html"
-#define TEST_HTTP_RESPONSE        "<html><body><h1>It works!</h1></body></html>"
+#define HTTPS_TEST_REQUEST       "/index.html"
+#define HTTPS_TEST_RESPONSE      "<html><body><h1>It works!</h1></body></html>"
 
 
 #ifdef __cplusplus

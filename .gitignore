@@ -40,8 +40,8 @@ diff
 src/wolfkeymgr
 examples/middlebox/decrypt
 examples/etsi_test/etsi_test
-examples/tls/client
-examples/tls/server
+examples/https/client
+examples/https/server
 libtool
 wolfkeymgr/options.h
 

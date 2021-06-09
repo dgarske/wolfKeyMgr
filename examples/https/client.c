@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
     WOLFSSL_CTX* ctx;
     WOLFSSL* ssl = NULL;
     HttpRsp rsp;
-    byte data[TLS_TEST_MAX_DATA];
+    byte data[HTTPS_TEST_MAX_DATA];
     int dataSz = (int)sizeof(data);
     
     wolfSSL_Init();
@@ -41,16 +41,16 @@ int main(int argc, char* argv[])
     ctx = wolfTlsClientNew();
     if (ctx == NULL) { ret = WOLFKM_BAD_MEMORY; goto exit; }
 
-    ret = wolfTlsAddCA(ctx, TLS_TEST_CA);
+    ret = wolfTlsAddCA(ctx, HTTPS_TEST_CA);
     if (ret != 0) goto exit;
 
-    printf("TLS Connect %s:%d\n", TLS_TEST_HOST, TLS_TEST_PORT);
-    ret = wolfTlsConnect(ctx, &ssl, TLS_TEST_HOST, TLS_TEST_PORT,
-        TLS_TEST_TIMEOUT_SEC);
+    printf("TLS Connect %s:%d\n", HTTPS_TEST_HOST, HTTPS_TEST_PORT);
+    ret = wolfTlsConnect(ctx, &ssl, HTTPS_TEST_HOST, HTTPS_TEST_PORT,
+        HTTPS_TEST_TIMEOUT_SEC);
     if (ret != 0) goto exit;
 
     dataSz = (int)sizeof(data);
-    ret = wolfHttpClient_EncodeRequest(HTTP_METHOD_GET, TEST_HTTP_GET_REQUEST,
+    ret = wolfHttpClient_EncodeRequest(HTTP_METHOD_GET, HTTPS_TEST_REQUEST,
         data, (word32*)&dataSz, NULL, 0);
     if (ret != 0) goto exit;
     printf("HTTPS Sending: %s\n", data);
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
     if (ret < 0) goto exit;
 
     dataSz = (int)sizeof(data);
-    ret = wolfTlsRead(ssl, data, &dataSz, TLS_TEST_TIMEOUT_SEC);
+    ret = wolfTlsRead(ssl, data, &dataSz, HTTPS_TEST_TIMEOUT_SEC);
     if (ret < 0) goto exit;
 
     ret = wolfHttpClient_ParseResponse(&rsp, (char*)data, dataSz);
@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
 exit:
 
     if (ret < 0) {
-        printf("TLS Client Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
+        printf("HTTPS Client Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
     }
 
     if (ssl)

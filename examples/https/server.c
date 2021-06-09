@@ -40,15 +40,15 @@ int main(int argc, char* argv[])
     WOLFSSL_CTX* ctx;
     WOLFSSL* ssl = NULL;
     HttpReq req;
-    byte data[TLS_TEST_MAX_DATA];
+    byte data[HTTPS_TEST_MAX_DATA];
     int dataSz;
     HttpHeader headers[2];
-    const char* body = TEST_HTTP_RESPONSE;
+    const char* body = HTTPS_TEST_RESPONSE;
     SOCKADDR_IN_T clientAddr;
 
     signal(SIGINT, sig_handler);
 
-    printf("TLS Server: Port %d\n", TLS_TEST_PORT);
+    printf("HTTPS Server: Port %d\n", HTTPS_TEST_PORT);
 
     wolfSSL_Init();
     
@@ -59,20 +59,20 @@ int main(int argc, char* argv[])
     ctx = wolfTlsServerNew();
     if (ctx == NULL) { ret = WOLFKM_BAD_MEMORY; goto exit; }
 
-    ret = wolfTlsAddCA(ctx, TLS_TEST_CA);
+    ret = wolfTlsAddCA(ctx, HTTPS_TEST_CA);
     if (ret != 0) goto exit;
 
-    ret = wolfTlsSetKey(ctx, TLS_TEST_KEY, NULL, TLS_TEST_CERT,
+    ret = wolfTlsSetKey(ctx, HTTPS_TEST_KEY, NULL, HTTPS_TEST_CERT,
         WOLFSSL_FILETYPE_PEM);
     if (ret != 0) goto exit;
 
     /* setup listener */
-    ret = wolfSockListen(&listenFd, TLS_TEST_PORT);
+    ret = wolfSockListen(&listenFd, HTTPS_TEST_PORT);
     if (ret != 0) goto exit;
 
     do {
         ret = wolfTlsAccept(ctx, listenFd, &ssl, &clientAddr,
-            TLS_TEST_TIMEOUT_SEC);
+            HTTPS_TEST_TIMEOUT_SEC);
         if (ret == WOLFKM_BAD_TIMEOUT) continue;
         if (ret != 0) goto exit;
         
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
 
         /* Get HTTP request and print */
         dataSz = (int)sizeof(data);
-        ret = wolfTlsRead(ssl, data, &dataSz, TLS_TEST_TIMEOUT_SEC);
+        ret = wolfTlsRead(ssl, data, &dataSz, HTTPS_TEST_TIMEOUT_SEC);
         if (ret < 0) goto exit;
         
         ret = wolfHttpServer_ParseRequest(&req, data, dataSz);
@@ -111,7 +111,7 @@ exit:
         }
 
         if (ret < 0) {
-            printf("TLS Server Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
+            printf("HTTPS Server Error %d: %s\n", ret, wolfTlsGetErrorStr(ret));
         }
     } while (mStop == 0);
 

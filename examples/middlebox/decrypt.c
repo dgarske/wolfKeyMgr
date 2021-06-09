@@ -544,7 +544,7 @@ int main(int argc, char** argv)
         ret = pcap_activate(pcap);
         if (ret != 0) printf("pcap_activate failed %s\n", pcap_geterr(pcap));
 
-        portDef = TLS_TEST_PORT;
+        portDef = HTTPS_TEST_PORT;
         printf("Enter the port to scan [default: %d]: ", portDef);
         memset(cmdLineArg, 0, sizeof(cmdLineArg));
         if (fgets(cmdLineArg, sizeof(cmdLineArg), stdin)) {
