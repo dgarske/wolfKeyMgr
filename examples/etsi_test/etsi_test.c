@@ -178,7 +178,8 @@ static void Usage(void)
     printf("-w <pass>   TLS Client Key Password, default %s\n", ETSI_TEST_CLIENT_PASS);
     printf("-c <pem>    TLS Client Certificate, default %s\n", ETSI_TEST_CLIENT_CERT);
     printf("-A <pem>    TLS CA Certificate, default %s\n", ETSI_TEST_CLIENT_CA);
-    printf("-K <keyt>   Key Type: SECP256R1 (default), FFDHE_2048, X25519 or X448\n");
+    printf("-K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default %s)\n",
+        wolfEtsiKeyGetTypeStr(ETSI_TEST_KEY_TYPE));
 }
 
 int main(int argc, char** argv)
@@ -201,7 +202,7 @@ int main(int argc, char** argv)
     info.clientCertFile = ETSI_TEST_CLIENT_CERT;
     info.caFile = ETSI_TEST_CLIENT_CA;
     info.useGet = 1;
-    info.keyType = ETSI_KEY_TYPE_SECP256R1;
+    info.keyType = ETSI_TEST_KEY_TYPE;
 
     /* argument processing */
     while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:")) != -1) {

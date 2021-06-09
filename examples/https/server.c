@@ -21,10 +21,14 @@
 
 #include "wolfkeymgr/mod_tls.h"
 #include "wolfkeymgr/mod_http.h"
+#include "wolfkeymgr/mod_etsi.h"
 #include "examples/test_config.h"
 
 static volatile int mStop = 0;
 static WKM_SOCKET_T listenFd = WKM_SOCKET_INVALID;
+
+static EtsiClientCtx* gEtsiClient;
+static int etsi_client_get(WOLFSSL* ssl);
 
 static void sig_handler(const int sig)
 {
@@ -78,6 +82,9 @@ int main(int argc, char* argv[])
         
         printf("TLS Accept %s\n", wolfSocketAddrStr(&clientAddr));
 
+        ret = etsi_client_get(ssl);
+        if (ret != 0) goto exit;
+
         /* Get HTTP request and print */
         dataSz = (int)sizeof(data);
         ret = wolfTlsRead(ssl, data, &dataSz, HTTPS_TEST_TIMEOUT_SEC);
@@ -122,5 +129,60 @@ exit:
 
     wolfSSL_Cleanup();
 
+    return ret;
+}
+
+/* ETSI Client */
+static void etsi_client_cleanup(void)
+{
+    if (gEtsiClient) {
+        wolfEtsiClientFree(gEtsiClient);
+        gEtsiClient = NULL;
+
+        wolfEtsiClientCleanup();
+    }
+}
+static int etsi_client_get(WOLFSSL* ssl)
+{
+    int ret = -1;
+    static EtsiKey key;
+    
+    /* setup key manager connection */
+    if (gEtsiClient == NULL) {
+        wolfEtsiClientInit();
+
+        gEtsiClient = wolfEtsiClientNew();
+        if (gEtsiClient) {
+            wolfEtsiClientAddCA(gEtsiClient, ETSI_TEST_CLIENT_CA);
+            wolfEtsiClientSetKey(gEtsiClient,
+                ETSI_TEST_CLIENT_KEY, ETSI_TEST_CLIENT_PASS,
+                ETSI_TEST_CLIENT_CERT, WOLFSSL_FILETYPE_PEM);
+
+            ret = wolfEtsiClientConnect(gEtsiClient, ETSI_TEST_HOST,
+                ETSI_TEST_PORT, ETSI_TEST_TIMEOUT_MS);
+            if (ret != 0) {
+                printf("Error connecting to ETSI server! %d\n", ret);
+                etsi_client_cleanup();
+            }
+        }
+        else {
+            ret = MEMORY_E;
+        }
+    }
+    if (gEtsiClient) {
+        ret = wolfEtsiClientGet(gEtsiClient, &key, ETSI_TEST_KEY_TYPE, 
+            NULL, NULL, ETSI_TEST_TIMEOUT_MS);
+        /* positive return means new key returned */
+        /* zero means, same key is used */
+        /* negative means error */
+        if (ret < 0) {
+            printf("Error getting ETSI static ephemeral key! %d\n", ret);
+            etsi_client_cleanup();
+        }
+        else {
+            printf("Got ETSI static ephemeral key (%d bytes)\n", key.responseSz);
+            ret = wolfEtsiKeyLoadSSL(&key, ssl);
+        }
+    }
     return ret;
 }

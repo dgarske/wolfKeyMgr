@@ -31,6 +31,7 @@ extern "C" {
 #define ETSI_TEST_PORT            8119
 #define ETSI_TEST_PORT_STR        "8119"
 #define ETSI_TEST_TIMEOUT_MS      2
+#define ETSI_TEST_KEY_TYPE        ETSI_KEY_TYPE_SECP256R1
 
 /* example certificate and key for mutual authentication to key manager */
 /* see ./certs/test-cert.sh for generation and signing */

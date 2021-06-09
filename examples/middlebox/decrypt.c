@@ -123,7 +123,6 @@ pcap_if_t* alldevs = NULL;
 
 
 static EtsiClientCtx* gEtsiClient;
-static HttpUrl gUrl;
 
 static void etsi_client_cleanup(void)
 {
@@ -138,6 +137,7 @@ static void etsi_client_cleanup(void)
 static int etsi_client_get(char* urlStr, EtsiKey* key)
 {
     int ret = -1;
+    static HttpUrl url;
     
     /* setup key manager connection */
     if (gEtsiClient == NULL) {
@@ -151,11 +151,11 @@ static int etsi_client_get(char* urlStr, EtsiKey* key)
                 ETSI_TEST_CLIENT_CERT, WOLFSSL_FILETYPE_PEM);
 
             if (urlStr) {
-                memset(&gUrl, 0, sizeof(gUrl));
-                wolfHttpUrlDecode(&gUrl, urlStr);
+                memset(&url, 0, sizeof(url));
+                wolfHttpUrlDecode(&url, urlStr);
             }
 
-            ret = wolfEtsiClientConnect(gEtsiClient, gUrl.domain, gUrl.port,
+            ret = wolfEtsiClientConnect(gEtsiClient, url.domain, url.port,
                 ETSI_TEST_TIMEOUT_MS);
             if (ret != 0) {
                 printf("Error connecting to ETSI server! %d\n", ret);
@@ -168,7 +168,7 @@ static int etsi_client_get(char* urlStr, EtsiKey* key)
         }
     }
     if (gEtsiClient && key) {
-        ret = wolfEtsiClientGet(gEtsiClient, key, ETSI_KEY_TYPE_SECP256R1, 
+        ret = wolfEtsiClientGet(gEtsiClient, key, ETSI_TEST_KEY_TYPE, 
             NULL, NULL, ETSI_TEST_TIMEOUT_MS);
         /* positive return means new key returned */
         /* zero means, same key is used */
