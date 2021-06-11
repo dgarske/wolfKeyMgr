@@ -180,6 +180,7 @@ static int etsi_client_get(char* urlStr, EtsiKey* key)
             etsi_client_cleanup();
         }
         printf("Got ETSI static ephemeral key (%d bytes)\n", key->responseSz);
+        wolfEtsiKeyPrint(key);
     }
     return ret;
 }
@@ -462,7 +463,9 @@ int main(int argc, char** argv)
     ssl_InitSniffer();   /* dll load on Windows */
 #endif
 #ifdef DEBUG_WOLFSSL
+    /* log setup */
     //wolfSSL_Debugging_ON();
+    wolfKeyMgr_SetLogFile(NULL, 0, WOLFKM_LOG_DEBUG);
 #endif
     ssl_Trace("./tracefile.txt", err);
     ssl_EnableRecovery(1, -1, err);

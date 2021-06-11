@@ -530,6 +530,7 @@ int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx)
 
 int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl)
 {
+    int ret;
     int keyAlgo;
 
     if (key == NULL || ssl == NULL)
@@ -538,8 +539,13 @@ int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl)
     /* determine key algo */
     keyAlgo = wolfEtsiKeyGetPkType(key);
 
-    return wolfSSL_set_ephemeral_key(ssl, keyAlgo, 
+    ret = wolfSSL_set_ephemeral_key(ssl, keyAlgo, 
         key->response, key->responseSz, WOLFSSL_FILETYPE_ASN1);
+    if (ret == 0) {
+        /* TODO: handle return code */
+        (void)wolfSSL_UseKeyShare(ssl, key->type);
+    }
+    return ret;
 }
 
 int wolfEtsiKeyPrint(EtsiKey* key)

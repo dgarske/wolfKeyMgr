@@ -181,6 +181,7 @@ static int etsi_client_get(WOLFSSL* ssl)
         }
         else {
             printf("Got ETSI static ephemeral key (%d bytes)\n", key.responseSz);
+            wolfEtsiKeyPrint(&key);
             ret = wolfEtsiKeyLoadSSL(&key, ssl);
         }
     }
