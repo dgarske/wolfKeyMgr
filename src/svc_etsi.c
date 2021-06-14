@@ -232,7 +232,8 @@ static int GenNewKeyDh(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
 
     if (ret == 0) {
         /* export DH key as DER */
-        /* Note: Proper support for wc_DhPrivKeyToDer was added v4.8.0 or later (see PR 3832) */
+        /* Note: Proper support for wc_DhPrivKeyToDer was added v4.8.0 or 
+         *       later (see PR 3832) */
         svcCtx->key.responseSz = sizeof(svcCtx->key.response);
         ret = wc_DhPrivKeyToDer(&svcCtx->wolfKey.dh, (byte*)svcCtx->key.response,
             &svcCtx->key.responseSz);
@@ -617,7 +618,7 @@ SvcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int renewSec,
 
     ret = wc_InitRng(&svcCtx->rng);
     if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't make keygen worker\n");
+        XLOG(WOLFKM_LOG_ERROR, "Error initializing RNG %d\n", ret);
         return NULL;
     }
 
@@ -628,7 +629,7 @@ SvcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int renewSec,
 
     /* start key generation thread */
     if (pthread_create(&svcCtx->thread, NULL, KeyPushWorker, svc) != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't make keygen worker\n");
+        XLOG(WOLFKM_LOG_ERROR, "Error creating keygen worker\n");
         wolfEtsiSvc_Cleanup(svc);
         return NULL;
     }

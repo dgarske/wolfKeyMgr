@@ -29,7 +29,7 @@ static void Usage(void)
 {
     printf("%s\n", PACKAGE_STRING);
     printf("-?          Help, print this usage\n");
-    printf("-i          Don't chdir / in daemon mode\n");
+    printf("-i          Do not chdir / in daemon mode\n");
     printf("-b          Daemon mode, run in background\n");
     printf("-p <str>    Pid File name, default %s\n", WOLFKM_DEFAULT_PID);
     printf("-l <num>    Log Level (1=Error to 4=Debug), default %d\n", WOLFKM_DEFAULT_LOG_LEVEL);
@@ -169,7 +169,7 @@ int main(int argc, char** argv)
     /* Create daemon */
     if (daemon) {
         if (logName == NULL) {
-            perror("daemon mode needs a log file, can't write to stderr");
+            perror("daemon mode needs a log file, cannot write to stderr");
             exit(EXIT_FAILURE);
         }
         if (wolfKeyMgr_MakeDaemon(core == 0) == -1) {
@@ -266,7 +266,7 @@ int main(int argc, char** argv)
         ret = wolfKeyMgr_AddSigHandler(mainBase, &sigArgTerm, SIGTERM);
     }
     if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't add event for signal\n");
+        XLOG(WOLFKM_LOG_ERROR, "Error adding event for signal\n");
         ret = EXIT_FAILURE; goto exit;
     }
 

@@ -138,7 +138,7 @@ WOLFSSL_CTX* wolfTlsClientNew(void)
     ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
 #endif
     if (ctx == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS client context\n");
+        XLOG(WOLFKM_LOG_ERROR, "Error allocating TLS client context\n");
         return NULL;
     }
     wolfTlsInitCtxDefaults(ctx);
@@ -156,7 +156,7 @@ WOLFSSL_CTX* wolfTlsServerNew(void)
     ctx = wolfSSL_CTX_new(wolfTLSv1_2_server_method());
 #endif
     if (ctx == NULL) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't alloc TLS server context\n");
+        XLOG(WOLFKM_LOG_ERROR, "Error allocating TLS server context\n");
         return NULL;
     }
     wolfTlsInitCtxDefaults(ctx);
@@ -173,7 +173,7 @@ int wolfTlsAddCA(WOLFSSL_CTX* ctx, const char* caFile)
 
     ret = wolfSSL_CTX_load_verify_locations(ctx, caFile, NULL);
     if (ret != WOLFSSL_SUCCESS) {
-        XLOG(WOLFKM_LOG_ERROR, "Can't load TLS CA %s into context. Error: %s (%d)\n", 
+        XLOG(WOLFKM_LOG_ERROR, "Error loading TLS CA %s into context. Error: %s (%d)\n", 
             caFile, wolfSSL_ERR_reason_error_string(ret), ret);
         return WOLFKM_BAD_FILE;
     }

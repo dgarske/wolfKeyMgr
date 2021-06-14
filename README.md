@@ -191,7 +191,7 @@ Help using `-?`:
 $ ./src/wolfkeymgr -?
 wolfKeyManager 0.3
 -?          Help, print this usage
--i          Don't chdir / in daemon mode
+-i          Do not chdir / in daemon mode
 -b          Daemon mode, run in background
 -p <str>    Pid File name, default ./wolfkeymgr.pid
 -l <num>    Log Level (1=Error to 4=Debug), default 4

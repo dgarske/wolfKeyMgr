@@ -327,7 +327,7 @@ static int myWatchCb(void* vSniffer,
     }
 
     if (certName == NULL) {
-        /* don't return error if key is not loaded */
+        /* do not return error if key is not loaded */
         printf("Warning: No matching key found for cert hash\n");
         return 0;
     }
