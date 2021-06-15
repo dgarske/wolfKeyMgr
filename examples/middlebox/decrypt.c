@@ -661,7 +661,7 @@ int main(int argc, char** argv)
     }
     else {
         /* usage error */
-        printf( "usage: ./snifftest or ./snifftest dump pemKey"
+        printf( "usage: ./decrypt or ./decrypt dumpFile keyServerURL"
                 " [server] [port] [password]\n");
         exit(EXIT_FAILURE);
     }
