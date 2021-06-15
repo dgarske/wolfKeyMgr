@@ -179,8 +179,11 @@ static int etsi_client_get(char* urlStr, EtsiKey* key)
             /* cleanup */
             etsi_client_cleanup();
         }
-        printf("Got ETSI static ephemeral key (%d bytes)\n", key->responseSz);
-        wolfEtsiKeyPrint(key);
+        else {
+            printf("Got ETSI static ephemeral key (%d bytes)\n",
+                key->responseSz);
+            wolfEtsiKeyPrint(key);
+        }
     }
     return ret;
 }

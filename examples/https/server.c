@@ -179,10 +179,16 @@ static int etsi_client_get(WOLFSSL_CTX* ctx)
             printf("Error getting ETSI static ephemeral key! %d\n", ret);
             etsi_client_cleanup();
         }
-        else {
+        else if (ret > 0) {
+            /* got new key */
             printf("Got ETSI static ephemeral key (%d bytes)\n", key.responseSz);
             wolfEtsiKeyPrint(&key);
             ret = wolfEtsiKeyLoadCTX(&key, ctx);
+        }
+        else {
+            /* key has not changed */
+            printf("ETSI Key Cached (valid for %lu sec)\n",
+                key.expires - wolfGetCurrentTimeT());
         }
     }
     return ret;
