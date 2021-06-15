@@ -28,7 +28,7 @@ static volatile int mStop = 0;
 static WKM_SOCKET_T listenFd = WKM_SOCKET_INVALID;
 
 static EtsiClientCtx* gEtsiClient;
-static int etsi_client_get(WOLFSSL* ssl);
+static int etsi_client_get(WOLFSSL_CTX* ctx);
 
 static void sig_handler(const int sig)
 {
@@ -75,15 +75,15 @@ int main(int argc, char* argv[])
     if (ret != 0) goto exit;
 
     do {
+        ret = etsi_client_get(ctx);
+        if (ret != 0) goto exit;
+
         ret = wolfTlsAccept(ctx, listenFd, &ssl, &clientAddr,
             HTTPS_TEST_TIMEOUT_SEC);
         if (ret == WOLFKM_BAD_TIMEOUT) continue;
         if (ret != 0) goto exit;
         
         printf("TLS Accept %s\n", wolfSocketAddrStr(&clientAddr));
-
-        ret = etsi_client_get(ssl);
-        if (ret != 0) goto exit;
 
         /* Get HTTP request and print */
         dataSz = (int)sizeof(data);
@@ -142,7 +142,7 @@ static void etsi_client_cleanup(void)
         wolfEtsiClientCleanup();
     }
 }
-static int etsi_client_get(WOLFSSL* ssl)
+static int etsi_client_get(WOLFSSL_CTX* ctx)
 {
     int ret = -1;
     static EtsiKey key;
@@ -182,7 +182,7 @@ static int etsi_client_get(WOLFSSL* ssl)
         else {
             printf("Got ETSI static ephemeral key (%d bytes)\n", key.responseSz);
             wolfEtsiKeyPrint(&key);
-            ret = wolfEtsiKeyLoadSSL(&key, ssl);
+            ret = wolfEtsiKeyLoadCTX(&key, ctx);
         }
     }
     return ret;
