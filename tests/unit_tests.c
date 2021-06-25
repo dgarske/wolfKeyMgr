@@ -24,10 +24,18 @@
 int main(int argc, char** argv)
 {
     int ret;
+    enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
     wolfVaultCtx* ctx = NULL;
+
+    /* log setup */
+    wolfKeyMgr_SetLogFile(NULL, 0, logLevel);
+    printf("Key Manager Unit Test\n");
+
     ret = wolfVaultOpen(&ctx, "vault.bin", "password");
 
     printf("Vault Open Test: %s\n", ret == 0 ? "pass" : "fail");
 
     wolfVaultClose(ctx);
+
+    return ret;
 }

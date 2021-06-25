@@ -28,11 +28,13 @@ struct wolfVaultCtx {
     wolfSSL_Mutex lock;
 };
 
-#define VAULT_HEADER_ID  0x576F6C66UL /* Wolf */
+#define VAULT_HEADER_ID  0x576F6C66U /* Wolf */
 #define VAULT_HEADER_VER 1
 
-#define VAULT_SEC_TYPE_NONE 0
-#define VAULT_SEC_TYPE_PBKDF2_AESXTS256 1
+#define VAULT_SEC_TYPE_NONE             0 /* no encryption */
+#define VAULT_SEC_TYPE_RSA_AESXTS256    1 /* use RSA private key to decrypt the AES symmetric key */
+#define VAULT_SEC_TYPE_PBKDF2_AESXTS256 2 /* derive symmetric key using wc_PBKDF2 from password */
+
 
 typedef struct wolfVaultHeader {
     uint32_t id;
@@ -40,45 +42,6 @@ typedef struct wolfVaultHeader {
     uint32_t securityType;
     size_t   size;
 } wolfVaultHeader;
-
-#define DEBUG_CPUID
-static inline void GetCpuIdCmd(unsigned int *eax, unsigned int *ebx,
-                                unsigned int *ecx, unsigned int *edx)
-{
-    /* eax is used for input and output parameter */
-    asm volatile("cpuid"
-        : "=a" (*eax),
-          "=b" (*ebx),
-          "=c" (*ecx),
-          "=d" (*edx)
-        : "0" (*eax), "2" (*ecx));
-}
-static void GetCpuId(uint32_t* id1, uint32_t* id2)
-{
-    unsigned int eax, ebx, ecx, edx;
-
-    eax = 1; /* processor info and feature bits */
-    GetCpuIdCmd(&eax, &ebx, &ecx, &edx);
-
-#ifdef DEBUG_CPUID
-    printf("stepping %d\n", eax & 0xF);
-    printf("model %d\n", (eax >> 4) & 0xF);
-    printf("family %d\n", (eax >> 8) & 0xF);
-    printf("processor type %d\n", (eax >> 12) & 0x3);
-    printf("extended model %d\n", (eax >> 16) & 0xF);
-    printf("extended family %d\n", (eax >> 20) & 0xFF);
-#endif
-
-    eax = 3; /* processor serial number */
-    GetCpuIdCmd(&eax, &ebx, &ecx, &edx);
-#ifdef DEBUG_CPUID
-    printf("serial number 0x%08x%08x\n", edx, ecx);
-#endif
-    if (id1) *id1 = ecx;
-    if (id2) *id2 = edx;
-}
-
-//wc_PBKDF2
 
 size_t wolfVaultGetSize(wolfVaultCtx* ctx)
 {
@@ -90,16 +53,20 @@ size_t wolfVaultGetSize(wolfVaultCtx* ctx)
     return sz;
 }
 
+//int wolfVaultDecrypt(wolfVaultCtx* ctx)
+/* use the ETSI server RSA private key (WOLFKM_ETSISVC_KEY) to decrypt the AES symmetric key */
+//wc_PBKDF2
+
 int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
 {
     int ret = 0;
     wolfVaultCtx* ctx_new;
     wolfVaultHeader header;
-
-    GetCpuId(NULL, NULL);
+    size_t fileSize;
 
     if (ctx == NULL) 
         return WOLFKM_BAD_ARGS;
+
     ctx_new = (wolfVaultCtx*)malloc(sizeof(wolfVaultCtx));
     if (ctx_new == NULL)
         return WOLFKM_BAD_MEMORY;
@@ -132,18 +99,29 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
         /* read header */
         ret = fread(&header, 1, sizeof(header), ctx_new->fd);
         ret = (ret == sizeof(header)) ? 0 : WOLFKM_BAD_FILE;
-        
-        //header.size = wolfVaultGetSize(ctx_new);
+
+        fileSize = wolfVaultGetSize(ctx_new);
     }
     
     /* validate vault */
-    if (ret == 0 && header.id != VAULT_HEADER_ID)
+    if (ret == 0 && header.id != VAULT_HEADER_ID) {
+        XLOG(WOLFKM_LOG_ERROR, "Header ID mismatch %u != %u\n",
+            VAULT_HEADER_ID, header.id);
         ret = WOLFKM_BAD_FILE;
-    if (ret == 0 && header.version != VAULT_HEADER_VER)
+    }
+    if (ret == 0 && header.version != VAULT_HEADER_VER) {
+        XLOG(WOLFKM_LOG_ERROR, "Header version mismatch %u != %u\n",
+            VAULT_HEADER_VER, header.version);
         ret = WOLFKM_BAD_FILE;
+    }
+    if (ret == 0 && header.size != fileSize) {
+        XLOG(WOLFKM_LOG_ERROR, "Header size does not match actual %lu != %lu\n",
+            fileSize, header.size);
+        ret = WOLFKM_BAD_FILE;
+    }
     
     if (ret == 0) {
-        
+        XLOG(WOLFKM_LOG_INFO, "Vault %s opened (%d bytes)\n", file, fileSize);
     }
 
     if (ret != 0) {
