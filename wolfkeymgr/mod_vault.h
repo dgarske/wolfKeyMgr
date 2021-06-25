@@ -35,13 +35,39 @@ extern "C" {
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/pwdbased.h>
 
+#ifndef WOLFKM_VAULT_NAME_MAX_SZ
+#define WOLFKM_VAULT_NAME_MAX_SZ 64
+#endif
 
-typedef struct wolfVault_t {
-    int fd;
-} wolfVault_t;
+/* opaque type for wolfVaultCtx (pointer reference only) */
+typedef struct wolfVaultCtx wolfVaultCtx;
 
-WOLFKM_API int wolfVaultOpen(wolfVault_t* ctx, const char* file, const char* password);
-WOLFKM_API int wolfVaultClose(wolfVault_t* ctx);
+typedef struct wolfVaultItem {
+    char        name[WOLFKM_VAULT_NAME_MAX_SZ]; /* name is hash of public key or leading bits from it */
+    word32      type;
+    word32      timestamp;
+    word32      size;
+    const byte* data; /* always dynamic - only free using wolfVaultFreeItem */
+} wolfVaultItem;
+
+/* open vault file using password */
+WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password);
+/* add item to vault */
+WOLFKM_API int wolfVaultAdd(wolfVaultCtx* ctx, const char* name, word32 type, const byte* data, word32 dataSz);
+/* get copy of item from vault */
+WOLFKM_API int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, const char* name, word32 type, byte* data, word32* dataSz);
+/* search and return item from vault */
+WOLFKM_API int wolfVaultFind(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
+/* search next and return item from vault */
+WOLFKM_API int wolfVaultFindNext(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
+/* free a wolfVaultItem structure */
+WOLFKM_API int wolfVaultFreeItem(wolfVaultItem* item);
+/* delete a single item from the vault */
+WOLFKM_API int wolfVaultDelete(wolfVaultCtx* ctx, const char* name, word32 type);
+/* archive items older than specified date from vault */
+WOLFKM_API int wolfVaultArchive(wolfVaultCtx* ctx, word32 timestamp);
+/* close vault file */
+WOLFKM_API void wolfVaultClose(wolfVaultCtx* ctx);
 
 
 #ifdef __cplusplus
