@@ -43,11 +43,11 @@ extern "C" {
 typedef struct wolfVaultCtx wolfVaultCtx;
 
 typedef struct wolfVaultItem {
-    char        name[WOLFKM_VAULT_NAME_MAX_SZ]; /* name is hash of public key or leading bits from it */
-    word32      type;
-    word32      timestamp;
-    word32      size;
-    const byte* data; /* always dynamic - only free using wolfVaultFreeItem */
+    char   name[WOLFKM_VAULT_NAME_MAX_SZ]; /* name is hash of public key or leading bits from it */
+    word32 type;
+    time_t timestamp;
+    word32 size;
+    byte*  data; /* always dynamic - only free using wolfVaultFreeItem */
 } wolfVaultItem;
 
 /* open vault file using password */
@@ -55,7 +55,7 @@ WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* p
 /* add item to vault */
 WOLFKM_API int wolfVaultAdd(wolfVaultCtx* ctx, const char* name, word32 type, const byte* data, word32 dataSz);
 /* get copy of item from vault */
-WOLFKM_API int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, const char* name, word32 type, byte* data, word32* dataSz);
+WOLFKM_API int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, const char* name, word32 type);
 /* search and return item from vault */
 WOLFKM_API int wolfVaultFind(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
 /* search next and return item from vault */
