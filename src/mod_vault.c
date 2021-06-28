@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 
-#define VAULT_HEADER_ID  0x576F6C66U /* Wolf */
+#define VAULT_HEADER_ID  0x666C6F57U /* Wolf - little endian */
 #define VAULT_HEADER_VER 1
 
 #define VAULT_SEC_TYPE_NONE             0 /* no encryption */
@@ -39,10 +39,12 @@
 typedef struct VaultHeader {
     uint32_t id;
     uint32_t version;
-    uint32_t securityType;
-    size_t   size;
-    uint8_t  keyEncrypted[32];
-    uint8_t  hash[16]; /* SHA256 hash of entire file */
+    uint32_t headerSz;     /* size of header including id/version */
+    uint32_t securityType; /* see VAULT_SEC_TYPE_* */
+    uint32_t vaultCount;
+    size_t   vaultSize;    /* size not including header */
+    uint8_t  keyEnc[32];
+    uint8_t  hash[16];     /* SHA256 hash of entire file */
 } VaultHeader_t;
 
 typedef struct VaultItem {
@@ -88,7 +90,7 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
 {
     int ret = 0;
     wolfVaultCtx* ctx_new;
-    size_t fileSize;
+    size_t vaultSize;
 
     if (ctx == NULL) 
         return WOLFKM_BAD_ARGS;
@@ -110,46 +112,62 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
             memset(&ctx_new->header, 0, sizeof(VaultHeader_t));
             ctx_new->header.id = VAULT_HEADER_ID;
             ctx_new->header.version = VAULT_HEADER_VER;
+            ctx_new->header.headerSz = sizeof(VaultHeader_t);
             /* TODO: PBKDF2 with VAULT_SEC_TYPE_PBKDF2_AESXTS256 */
             ctx_new->header.securityType = VAULT_SEC_TYPE_NONE;
             (void)password;
-            fileSize = sizeof(VaultHeader_t);
-            ctx_new->header.size = fileSize;
             ret = (int)fwrite(&ctx_new->header, 1, sizeof(VaultHeader_t),
                 ctx_new->fd);
             ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
+            vaultSize = 0;
         }
         else {
             ret = WOLFKM_BAD_FILE;
         }
     }
     else {
-        /* read header */
-        ret = fread(&ctx_new->header, 1, sizeof(VaultHeader_t), ctx_new->fd);
-        ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
+        byte* headPtr = (byte*)&ctx_new->header;
+        uint32_t headSz = (uint32_t)sizeof(uint32_t)*3;
 
-        fileSize = wolfVaultGetSize(ctx_new);
+        /* read header - front (id, version and size) */
+        ret = fread(headPtr, 1, headSz, ctx_new->fd);
+        ret = (ret == headSz) ? 0 : WOLFKM_BAD_FILE;
+        headPtr += headSz;
+
+        /* validate vault header */
+        if (ret == 0 && ctx_new->header.id != VAULT_HEADER_ID) {
+            XLOG(WOLFKM_LOG_ERROR, "Header ID mismatch %u != %u\n",
+                VAULT_HEADER_ID, ctx_new->header.id);
+            ret = WOLFKM_BAD_FILE;
+        }
+        if (ret == 0 && ctx_new->header.version != VAULT_HEADER_VER) {
+            XLOG(WOLFKM_LOG_ERROR, "Header version mismatch %u != %u\n",
+                VAULT_HEADER_VER, ctx_new->header.version);
+            ret = WOLFKM_BAD_FILE;
+        }
+
+        if (ret == 0 && ctx_new->header.headerSz > sizeof(VaultHeader_t)) {
+            XLOG(WOLFKM_LOG_ERROR, "Header size invalid! %u != %u\n",
+                (uint32_t)sizeof(VaultHeader_t), ctx_new->header.headerSz);
+            ret = WOLFKM_BAD_FILE;
+        }
+
+        /* read remainder */
+        ret = (int)fread(headPtr, 1, ctx_new->header.headerSz-headSz, ctx_new->fd);
+        ret = (ret == ctx_new->header.headerSz-headSz) ? 0 : WOLFKM_BAD_FILE;
+
+        vaultSize = wolfVaultGetSize(ctx_new);
+        if (vaultSize > ctx_new->header.headerSz)
+            vaultSize -= ctx_new->header.headerSz;
+        if (ret == 0 && ctx_new->header.vaultSize != vaultSize) {
+            XLOG(WOLFKM_LOG_ERROR, "Vault size does not match actual %lu != %lu\n",
+                vaultSize, ctx_new->header.vaultSize);
+            ret = WOLFKM_BAD_FILE;
+        }
     }
-    
-    /* validate vault */
-    if (ret == 0 && ctx_new->header.id != VAULT_HEADER_ID) {
-        XLOG(WOLFKM_LOG_ERROR, "Header ID mismatch %u != %u\n",
-            VAULT_HEADER_ID, ctx_new->header.id);
-        ret = WOLFKM_BAD_FILE;
-    }
-    if (ret == 0 && ctx_new->header.version != VAULT_HEADER_VER) {
-        XLOG(WOLFKM_LOG_ERROR, "Header version mismatch %u != %u\n",
-            VAULT_HEADER_VER, ctx_new->header.version);
-        ret = WOLFKM_BAD_FILE;
-    }
-    if (ret == 0 && ctx_new->header.size != fileSize) {
-        XLOG(WOLFKM_LOG_ERROR, "Header size does not match actual %lu != %lu\n",
-            fileSize, ctx_new->header.size);
-        ret = WOLFKM_BAD_FILE;
-    }
-    
+
     if (ret == 0) {
-        XLOG(WOLFKM_LOG_INFO, "Vault %s opened (%lu bytes)\n", file, fileSize);
+        XLOG(WOLFKM_LOG_INFO, "Vault %s opened (%lu bytes)\n", file, vaultSize);
     }
     else {
         fclose(ctx_new->fd);
@@ -193,7 +211,8 @@ int wolfVaultAdd(wolfVaultCtx* ctx, const char* name, word32 type,
         ret = (ret == dataSz) ? 0 : WOLFKM_BAD_FILE;        
     }
     if (ret == 0) {
-        ctx->header.size += sizeof(ctx->item) + dataSz;
+        ctx->header.vaultCount++;
+        ctx->header.vaultSize += sizeof(ctx->item) + dataSz;
         /* TODO: Extend SHA or HMAC */
     }
     wc_UnLockMutex(&ctx->lock);
@@ -355,4 +374,16 @@ void wolfVaultClose(wolfVaultCtx* ctx)
     fclose(ctx->fd);
     wc_FreeMutex(&ctx->lock);
     free(ctx);
+}
+
+void wolfVaultPrintInfo(wolfVaultCtx* ctx)
+{
+    if (ctx == NULL)
+        return;
+
+    XLOG(WOLFKM_LOG_INFO, "Version: %d\n", ctx->header.version);
+    XLOG(WOLFKM_LOG_INFO, "Header Size: %d\n", ctx->header.headerSz);
+    XLOG(WOLFKM_LOG_INFO, "Security Type: %d\n", ctx->header.securityType);
+    XLOG(WOLFKM_LOG_INFO, "Item Count: %d\n", ctx->header.vaultCount);
+    XLOG(WOLFKM_LOG_INFO, "Total Size: %d\n", ctx->header.vaultSize);    
 }

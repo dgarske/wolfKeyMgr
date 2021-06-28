@@ -69,6 +69,7 @@ WOLFKM_API int wolfVaultArchive(wolfVaultCtx* ctx, word32 timestamp);
 /* close vault file */
 WOLFKM_API void wolfVaultClose(wolfVaultCtx* ctx);
 
+WOLFKM_API void wolfVaultPrintInfo(wolfVaultCtx* ctx);
 
 #ifdef __cplusplus
 }

@@ -34,6 +34,8 @@ static int vault_test(void)
 
     ret = wolfVaultOpen(&ctx, testFile, testPass);
     if (ret == 0) {
+        wolfVaultPrintInfo(ctx);
+
         ret = wolfVaultAdd(ctx, testName, testType,
             (const byte*)testData, strlen(testData)+1);
         if (ret == 0) {
