@@ -47,7 +47,7 @@ typedef struct wolfVaultItem {
     word32 type;
     time_t timestamp;
     word32 size;
-    byte*  data; /* always dynamic - only free using wolfVaultFreeItem */
+    byte*  data; /* always dynamic - free using wolfVaultFreeItem */
 } wolfVaultItem;
 
 /* open vault file using password */
@@ -61,7 +61,7 @@ WOLFKM_API int wolfVaultFind(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type
 /* search next and return item from vault */
 WOLFKM_API int wolfVaultFindNext(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
 /* free a wolfVaultItem structure */
-WOLFKM_API int wolfVaultFreeItem(wolfVaultItem* item);
+WOLFKM_API void wolfVaultFreeItem(wolfVaultItem* item);
 /* delete a single item from the vault */
 WOLFKM_API int wolfVaultDelete(wolfVaultCtx* ctx, const char* name, word32 type);
 /* archive items older than specified date from vault */

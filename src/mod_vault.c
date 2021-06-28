@@ -107,15 +107,17 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
         ctx_new->fd = fopen(file, "wb+");
         if (ctx_new->fd != NULL) {
             /* write header */
-            memset(&ctx_new->header, 0, sizeof(ctx_new->header));
+            memset(&ctx_new->header, 0, sizeof(VaultHeader_t));
             ctx_new->header.id = VAULT_HEADER_ID;
             ctx_new->header.version = VAULT_HEADER_VER;
             /* TODO: PBKDF2 with VAULT_SEC_TYPE_PBKDF2_AESXTS256 */
             ctx_new->header.securityType = VAULT_SEC_TYPE_NONE;
             (void)password;
-            ctx_new->header.size = sizeof(ctx_new->header);
-            ret = (int)fwrite(&ctx_new->header, 1, sizeof(ctx_new->header), ctx_new->fd);
-            ret = (ret == sizeof(ctx_new->header)) ? 0 : WOLFKM_BAD_FILE;
+            fileSize = sizeof(VaultHeader_t);
+            ctx_new->header.size = fileSize;
+            ret = (int)fwrite(&ctx_new->header, 1, sizeof(VaultHeader_t),
+                ctx_new->fd);
+            ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
         }
         else {
             ret = WOLFKM_BAD_FILE;
@@ -123,8 +125,8 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
     }
     else {
         /* read header */
-        ret = fread(&ctx_new->header, 1, sizeof(ctx_new->header), ctx_new->fd);
-        ret = (ret == sizeof(ctx_new->header)) ? 0 : WOLFKM_BAD_FILE;
+        ret = fread(&ctx_new->header, 1, sizeof(VaultHeader_t), ctx_new->fd);
+        ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
 
         fileSize = wolfVaultGetSize(ctx_new);
     }
@@ -219,7 +221,7 @@ int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, const char* name,
         item->type = type;
         item->timestamp = ctx->item.timestamp;
         item->size = ctx->item.dataSz;
-        ret = fseek(ctx->fd, ctx->item.headerPos + sizeof(VaultItem_t), SEEK_SET);
+        ret = fseek(ctx->fd, ctx->item.headerPos+sizeof(VaultItem_t), SEEK_SET);
         if (ret != 0)
             ret = WOLFKM_BAD_MEMORY;
         if (ret == 0) {
@@ -249,55 +251,108 @@ int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, const char* name,
 int wolfVaultFind(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type,
     word32 timestamp)
 {
+    int ret;
+
+    if (ctx == NULL || item == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    ret = wc_LockMutex(&ctx->lock);
+    if (ret != 0)
+        return ret;
+
     /* TODO: Implement find */
     (void)ctx;
     (void)item;
     (void)type;
     (void)timestamp;
+    wc_UnLockMutex(&ctx->lock);
     return WOLFKM_BAD_ARGS;
 }
 
 int wolfVaultFindNext(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type,
     word32 timestamp)
 {
+    int ret;
+
+    if (ctx == NULL || item == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    ret = wc_LockMutex(&ctx->lock);
+    if (ret != 0)
+        return ret;
+
     /* TODO: Implement find next */
     (void)ctx;
     (void)item;
     (void)type;
     (void)timestamp;
+    wc_UnLockMutex(&ctx->lock);
     return WOLFKM_BAD_ARGS;
 }
 
-int wolfVaultFreeItem(wolfVaultItem* item)
+void wolfVaultFreeItem(wolfVaultItem* item)
 {
     if (item && item->data != NULL) {
         free(item->data);
         item->data = NULL;
     }
-    return 0;
 }
 
 int wolfVaultDelete(wolfVaultCtx* ctx, const char* name, word32 type)
 {
+    int ret;
+
+    if (ctx == NULL || name == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    ret = wc_LockMutex(&ctx->lock);
+    if (ret != 0)
+        return ret;
+
     /* TODO: Implement delete */
     (void)ctx;
     (void)name;
     (void)type;
+    wc_UnLockMutex(&ctx->lock);
     return WOLFKM_BAD_ARGS;
 }
 
 int wolfVaultArchive(wolfVaultCtx* ctx, word32 timestamp)
 {
+    int ret;
+
+    if (ctx == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    ret = wc_LockMutex(&ctx->lock);
+    if (ret != 0)
+        return ret;
+
     /* TODO: Implement archive */
     (void)ctx;
     (void)timestamp;
+    wc_UnLockMutex(&ctx->lock);
     return WOLFKM_BAD_ARGS;
 }
 
 void wolfVaultClose(wolfVaultCtx* ctx)
 {
-    if (ctx) {
-        wc_FreeMutex(&ctx->lock);
-        free(ctx);
+    int ret;
+
+    if (ctx == NULL)
+        return;
+
+    ret = wc_LockMutex(&ctx->lock);
+    if (ret == 0) {
+        /* update with final header */
+        fseek(ctx->fd, 0, SEEK_SET);
+        ret = (int)fwrite(&ctx->header, 1, sizeof(VaultHeader_t), ctx->fd);
+        ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
+
+        wc_UnLockMutex(&ctx->lock);
     }
+
+    fclose(ctx->fd);
+    wc_FreeMutex(&ctx->lock);
+    free(ctx);
 }

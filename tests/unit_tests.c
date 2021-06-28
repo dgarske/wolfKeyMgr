@@ -21,21 +21,49 @@
 
 #include "wolfkeymgr/mod_vault.h"
 
+static int vault_test(void)
+{
+    int ret;
+    wolfVaultCtx* ctx = NULL;
+    wolfVaultItem item;
+    const char* testFile = "vault.bin";
+    const char* testPass = "password";
+    const char* testName = "testname";
+    const char* testData = "testdata";
+    word32 testType = 1;
+
+    ret = wolfVaultOpen(&ctx, testFile, testPass);
+    if (ret == 0) {
+        ret = wolfVaultAdd(ctx, testName, testType,
+            (const byte*)testData, strlen(testData)+1);
+        if (ret == 0) {
+            ret = wolfVaultGet(ctx, &item, testName, testType);
+            if (ret == 0) {
+                if (memcmp(item.data, testData, strlen(testData)+1) != 0) {
+                    printf("Vault item data test failed\n");
+                    ret = -1;
+                }
+                wolfVaultFreeItem(&item);
+            }
+        }
+
+        wolfVaultClose(ctx);
+    }
+    return ret;
+}
+
 int main(int argc, char** argv)
 {
     int ret;
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
-    wolfVaultCtx* ctx = NULL;
 
     /* log setup */
     wolfKeyMgr_SetLogFile(NULL, 0, logLevel);
     printf("Key Manager Unit Test\n");
 
-    ret = wolfVaultOpen(&ctx, "vault.bin", "password");
-
+    ret = vault_test();
     printf("Vault Open Test: %s\n", ret == 0 ? "pass" : "fail");
 
-    wolfVaultClose(ctx);
 
     return ret;
 }
