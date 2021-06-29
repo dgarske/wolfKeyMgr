@@ -121,18 +121,6 @@ esac
 # Checks for library functions.
 LIB_SOCKET_NSL
 
-# ETSI Service
-AC_ARG_ENABLE([etsisvc],
-    [AS_HELP_STRING([--enable-etsisvc],[Enable the ETSI key service (default: enabled)])],
-    [ ENABLED_ETSI_SERVICE=$enableval ],
-    [ ENABLED_ETSI_SERVICE=yes ]
-    )
-
-if test "x$ENABLED_ETSI_SERVICE" = "xyes"
-then
-    CFLAGS="$CFLAGS -DWOLFKM_ETSI_SERVICE"
-fi
-
 
 # SNIFFER
 AC_ARG_ENABLE([sniffer],
@@ -166,7 +154,6 @@ fi
 # The following AM_CONDITIONAL statements set flags for use in the Makefiles.
 # Some of these affect build targets and objects, some trigger different
 # test scripts for make check.
-AM_CONDITIONAL([BUILD_ETSI_SERVICE],[test "x$ENABLED_ETSI_SERVICE" = "xyes"])
 AM_CONDITIONAL([BUILD_SNIFFER],[test "x$ENABLED_SNIFFER" = "xyes"])
 AM_CONDITIONAL([BUILD_VAULT],[test "x$ENABLED_VAULT" = "xyes"])
 
@@ -267,6 +254,5 @@ echo "   * CPP Flags:                 $CPPFLAGS"
 echo "   * LIB Flags:                 $LIB"
 echo "   * Debug enabled:             $ax_enable_debug"
 
-echo "   * ETSI Service               $ENABLED_ETSI_SERVICE"
 echo "   * Vault                      $ENABLED_VAULT"
 echo "   * Sniffer                    $ENABLED_SNIFFER"

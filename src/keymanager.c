@@ -32,6 +32,7 @@ static void Usage(void)
     printf("-i          Do not chdir / in daemon mode\n");
     printf("-b          Daemon mode, run in background\n");
     printf("-p <str>    Pid File name, default %s\n", WOLFKM_DEFAULT_PID);
+    printf("-P <port>   Listener port, default %s\n", WOLFKM_ETSISVC_PORT);
     printf("-l <num>    Log Level (1=Error to 4=Debug), default %d\n", WOLFKM_DEFAULT_LOG_LEVEL);
     printf("-f <str>    Log file name, default %s\n",
                           WOLFKM_DEFAULT_LOG_NAME ? WOLFKM_DEFAULT_LOG_NAME : "None");
@@ -47,6 +48,7 @@ static void Usage(void)
     printf("-A <pem>    TLS CA Certificate, default %s\n", WOLFKM_ETSISVC_CA);
     printf("-K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default %s)\n",
         wolfEtsiKeyGetTypeStr(WOLFKM_ETSISVC_DEF_KEY_TYPE));
+    printf("-v <file>   Vault file for key storage, default %s\n", WOLFKM_ETSISVC_VAULT);
 }
 
 static int wolfKeyMgr_AddSigHandler(struct event_base* mainBase,
@@ -82,9 +84,11 @@ int main(int argc, char** argv)
     const char* caCert = WOLFKM_ETSISVC_CA;
     SignalArg sigArgInt, sigArgTerm;
     EtsiKeyType keyTypeDef = WOLFKM_ETSISVC_DEF_KEY_TYPE;
+    const char* vaultFile = WOLFKM_ETSISVC_VAULT;
+    const char* listenPort = WOLFKM_ETSISVC_PORT;
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?bis:t:o:f:l:dk:w:c:A:r:K:")) != -1) {
+    while ((ch = getopt(argc, argv, "?bis:t:o:f:l:dk:w:c:A:r:K:v:p:P:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -114,6 +118,9 @@ int main(int argc, char** argv)
                 break;
             case 'p' :
                 pidName = optarg;
+                break;
+            case 'P':
+                listenPort = optarg;
                 break;
             case 'l' :
                 logLevel = atoi(optarg);
@@ -160,6 +167,9 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+            case 'v':
+                vaultFile = optarg;
+                break;
             default:
                 Usage();
                 exit(EX_USAGE);
@@ -230,29 +240,39 @@ int main(int argc, char** argv)
     wolfKeyMgr_SetMaxFiles(maxFiles);
 
     /********** ETSI Service **********/
-    etsiSvc = wolfEtsiSvc_Init(mainBase, renewSec, keyTypeDef);
+    etsiSvc = wolfEtsiSvc_Init(renewSec, keyTypeDef);
     if (etsiSvc) {
         /* set socket timeut */
         wolfKeyMgr_SetTimeout(etsiSvc, timeoutSec);
 
         ret = wolfKeyMgr_LoadCAFile(etsiSvc, caCert, WOLFSSL_FILETYPE_PEM);
         if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS CA cert\n");
+            XLOG(WOLFKM_LOG_ERROR, "Error %d loading ETSI TLS CA cert\n", ret);
+            goto exit;
         }
 
         ret = wolfKeyMgr_LoadKeyFile(etsiSvc, serverKey, 
             WOLFSSL_FILETYPE_PEM, serverKeyPass);
         if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS key\n");
+            XLOG(WOLFKM_LOG_ERROR, "Error %d loading ETSI TLS key\n", ret);
+            goto exit;
         }
 
         ret = wolfKeyMgr_LoadCertFile(etsiSvc, serverCert, 
             WOLFSSL_FILETYPE_PEM);
         if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI TLS certificate\n");
+            XLOG(WOLFKM_LOG_ERROR, "Error %d loading ETSI TLS certificate\n", ret);
+            goto exit;
         }
 
-        etsiSvc->disableMutalAuth = disableMutualAuth;
+        /* open vault and use server key for encryption */
+        ret = wolfEtsiSvc_SetVaultFile(etsiSvc, vaultFile);
+        if (ret != 0) {
+            XLOG(WOLFKM_LOG_ERROR, "Error opening vault: %d\n", ret);
+            goto exit;
+        }
+
+        wolfEtsiSvc_Start(etsiSvc, mainBase, listenPort);
 
         /* thread setup - cleanup handled in sigint handler */
         wolfKeyMgr_ServiceInit(etsiSvc, poolSize);

@@ -19,8 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifdef WOLFKM_ETSI_SERVICE
-
 #include "wolfkeymgr/mod_etsi.h"
 #include <signal.h>
 
@@ -899,5 +897,3 @@ void wolfEtsiClientCleanup(void)
 {
     wolfSSL_Cleanup();
 }
-
-#endif /* WOLFKM_ETSI_SERVICE */

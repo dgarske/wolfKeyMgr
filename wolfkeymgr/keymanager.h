@@ -47,6 +47,25 @@
 #define WOLFKM_DEFAULT_LOG_NAME     NULL
 #define WOLFKM_DEFAULT_PID          "./wolfkeymgr.pid"
 
+#define WOLFKM_ETSISVC_PORT         "8119"
+#define WOLFKM_ETSISVC_KEY_PASSWORD "wolfssl"
+#define WOLFKM_ETSISVC_CA           "./certs/ca-cert.pem"
+#define WOLFKM_ETSISVC_KEY          "./certs/server-key.pem"
+#define WOLFKM_ETSISVC_CERT         "./certs/server-cert.pem"
+#define WOLFKM_ETSISVC_VAULT        "./wolfkeymgr.vault"
+
+/* Determine default ETSI key type */
+#ifndef WOLFKM_ETSISVC_DEF_KEY_TYPE
+    #ifdef HAVE_ECC
+        #define WOLFKM_ETSISVC_DEF_KEY_TYPE  ETSI_KEY_TYPE_SECP256R1
+    #elif !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
+        #define WOLFKM_ETSISVC_DEF_KEY_TYPE  ETSI_KEY_TYPE_FFDHE_2048
+    #elif defined(HAVE_CURVE25519)
+        #define WOLFKM_ETSISVC_DEF_KEY_TYPE  ETSI_KEY_TYPE_X25519
+    #elif defined(HAVE_CURVE448)
+        #define WOLFKM_ETSISVC_DEF_KEY_TYPE  ETSI_KEY_TYPE_X25519
+    #endif
+#endif
 
 /* program constants */
 enum ProgramConstMisc {

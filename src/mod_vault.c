@@ -57,11 +57,15 @@ typedef struct VaultItem {
 #define VAULT_ITEM_SZ(item)      (VAULT_ITEM_HEAD_SZ(item) + (item)->dataSz)
 
 struct wolfVaultCtx {
-    FILE*          fd;
-    wolfSSL_Mutex  lock;
-    VaultHeader_t  header;
-    VaultItem_t    item;    /* cached last item */
-    size_t         itemPos; /* cached last item position in file */
+    FILE*           fd;
+    wolfSSL_Mutex   lock;
+    VaultHeader_t   header;
+    VaultItem_t     item;    /* cached last item */
+    size_t          itemPos; /* cached last item position in file */
+
+    uint32_t        securityType; /* see VAULT_SEC_TYPE_* */
+    VaultAuthCbFunc authCb;
+    void*           authCbCtx;
 };
 
 static size_t wolfVaultGetSize(wolfVaultCtx* ctx)
@@ -186,19 +190,14 @@ static int wolfVaultDecrypt(wolfVaultCtx* ctx)
     /* Derive key based on password */
 #endif
 
-int wolfVaultAuth(wolfVaultCtx* ctx, word32 secType, const char* fileOrPassword)
+int wolfVaultAuth(wolfVaultCtx* ctx, word32 secType, VaultAuthCbFunc cb,
+    void* cbCtx)
 {
-    (void)ctx;
-    (void)secType;
-    (void)fileOrPassword;
-    return 0;
-}
-
-int wolfVaultAuthCb(wolfVaultCtx* ctx, word32 secType, VaultAuthCbFunc cb)
-{
-    (void)ctx;
-    (void)secType;
-    (void)cb;
+    if (ctx) {
+        ctx->authCb = cb;
+        ctx->authCbCtx = cbCtx;
+        ctx->securityType = secType;
+    }
     return 0;
 }
 

@@ -24,8 +24,6 @@
 #include "wolfkeymgr/mod_etsi.h"
 #include "wolfkeymgr/mod_vault.h"
 
-#ifdef WOLFKM_ETSI_SERVICE
-
 /* shared context for worker threads */
 typedef struct EtsiSvcCtx {
     /* latest shared key data */
@@ -387,15 +385,9 @@ void wolfEtsiSvc_WorkerFree(SvcInfo* svc, void* svcThreadCtx)
     free((EtsiSvcThread*)svcThreadCtx);
 }
 
-#endif /* WOLFKM_ETSI_SERVICE */
-
-
-SvcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int renewSec,
-    EtsiKeyType keyTypeDef)
+SvcInfo* wolfEtsiSvc_Init(int renewSec, EtsiKeyType keyTypeDef)
 {
-#ifdef WOLFKM_ETSI_SERVICE
     int ret;
-    char* listenPort = WOLFKM_ETSISVC_PORT;
     SvcInfo* svc = &etsiService;
     EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)svc->svcCtx;
 
@@ -410,11 +402,23 @@ SvcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int renewSec,
     svcCtx->renewSec = renewSec;
     svcCtx->key.type = keyTypeDef;
 
+    return svc;
+}
+
+int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase, const char* listenPort)
+{
+    int ret;
+    EtsiSvcCtx* svcCtx;
+
+    if (svc == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    svcCtx = (EtsiSvcCtx*)svc->svcCtx;
+
     /* start key generation thread */
     if (pthread_create(&svcCtx->thread, NULL, KeyPushWorker, svc) != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error creating keygen worker\n");
-        wolfEtsiSvc_Cleanup(svc);
-        return NULL;
+        return WOLFKM_BAD_MEMORY;
     }
 
     /* setup listening events */
@@ -424,23 +428,14 @@ SvcInfo* wolfEtsiSvc_Init(struct event_base* mainBase, int renewSec,
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one ETSI listener,"
                                "already running?\n");
-        wolfEtsiSvc_Cleanup(svc);
-        return NULL;
     }
 
-    return svc;
-#else
-    (void)mainBase;
-    (void)renewSec;
-
-    return NULL;
-#endif
+    return ret;
 }
 
 void wolfEtsiSvc_Cleanup(SvcInfo* svc)
 {
     if (svc) {
-#ifdef WOLFKM_ETSI_SERVICE
         EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)svc->svcCtx;
 
         if (svc->keyBuffer) {
@@ -451,9 +446,54 @@ void wolfEtsiSvc_Cleanup(SvcInfo* svc)
             free(svc->certBuffer);
             svc->certBuffer = NULL;
         }
+    #ifdef WOLFKM_VAULT
+        if (svcCtx->vault) {
+            wolfVaultClose(svcCtx->vault);
+        }
+    #endif
 
         wc_FreeRng(&svcCtx->rng);
         pthread_mutex_destroy(&svcCtx->lock);
     }
+}
+
+static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, word32 secType, char* key,
+    word32* keySz, void* cbCtx)
+{
+    int ret = 0;
+    EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)cbCtx;
+
+    if (secType == VAULT_SEC_TYPE_RSA_AESXTS256) {
+    #if 0
+        /* TODO: use the RSA private key to decrypt the provided symmetric key */
+        svcCtx->keyBuffer
+        svcCtx->keyBufferSz
+        int wc_RsaPrivateDecryptInline(byte* in, word32 inLen, byte** out, RsaKey* key)
+    #endif
+    }
+    (void)key;
+    (void)keySz;
+    (void)svcCtx;
+    return ret;
+}
+
+int wolfEtsiSvc_SetVaultFile(SvcInfo* svc, const char* vaultFile)
+{
+    int ret = 0;
+    EtsiSvcCtx* svcCtx;
+    
+    if (svc == NULL || vaultFile == NULL)
+        return WOLFKM_BAD_ARGS;
+
+#ifdef WOLFKM_VAULT
+    svcCtx = (EtsiSvcCtx*)svc->svcCtx;
+    ret = wolfVaultOpen(&svcCtx->vault, vaultFile);
+    if (ret == 0) {
+        wolfVaultPrintInfo(svcCtx->vault);
+
+        ret = wolfVaultAuth(svcCtx->vault, VAULT_SEC_TYPE_RSA_AESXTS256,
+            wolfEtsiSvcVaultAuthCb, svcCtx);
+    }
 #endif
+    return ret;
 }

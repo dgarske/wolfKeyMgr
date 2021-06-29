@@ -789,10 +789,9 @@ static int InitServerTLS(SvcInfo* svc)
     }
 
     /* mutual authentication */
-    if (!svc->disableMutalAuth) {
-        wolfSSL_CTX_set_verify(svc->sslCtx, 
-            (WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT), NULL);
-    }
+    wolfSSL_CTX_set_verify(svc->sslCtx, 
+        (WOLFSSL_VERIFY_PEER | WOLFSSL_VERIFY_FAIL_IF_NO_PEER_CERT), NULL);
+
     return 0;
 }
 
@@ -1070,7 +1069,7 @@ FILE* wolfKeyMgr_GetPidFile(const char* pidFile, pid_t pid)
 /* try to add listeners on interface version
  * return count of listener interfaces added.
  */
-int wolfKeyMgr_AddListeners(SvcInfo* svc, int af_v, char* listenPort,
+int wolfKeyMgr_AddListeners(SvcInfo* svc, int af_v, const char* listenPort,
     struct event_base* mainBase)
 {
     int                     err;

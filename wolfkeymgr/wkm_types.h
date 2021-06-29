@@ -54,11 +54,9 @@
 #include <wolfssl/wolfcrypt/curve448.h>
 #endif
 
-#ifdef WOLFKM_ETSI_SERVICE
-    #if !defined(HAVE_ECC) && defined(NO_DH) && !defined(HAVE_CURVE25519) && \
-        !defined(HAVE_CURVE448)
-        #error This service requires ECC, DH, X25519 or X448 support
-    #endif
+#if !defined(HAVE_ECC) && defined(NO_DH) && !defined(HAVE_CURVE25519) && \
+    !defined(HAVE_CURVE448)
+    #error This service requires ECC, DH, X25519 or X448 support
 #endif
 
 
