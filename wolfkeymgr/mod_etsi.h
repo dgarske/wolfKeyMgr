@@ -99,10 +99,14 @@ typedef enum EtsiKeyType {
     ETSI_KEY_TYPE_MAX = ETSI_KEY_TYPE_FFDHE_8192,
 } EtsiKeyType;
 
+#define ETSI_MAX_KEY_NAME 64
+
 typedef struct EtsiKey {
     enum EtsiKeyType type;
-    char   response[ETSI_MAX_RESPONSE_SZ];
+    word32 nameSz;
+    byte   name[ETSI_MAX_KEY_NAME]; /* public info - first 32-bytes */
     word32 responseSz;
+    byte   response[ETSI_MAX_RESPONSE_SZ];
     time_t expires; /* from HTTP HTTP_HDR_EXPIRES */
 
     /* flags */
@@ -175,6 +179,8 @@ WOLFKM_API int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx);
 WOLFKM_API int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl);
 /* Get pointer to PKCS8 key response */
 WOLFKM_API int wolfEtsiKeyGet(EtsiKey* key, byte** response, word32* responseSz);
+/* Generate a new key */
+WOLFKM_API int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng);
 /* print ETSI key data - for debugging / testing */
 WOLFKM_API int  wolfEtsiKeyPrint(EtsiKey* key);
 /* release ETSI key resources */

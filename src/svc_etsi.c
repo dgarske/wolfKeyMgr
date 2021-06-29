@@ -22,6 +22,7 @@
 #include "wolfkeymgr/keymanager.h"
 #include "wolfkeymgr/mod_http.h"
 #include "wolfkeymgr/mod_etsi.h"
+#include "wolfkeymgr/mod_vault.h"
 
 #ifdef WOLFKM_ETSI_SERVICE
 
@@ -32,26 +33,13 @@ typedef struct EtsiSvcCtx {
     word32  renewSec;
     word32  index;
 
-    /* wolf key struct union */
-    union {
-    #ifdef HAVE_ECC
-        ecc_key ecc;
-    #endif
-    #if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
-        DhKey dh;
-    #endif
-    #ifdef HAVE_CURVE25519
-        curve25519_key x25519;
-    #endif
-    #ifdef HAVE_CURVE448
-        curve448_key x448;
-    #endif
-    } wolfKey;
-
-    /* Key Gen worker thread */
     WC_RNG          rng;
-    pthread_mutex_t lock; /* queue lock */
+    pthread_mutex_t lock;   /* shared lock */
     pthread_t       thread; /* key gen worker */
+
+#ifdef WOLFKM_VAULT
+    wolfVaultCtx*   vault; /* key vault */
+#endif
 } EtsiSvcCtx;
 static EtsiSvcCtx gSvcCtx;
 
@@ -93,244 +81,40 @@ typedef struct EtsiSvcConn {
     word32 groupNum;
 } EtsiSvcConn;
 
-#ifdef HAVE_ECC
-static int GenNewKeyEcc(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
+#ifdef WOLFKM_VAULT
+static int AddKeyToVault(EtsiSvcCtx* svcCtx, EtsiKey* key)
 {
-    int ret;
-    int curveId = ECC_CURVE_DEF, keySize = 32;
-
-    /* Determine ECC Key Size and Curve */
-    switch (keyType) {
-        case ETSI_KEY_TYPE_SECP160K1:
-            curveId = ECC_SECP160K1; keySize = 20; break;
-        case ETSI_KEY_TYPE_SECP160R1:
-            curveId = ECC_SECP160R1; keySize = 20; break;
-        case ETSI_KEY_TYPE_SECP160R2:
-            curveId = ECC_SECP160R2; keySize = 20; break;
-        case ETSI_KEY_TYPE_SECP192K1:
-            curveId = ECC_SECP192K1; keySize = 24; break;
-        case ETSI_KEY_TYPE_SECP192R1:
-            curveId = ECC_SECP192R1; keySize = 24; break;
-        case ETSI_KEY_TYPE_SECP224K1:
-            curveId = ECC_SECP224K1; keySize = 28; break;
-        case ETSI_KEY_TYPE_SECP224R1:
-            curveId = ECC_SECP224R1; keySize = 28; break;
-        case ETSI_KEY_TYPE_SECP256K1:
-            curveId = ECC_SECP256K1; keySize = 32; break;
-        case ETSI_KEY_TYPE_SECP256R1:
-            curveId = ECC_SECP256R1; keySize = 32; break;
-        case ETSI_KEY_TYPE_SECP384R1:
-            curveId = ECC_SECP384R1; keySize = 48; break;
-        case ETSI_KEY_TYPE_SECP521R1:
-            curveId = ECC_SECP521R1; keySize = 66; break;
-        case ETSI_KEY_TYPE_BRAINPOOLP256R1:
-            curveId = ECC_BRAINPOOLP256R1; keySize = 32; break;
-        case ETSI_KEY_TYPE_BRAINPOOLP384R1:
-            curveId = ECC_BRAINPOOLP384R1; keySize = 48; break;
-        case ETSI_KEY_TYPE_BRAINPOOLP512R1:
-            curveId = ECC_BRAINPOOLP512R1; keySize = 64; break;
-        default:
-            break;
+    if (svcCtx->vault == NULL) {
+        XLOG(WOLFKM_LOG_WARN, "AddKey: vault not open\n");
+        return 0; /* don't fail, just log warning */
     }
 
-    ret = wc_ecc_init(&svcCtx->wolfKey.ecc);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "ECC Init Failed! %d\n", ret);
-        return WOLFKM_BAD_KEY;
-    }
-        
-    ret = wc_ecc_make_key_ex(&svcCtx->rng, keySize, &svcCtx->wolfKey.ecc,
-        curveId);
-    if (ret == 0) {
-        /* Export as DER IETF RFC 5915 */
-        svcCtx->key.responseSz = sizeof(svcCtx->key.response);
-        ret = wc_EccKeyToDer(&svcCtx->wolfKey.ecc, (byte*)svcCtx->key.response,
-            svcCtx->key.responseSz);
-        if (ret >= 0) {
-            svcCtx->key.responseSz = ret;
-            ret = 0;
-        }
-    }
-
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "ECC Key Generation Failed! %d\n", ret);
-        wc_ecc_free(&svcCtx->wolfKey.ecc);
-    }
-
-    return ret;
+    return wolfVaultAdd(svcCtx->vault, key->type,
+        key->name, key->nameSz,
+        key->response, key->responseSz);
 }
 #endif
 
-#if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
-
-static int GenNewKeyDh(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
+static int GenNewKey(EtsiSvcCtx* svcCtx, EtsiKeyType keyType)
 {
-    int ret;
-    const DhParams* params = NULL;
-    word32 privKeySz = 0, pubKeySz = 0;
-    byte privKey[MAX_DH_PRIV_SZ];
-    byte pubKey[MAX_DH_PUB_SZ];
+    int ret = WOLFKM_NOT_COMPILED_IN;
+    const char* keyTypeStr = wolfEtsiKeyGetTypeStr(keyType);
 
-    switch (keyType) {
-    #ifdef HAVE_FFDHE_2048
-        case ETSI_KEY_TYPE_FFDHE_2048:
-            params = wc_Dh_ffdhe2048_Get(); privKeySz = 29; break;
-    #endif
-    #ifdef HAVE_FFDHE_3072
-        case ETSI_KEY_TYPE_FFDHE_3072:
-            params = wc_Dh_ffdhe3072_Get(); privKeySz = 34; break;
-    #endif
-    #ifdef HAVE_FFDHE_4096
-        case ETSI_KEY_TYPE_FFDHE_4096:
-            params = wc_Dh_ffdhe4096_Get(); privKeySz = 39; break;
-    #endif
-    #ifdef HAVE_FFDHE_6144
-        case ETSI_KEY_TYPE_FFDHE_6144:
-            params = wc_Dh_ffdhe6144_Get(); privKeySz = 46; break;
-    #endif
-    #ifdef HAVE_FFDHE_8192
-        case ETSI_KEY_TYPE_FFDHE_8192:
-            params = wc_Dh_ffdhe8192_Get(); privKeySz = 52; break;
-    #endif
-        default:
-            break;
+    if (keyTypeStr == NULL) {
+        return WOLFKM_BAD_ARGS;
     }
 
-    if (params == NULL) {
-        return WOLFKM_NOT_COMPILED_IN;
-    }
+    XLOG(WOLFKM_LOG_WARN, "Generating new %s key (index %d)\n",
+        keyTypeStr, svcCtx->index);
 
-    ret = wc_InitDhKey(&svcCtx->wolfKey.dh);
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DH Init Failed! %d\n", ret);
-        return WOLFKM_BAD_KEY;
-    }
-
-    /* Set key params */
-    ret = wc_DhSetKey(&svcCtx->wolfKey.dh,
-        params->p, params->p_len,
-        params->g, params->g_len);
-    if (ret == 0) {
-        /* Generate a new key pair */
-        pubKeySz = params->p_len;
-        ret = wc_DhGenerateKeyPair(&svcCtx->wolfKey.dh, &svcCtx->rng,
-            privKey, &privKeySz,
-            pubKey, &pubKeySz);
-    }
-    if (ret == 0) {
-        if (params->p_len != pubKeySz) {
-            /* Zero pad the front of the public key to match prime "p" size */
-            memmove(pubKey + params->p_len - pubKeySz, pubKey, pubKeySz);
-            memset(pubKey, 0, params->p_len - pubKeySz);
-        }
-
-        /* load public and private key info into DkKey */
-        ret = wc_DhImportKeyPair(&svcCtx->wolfKey.dh,
-            privKey, privKeySz,
-            pubKey, pubKeySz);
-    }
-
-    if (ret == 0) {
-        /* export DH key as DER */
-        /* Note: Proper support for wc_DhPrivKeyToDer was added v4.8.0 or 
-         *       later (see PR 3832) */
-        svcCtx->key.responseSz = sizeof(svcCtx->key.response);
-        ret = wc_DhPrivKeyToDer(&svcCtx->wolfKey.dh, (byte*)svcCtx->key.response,
-            &svcCtx->key.responseSz);
-        if (ret >= 0)
-            ret = 0; /* size is returned in keyBufSz */
-    }
-
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "DH Key Generation Failed! %d\n", ret);
-        wc_FreeDhKey(&svcCtx->wolfKey.dh);
-    }
-
-    return ret;
-}
-#endif /* !NO_DH */
-
-/* caller should lock svcCtx->lock */
-static void FreeSvcKey(EtsiSvcCtx* svcCtx)
-{
-    if (svcCtx == NULL || svcCtx->key.type == ETSI_KEY_TYPE_UNKNOWN) {
-        return;
-    }
-
-#ifdef HAVE_ECC
-    if (svcCtx->key.type >= ETSI_KEY_TYPE_SECP160K1 && 
-        svcCtx->key.type <= ETSI_KEY_TYPE_BRAINPOOLP512R1) {
-        wc_ecc_free(&svcCtx->wolfKey.ecc);
-    }
-#endif
-#if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
-    if (svcCtx->key.type >= ETSI_KEY_TYPE_FFDHE_2048 && 
-        svcCtx->key.type <= ETSI_KEY_TYPE_FFDHE_8192) {
-        wc_FreeDhKey(&svcCtx->wolfKey.dh);
-    }
-#endif
-#ifdef HAVE_CURVE25519
-    if (svcCtx->key.type == ETSI_KEY_TYPE_X25519) {
-        wc_curve25519_free(&svcCtx->wolfKey.x25519);
-    }
-#endif
-#ifdef HAVE_CURVE448
-    if (svcCtx->key.type == ETSI_KEY_TYPE_X448) {
-        wc_curve448_free(&svcCtx->wolfKey.x448);
-    }
-#endif
-    svcCtx->key.type = ETSI_KEY_TYPE_UNKNOWN;
-}
-
-static int GenNewKey(EtsiSvcCtx* svcCtx)
-{
-    int ret = NOT_COMPILED_IN;
-    EtsiKeyType keyType;
-
-    keyType = svcCtx->key.type;
-
-    /* Free old key type */
-    FreeSvcKey(svcCtx);
-
-#ifdef HAVE_ECC
-    if (keyType >= ETSI_KEY_TYPE_SECP160K1 && 
-        keyType <= ETSI_KEY_TYPE_BRAINPOOLP512R1) {
-        XLOG(WOLFKM_LOG_WARN, "Generating new %s key (index %d)\n",
-            wolfEtsiKeyGetTypeStr(keyType), svcCtx->index);
-        ret = GenNewKeyEcc(svcCtx, keyType);
-    }
-#endif
-#if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
-    if (keyType >= ETSI_KEY_TYPE_FFDHE_2048 && 
-        keyType <= ETSI_KEY_TYPE_FFDHE_8192) {
-        XLOG(WOLFKM_LOG_WARN, "Generating new %s key (index %d)\n",
-            wolfEtsiKeyGetTypeStr(keyType), svcCtx->index);
-        ret = GenNewKeyDh(svcCtx, keyType);
-    }
-#endif
-#ifdef HAVE_CURVE25519
-    if (keyType == ETSI_KEY_TYPE_X25519) {
-        /* TODO: X25519 Key Gen */
-        XLOG(WOLFKM_LOG_WARN, "Generating new X25519 key (index %d)\n",
-            svcCtx->index);
-    }
-#endif
-#ifdef HAVE_CURVE448
-    if (keyType == ETSI_KEY_TYPE_X448) {
-        /* TODO: X448 Key Gen */
-        //curveId = ECC_X448;
-        //keySize = 56;
-        XLOG(WOLFKM_LOG_WARN, "Generating new X448 key (index %d)\n",
-            svcCtx->index);
-    }
-#endif
-
+    ret = wolfEtsiKeyGen(&svcCtx->key, keyType, &svcCtx->rng);
     if (ret == 0) {
         svcCtx->key.expires = wolfGetCurrentTimeT() + svcCtx->renewSec;
-        svcCtx->key.type = keyType;
         svcCtx->index++;
 
-        wolfEtsiKeyPrint(&svcCtx->key);
+    #ifdef WOLFKM_VAULT
+        ret = AddKeyToVault(svcCtx, &svcCtx->key);
+    #endif
     }
 
     return ret;
@@ -384,7 +168,7 @@ static void* KeyPushWorker(void* arg)
     do {
         /* generate new key */
         pthread_mutex_lock(&svcCtx->lock);
-        ret = GenNewKey(svcCtx);
+        ret = GenNewKey(svcCtx, svcCtx->key.type);
         pthread_mutex_unlock(&svcCtx->lock);
         if (ret != 0) {
             XLOG(WOLFKM_LOG_ERROR, "ETSI Key Generation Failed %d\n", ret);
@@ -502,8 +286,7 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     if (etsiConn->groupNum > 0 && 
             etsiThread->keyType != (EtsiKeyType)etsiConn->groupNum) {
         pthread_mutex_lock(&svcCtx->lock);
-        svcCtx->key.type = (EtsiKeyType)etsiConn->groupNum;
-        ret = GenNewKey(svcCtx);
+        ret = GenNewKey(svcCtx, (EtsiKeyType)etsiConn->groupNum);
         if (ret == 0) {
             ret = SetupKeyPackage(svcCtx, etsiThread);
         }
@@ -669,7 +452,6 @@ void wolfEtsiSvc_Cleanup(SvcInfo* svc)
             svc->certBuffer = NULL;
         }
 
-        FreeSvcKey(svcCtx);
         wc_FreeRng(&svcCtx->rng);
         pthread_mutex_destroy(&svcCtx->lock);
     }
