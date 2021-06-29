@@ -23,25 +23,43 @@
 
 static int vault_test(void)
 {
-    int ret;
+    int ret, i;
     wolfVaultCtx* ctx = NULL;
     wolfVaultItem item;
     const char* testFile = "vault.bin";
     const char* testPass = "password";
-    const char* testName = "testname";
-    const char* testData = "testdata";
-    word32 testType = 1;
+    struct vaultTestItems {
+        word32 type;
+        const char* name;
+        const char* data;
+    } testItems[] = {
+        {1, "testname1", "testdata1"},
+        {2, "testname2", "testdata2"}
+    };
 
     ret = wolfVaultOpen(&ctx, testFile, testPass);
     if (ret == 0) {
         wolfVaultPrintInfo(ctx);
 
-        ret = wolfVaultAdd(ctx, testName, testType,
-            (const byte*)testData, strlen(testData)+1);
-        if (ret == 0) {
-            ret = wolfVaultGet(ctx, &item, testName, testType);
+        /* add items */
+        for (i=0; i<sizeof(testItems)/sizeof(struct vaultTestItems); i++) {
+            ret = wolfVaultAdd(ctx, testItems[i].type,
+                (const byte*)testItems[i].name, strlen(testItems[i].name)+1,
+                (const byte*)testItems[i].data, strlen(testItems[i].data)+1);
+            if (ret != 0) {
+                printf("Vault add failed: %d\n", ret);
+                break;
+            }
+        }
+        /* get items */
+        for (i=0; i<sizeof(testItems)/sizeof(struct vaultTestItems); i++) {
+            ret = wolfVaultGet(ctx, &item, testItems[i].type,
+                (const byte*)testItems[i].name, strlen(testItems[i].name)+1);
             if (ret == 0) {
-                if (memcmp(item.data, testData, strlen(testData)+1) != 0) {
+                if (item.dataSz != strlen(testItems[i].data)+1 ||
+                    memcmp(item.data,
+                        testItems[i].data, strlen(testItems[i].data)+1) != 0)
+                {
                     printf("Vault item data test failed\n");
                     ret = -1;
                 }

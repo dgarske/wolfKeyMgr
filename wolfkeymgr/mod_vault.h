@@ -43,19 +43,20 @@ extern "C" {
 typedef struct wolfVaultCtx wolfVaultCtx;
 
 typedef struct wolfVaultItem {
-    char   name[WOLFKM_VAULT_NAME_MAX_SZ]; /* name is hash of public key or leading bits from it */
     word32 type;
+    word32 nameSz;
+    word32 dataSz;
     time_t timestamp;
-    word32 size;
     byte*  data; /* always dynamic - free using wolfVaultFreeItem */
+    byte   name[WOLFKM_VAULT_NAME_MAX_SZ]; /* name is hash of public key or leading bits from it */
 } wolfVaultItem;
 
 /* open vault file using password */
 WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password);
 /* add item to vault */
-WOLFKM_API int wolfVaultAdd(wolfVaultCtx* ctx, const char* name, word32 type, const byte* data, word32 dataSz);
+WOLFKM_API int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz, const byte* data, word32 dataSz);
 /* get copy of item from vault */
-WOLFKM_API int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, const char* name, word32 type);
+WOLFKM_API int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, const byte* name, word32 nameSz);
 /* search and return item from vault */
 WOLFKM_API int wolfVaultFind(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
 /* search next and return item from vault */
@@ -63,7 +64,7 @@ WOLFKM_API int wolfVaultFindNext(wolfVaultCtx* ctx, wolfVaultItem* item, word32 
 /* free a wolfVaultItem structure */
 WOLFKM_API void wolfVaultFreeItem(wolfVaultItem* item);
 /* delete a single item from the vault */
-WOLFKM_API int wolfVaultDelete(wolfVaultCtx* ctx, const char* name, word32 type);
+WOLFKM_API int wolfVaultDelete(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz);
 /* archive items older than specified date from vault */
 WOLFKM_API int wolfVaultArchive(wolfVaultCtx* ctx, word32 timestamp);
 /* close vault file */
