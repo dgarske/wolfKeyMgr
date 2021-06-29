@@ -149,11 +149,26 @@ AS_IF([ test "x$ENABLED_SNIFFER" = "xyes" ],
           )
       ])
 
+# VAULT
+AC_ARG_ENABLE([vault],
+    [AS_HELP_STRING([--enable-vault],[Enable key storage and retrieval (default: enabled)])],
+    [ ENABLED_VAULT=$enableval ],
+    [ ENABLED_VAULT=yes ]
+    )
+
+if test "x$ENABLED_VAULT" = "xyes"
+then
+    CFLAGS="$CFLAGS -DWOLFKM_VAULT"
+fi
+
+
 
 # The following AM_CONDITIONAL statements set flags for use in the Makefiles.
 # Some of these affect build targets and objects, some trigger different
 # test scripts for make check.
 AM_CONDITIONAL([BUILD_ETSI_SERVICE],[test "x$ENABLED_ETSI_SERVICE" = "xyes"])
+AM_CONDITIONAL([BUILD_SNIFFER],[test "x$ENABLED_SNIFFER" = "xyes"])
+AM_CONDITIONAL([BUILD_VAULT],[test "x$ENABLED_VAULT" = "xyes"])
 
 
 # FINAL
@@ -253,3 +268,5 @@ echo "   * LIB Flags:                 $LIB"
 echo "   * Debug enabled:             $ax_enable_debug"
 
 echo "   * ETSI Service               $ENABLED_ETSI_SERVICE"
+echo "   * Vault                      $ENABLED_VAULT"
+echo "   * Sniffer                    $ENABLED_SNIFFER"

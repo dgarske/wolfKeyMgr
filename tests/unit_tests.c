@@ -23,7 +23,9 @@
 
 static int vault_test(void)
 {
-    int ret, i;
+    int ret = 0;
+#ifdef WOLFKM_VAULT
+    int i;
     wolfVaultCtx* ctx = NULL;
     wolfVaultItem item;
     const char* testFile = "vault.bin";
@@ -69,6 +71,7 @@ static int vault_test(void)
 
         wolfVaultClose(ctx);
     }
+#endif /* WOLFKM_VAULT */
     return ret;
 }
 

@@ -23,6 +23,7 @@
 #include "wolfssl/wolfcrypt/pwdbased.h"
 #include <stdio.h>
 
+#ifdef WOLFKM_VAULT
 
 #define VAULT_HEADER_ID  0x666C6F57U /* Wolf - little endian */
 #define VAULT_ITEM_ID    0x6B636150U /* Pack - little endian */
@@ -461,3 +462,5 @@ void wolfVaultPrintInfo(wolfVaultCtx* ctx)
     XLOG(WOLFKM_LOG_INFO, "Item Count: %d\n", ctx->header.vaultCount);
     XLOG(WOLFKM_LOG_INFO, "Total Size: %lu\n", ctx->header.vaultSz);    
 }
+
+#endif /* WOLFKM_VAULT */
