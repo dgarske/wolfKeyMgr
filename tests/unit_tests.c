@@ -27,7 +27,7 @@ static int vault_test(void)
     wolfVaultCtx* ctx = NULL;
     wolfVaultItem item;
     const char* testFile = "vault.bin";
-    const char* testPass = "password";
+    //const char* testPass = "password";
     struct vaultTestItems {
         word32 type;
         const char* name;
@@ -37,7 +37,7 @@ static int vault_test(void)
         {2, "testname2", "testdata2"}
     };
 
-    ret = wolfVaultOpen(&ctx, testFile, testPass);
+    ret = wolfVaultOpen(&ctx, testFile);
     if (ret == 0) {
         wolfVaultPrintInfo(ctx);
 

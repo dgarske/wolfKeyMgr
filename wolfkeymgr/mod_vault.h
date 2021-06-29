@@ -52,7 +52,18 @@ typedef struct wolfVaultItem {
 } wolfVaultItem;
 
 /* open vault file using password */
-WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password);
+WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file);
+
+
+#define VAULT_SEC_TYPE_NONE             0 /* no encryption */
+#define VAULT_SEC_TYPE_RSA_AESXTS256    1 /* use RSA private key to decrypt the AES symmetric key */
+#define VAULT_SEC_TYPE_PBKDF2_AESXTS256 2 /* derive symmetric key using wc_PBKDF2 from password */
+
+/* setup encryption for file - or authenticate existing */
+WOLFKM_API int wolfVaultAuth(wolfVaultCtx* ctx, word32 secType, const char* fileOrPassword);
+typedef int (*VaultAuthCbFunc)(wolfVaultCtx* ctx, word32 secType, char* key, word32 keySz);
+WOLFKM_API int wolfVaultAuthCb(wolfVaultCtx* ctx, word32 secType, VaultAuthCbFunc cb);
+
 /* add item to vault */
 WOLFKM_API int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz, const byte* data, word32 dataSz);
 /* get copy of item from vault */

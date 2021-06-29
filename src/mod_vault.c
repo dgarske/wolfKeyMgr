@@ -28,15 +28,7 @@
 #define VAULT_ITEM_ID    0x6B636150U /* Pack - little endian */
 #define VAULT_HEADER_VER 1
 
-#define VAULT_SEC_TYPE_NONE             0 /* no encryption */
-#define VAULT_SEC_TYPE_RSA_AESXTS256    1 /* use RSA private key to decrypt the AES symmetric key */
-#define VAULT_SEC_TYPE_PBKDF2_AESXTS256 2 /* derive symmetric key using wc_PBKDF2 from password */
-
-/* setup a callback function for the key - or encrypt / decrypt  */
-/* feature: HMAC of file or just hash */
-/* feature: index file to improve ky search time */
-
-/* Packed struct version of header stored */
+/* struct stored to file */
 typedef struct VaultHeader {
     uint32_t id;           /* should be VAULT_HEADER_ID */
     uint32_t version;      /* should be VAULT_HEADER_VER */
@@ -55,7 +47,7 @@ typedef struct VaultItem {
     uint32_t nameSz;
     uint32_t dataSz;
     time_t   timestamp;
-    uint8_t  name[WOLFKM_VAULT_NAME_MAX_SZ]; /* actual size is nameSz */
+    uint8_t  name[WOLFKM_VAULT_NAME_MAX_SZ]; /* actual size stored is nameSz */
     /* then data */
 } VaultItem_t;
 
@@ -71,7 +63,7 @@ struct wolfVaultCtx {
     size_t         itemPos; /* cached last item position in file */
 };
 
-size_t wolfVaultGetSize(wolfVaultCtx* ctx)
+static size_t wolfVaultGetSize(wolfVaultCtx* ctx)
 {
     size_t sz = 0;
     if (ctx && fseek(ctx->fd, 0, SEEK_END) == 0) {
@@ -81,21 +73,7 @@ size_t wolfVaultGetSize(wolfVaultCtx* ctx)
     return sz;
 }
 
-#if 0
-static int wolfVaultDecrypt(wolfVaultCtx* ctx)
-{
-    /* VAULT_SEC_TYPE_RSA_AESXTS256: 
-     * use the ETSI server RSA private key (WOLFKM_ETSISVC_KEY) 
-     * to decrypt the AES symmetric key 
-     */
-
-    /* VAULT_SEC_TYPE_PBKDF2_AESXTS256:
-     * wc_PBKDF2
-     */
-}
-#endif
-
-int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
+int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
 {
     int ret = 0;
     wolfVaultCtx* ctx_new;
@@ -122,9 +100,7 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
             ctx_new->header.id = VAULT_HEADER_ID;
             ctx_new->header.version = VAULT_HEADER_VER;
             ctx_new->header.headerSz = sizeof(VaultHeader_t);
-            /* TODO: PBKDF2 with VAULT_SEC_TYPE_PBKDF2_AESXTS256 */
             ctx_new->header.securityType = VAULT_SEC_TYPE_NONE;
-            (void)password;
             ret = (int)fwrite(&ctx_new->header, 1, sizeof(VaultHeader_t),
                 ctx_new->fd);
             ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
@@ -162,8 +138,9 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
         }
 
         /* read remainder */
-        ret = (int)fread(headPtr, 1, ctx_new->header.headerSz-headSz, ctx_new->fd);
-        ret = (ret == ctx_new->header.headerSz-headSz) ? 0 : WOLFKM_BAD_FILE;
+        headSz = ctx_new->header.headerSz-headSz;
+        ret = (int)fread(headPtr, 1, headSz, ctx_new->fd);
+        ret = (ret == headSz) ? 0 : WOLFKM_BAD_FILE;
 
         vaultSz = wolfVaultGetSize(ctx_new);
         if (vaultSz > ctx_new->header.headerSz)
@@ -184,10 +161,44 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file, const char* password)
         ctx_new = NULL;
     }
 
-    /* Derive key based on password */
     *ctx = ctx_new;
 
     return ret;
+}
+
+
+#if 0
+static int wolfVaultDecrypt(wolfVaultCtx* ctx)
+{
+    /* VAULT_SEC_TYPE_RSA_AESXTS256: 
+     * use the ETSI server RSA private key (WOLFKM_ETSISVC_KEY) 
+     * to decrypt the AES symmetric key 
+     */
+
+    /* VAULT_SEC_TYPE_PBKDF2_AESXTS256:
+     * wc_PBKDF2
+     */
+}
+/* TODO: PBKDF2 with VAULT_SEC_TYPE_PBKDF2_AESXTS256 */
+            ctx_new->header.securityType = VAULT_SEC_TYPE_NONE;
+            (void)password;
+    /* Derive key based on password */
+#endif
+
+int wolfVaultAuth(wolfVaultCtx* ctx, word32 secType, const char* fileOrPassword)
+{
+    (void)ctx;
+    (void)secType;
+    (void)fileOrPassword;
+    return 0;
+}
+
+int wolfVaultAuthCb(wolfVaultCtx* ctx, word32 secType, VaultAuthCbFunc cb)
+{
+    (void)ctx;
+    (void)secType;
+    (void)cb;
+    return 0;
 }
 
 int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz,
