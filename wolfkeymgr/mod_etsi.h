@@ -155,11 +155,10 @@ WOLFKM_API int wolfEtsiClientPush(EtsiClientCtx* client, EtsiKeyType keyType,
     const char* fingerprint, const char* contextStr,
     EtsiKeyCallbackFunc cb, void* cbCtx);
 
-/* Retrieve key data for a fingerprint between timestamps 
-   time as: (Jan 1, 1970 UTC - UNIX Epoch - `date +%s`) */
-WOLFKM_API int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKeyType keyType,
-    const char* fingerprint, const char* contextStr, time_t begin, time_t end,
-    EtsiKeyCallbackFunc cb, void* cbCtx);
+/* Retrieve key data for a fingerprint for replay (expired key is okay) */
+WOLFKM_API int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKey* key,
+    EtsiKeyType keyType, const char* fingerprint, const char* contextStr,
+    int timeoutSec);
 
 /* Disconnect from ETSI Key Manager */
 WOLFKM_API int wolfEtsiClientClose(EtsiClientCtx* client);

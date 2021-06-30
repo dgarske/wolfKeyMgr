@@ -268,8 +268,8 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     /* TODO: Integrate HTTP processing with read to handle larger payloads */
     key->responseSz = sizeof(key->response);
     do {
-        ret = wolfTlsRead(client->ssl, (byte*)key->response, (int*)&key->responseSz,
-            timeoutSec);
+        ret = wolfTlsRead(client->ssl, (byte*)key->response,
+            (int*)&key->responseSz, timeoutSec);
         if (ret < 0) {
             XLOG(WOLFKM_LOG_ERROR, "DoClientRead failed: %d\n", ret);
             break;
@@ -399,20 +399,18 @@ int wolfEtsiClientPush(EtsiClientCtx* client, EtsiKeyType keyType,
     return ret;
 }
 
-
-int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKeyType keyType,
-    const char* fingerprint, const char* contextStr, time_t begin, time_t end,
-    EtsiKeyCallbackFunc cb, void* cbCtx)
+/* fingerprint is previously generated ephemeral public key name */
+int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKey* key,
+    EtsiKeyType keyType, const char* fingerprint, const char* contextStr,
+    int timeoutSec)
 {
     /* TODO: Add find ability for replay */
     (void)client;
+    (void)key;
     (void)keyType;
     (void)fingerprint;
     (void)contextStr;
-    (void)begin;
-    (void)end;
-    (void)cb;
-    (void)cbCtx;
+    (void)timeoutSec;
     return WOLFKM_NOT_COMPILED_IN;
 }
 

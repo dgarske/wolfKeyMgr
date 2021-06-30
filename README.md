@@ -61,7 +61,7 @@ $ ./autogen.sh
 $ git clone https://github.com/wolfssl/wolfssl
 $ cd wolfssl
 $ ./autogen.sh
-$ ./configure --enable-sniffer CFLAGS="-DWOLFSSL_DH_EXTRA -DWOLFSSL_SNIFFER_WATCH"
+$ ./configure --enable-sniffer --enable-xts CFLAGS="-DWOLFSSL_DH_EXTRA"
 $ make
 $ make check   # (optional, but highly recommended)
 $ sudo make install
