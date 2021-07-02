@@ -211,32 +211,22 @@ static void ParseHttpResponseExpires(HttpRsp* rsp, EtsiKey* key, time_t now)
     }
 }
 
-int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key, 
+/* fingerprint is previously generated ephemeral public key name */
+static int EtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     EtsiKeyType keyType, const char* fingerprint, const char* contextStr,
-    int timeoutSec)
+    int timeoutSec, HttpRsp* rsp)
 {
     int    ret;
     byte   request[ETSI_MAX_REQUEST_SZ];
     word32 requestSz = ETSI_MAX_REQUEST_SZ;
     int    pos;
-    HttpRsp rsp;
     const char* group;
-    time_t now;
 
     if (client == NULL || key == NULL) {
         return WOLFKM_BAD_ARGS;
     }
 
-    /* Has current key expired? */
-    now = wolfGetCurrentTimeT();
-    if (key->type == keyType && key->responseSz > 0 && 
-        key->expires > 0 && key->expires >= now) {
-        /* key is still valid, use existing */
-        /* return zero, indicating no key change */
-        return 0;
-    }
-
-    /* build GET request for current key */
+    /* build GET request for key */
     key->type = keyType;
     group = wolfEtsiKeyNamedGroupStr(key);
     ret = wolfEtsiClientMakeRequest(ETSI_CLIENT_GET, fingerprint, group,
@@ -281,15 +271,14 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     if (ret > 0) {
         /* parse HTTP server response */
         key->expires = 0;
-        ret = wolfHttpClient_ParseResponse(&rsp,
+        ret = wolfHttpClient_ParseResponse(rsp,
             (char*)key->response, key->responseSz);
-        if (ret == 0 && rsp.body && rsp.bodySz > 0) {
-            wolfHttpResponsePrint(&rsp);
-            ParseHttpResponseExpires(&rsp, key, now);
+        if (ret == 0 && rsp->body && rsp->bodySz > 0) {
+            wolfHttpResponsePrint(rsp);
 
             /* move payload (body) to response (same buffer) */
-            memcpy(key->response, rsp.body, rsp.bodySz);
-            key->responseSz = rsp.bodySz;
+            memcpy(key->response, rsp->body, rsp->bodySz);
+            key->responseSz = rsp->bodySz;
         }
         else {
             XLOG(WOLFKM_LOG_ERROR, "Error parsing HTTP response! %d\n", ret);
@@ -303,6 +292,35 @@ int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
         ret = key->responseSz; /* return key size */
     }
 
+    return ret;
+}
+
+int wolfEtsiClientGet(EtsiClientCtx* client, EtsiKey* key, 
+    EtsiKeyType keyType, const char* fingerprint, const char* contextStr,
+    int timeoutSec)
+{
+    int    ret;
+    time_t now;
+    HttpRsp rsp;
+
+    if (client == NULL || key == NULL) {
+        return WOLFKM_BAD_ARGS;
+    }
+
+    /* Has current key expired? */
+    now = wolfGetCurrentTimeT();
+    if (key->type == keyType && key->responseSz > 0 && 
+        key->expires > 0 && key->expires >= now) {
+        /* key is still valid, use existing */
+        /* return zero, indicating no key change */
+        return 0;
+    }
+
+    ret = EtsiClientGet(client, key, keyType, fingerprint, contextStr,
+        timeoutSec, &rsp);
+    if (ret == 0) {
+        ParseHttpResponseExpires(&rsp, key, now);
+    }
     return ret;
 }
 
@@ -399,19 +417,13 @@ int wolfEtsiClientPush(EtsiClientCtx* client, EtsiKeyType keyType,
     return ret;
 }
 
-/* fingerprint is previously generated ephemeral public key name */
 int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKey* key,
     EtsiKeyType keyType, const char* fingerprint, const char* contextStr,
     int timeoutSec)
 {
-    /* TODO: Add find ability for replay */
-    (void)client;
-    (void)key;
-    (void)keyType;
-    (void)fingerprint;
-    (void)contextStr;
-    (void)timeoutSec;
-    return WOLFKM_NOT_COMPILED_IN;
+    HttpRsp rsp;
+    return EtsiClientGet(client, key, keyType, fingerprint, contextStr,
+        timeoutSec, &rsp);
 }
 
 int wolfEtsiKeyGet(EtsiKey* key, byte** response, word32* responseSz)
