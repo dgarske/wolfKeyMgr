@@ -177,7 +177,7 @@ WOLFKM_API int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx);
 /* Load key to WOLFSSL session directly */
 WOLFKM_API int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl);
 /* Get pointer to PKCS8 key response */
-WOLFKM_API int wolfEtsiKeyGet(EtsiKey* key, byte** response, word32* responseSz);
+WOLFKM_API int wolfEtsiKeyGetPtr(EtsiKey* key, byte** response, word32* responseSz);
 /* Generate a new key */
 WOLFKM_API int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng);
 /* print ETSI key data - for debugging / testing */

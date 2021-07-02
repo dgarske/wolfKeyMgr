@@ -169,7 +169,7 @@ static int myKeyCb(void* vSniffer, int namedGroup,
     if (ret >= 0) {
         byte* keyBuf = NULL;
         word32 keySz = 0;
-        wolfEtsiKeyGet(&key, &keyBuf, &keySz);
+        wolfEtsiKeyGetPtr(&key, &keyBuf, &keySz);
 
         if (privKey->length != keySz) {
             void* heap = privKey->heap;
@@ -302,7 +302,7 @@ static int load_key(const char* name, const char* server, int port,
             else {
                 byte* keyBuf = NULL;
                 word32 keySz = 0;
-                wolfEtsiKeyGet(&key, &keyBuf, &keySz);
+                wolfEtsiKeyGetPtr(&key, &keyBuf, &keySz);
             #ifdef HAVE_SNI
                 ret = ssl_SetNamedEphemeralKeyBuffer(name, server, port,
                     (char*)keyBuf, keySz, FILETYPE_DER, passwd, err);

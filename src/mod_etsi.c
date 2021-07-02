@@ -211,7 +211,6 @@ static void ParseHttpResponseExpires(HttpRsp* rsp, EtsiKey* key, time_t now)
     }
 }
 
-/* fingerprint is previously generated ephemeral public key name */
 static int EtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     EtsiKeyType keyType, const char* fingerprint, const char* contextStr,
     int timeoutSec, HttpRsp* rsp)
@@ -422,11 +421,12 @@ int wolfEtsiClientFind(EtsiClientCtx* client, EtsiKey* key,
     int timeoutSec)
 {
     HttpRsp rsp;
+    /* fingerprint is previously generated ephemeral public key name */
     return EtsiClientGet(client, key, keyType, fingerprint, contextStr,
         timeoutSec, &rsp);
 }
 
-int wolfEtsiKeyGet(EtsiKey* key, byte** response, word32* responseSz)
+int wolfEtsiKeyGetPtr(EtsiKey* key, byte** response, word32* responseSz)
 {
     if (key == NULL)
         return WOLFKM_BAD_ARGS;
