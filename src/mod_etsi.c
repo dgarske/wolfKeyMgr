@@ -554,7 +554,175 @@ int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl)
     return ret;
 }
 
+#ifdef HAVE_ECC
+static int NamedGroupToCurveInfo(EtsiKeyType keyType, int* curveId, int* keySize)
+{
+    int ret = 0;
+    switch (keyType) {
+        case ETSI_KEY_TYPE_SECP160K1:
+            *curveId = ECC_SECP160K1; *keySize = 20; break;
+        case ETSI_KEY_TYPE_SECP160R1:
+            *curveId = ECC_SECP160R1; *keySize = 20; break;
+        case ETSI_KEY_TYPE_SECP160R2:
+            *curveId = ECC_SECP160R2; *keySize = 20; break;
+        case ETSI_KEY_TYPE_SECP192K1:
+            *curveId = ECC_SECP192K1; *keySize = 24; break;
+        case ETSI_KEY_TYPE_SECP192R1:
+            *curveId = ECC_SECP192R1; *keySize = 24; break;
+        case ETSI_KEY_TYPE_SECP224K1:
+            *curveId = ECC_SECP224K1; *keySize = 28; break;
+        case ETSI_KEY_TYPE_SECP224R1:
+            *curveId = ECC_SECP224R1; *keySize = 28; break;
+        case ETSI_KEY_TYPE_SECP256K1:
+            *curveId = ECC_SECP256K1; *keySize = 32; break;
+        case ETSI_KEY_TYPE_SECP256R1:
+            *curveId = ECC_SECP256R1; *keySize = 32; break;
+        case ETSI_KEY_TYPE_SECP384R1:
+            *curveId = ECC_SECP384R1; *keySize = 48; break;
+        case ETSI_KEY_TYPE_SECP521R1:
+            *curveId = ECC_SECP521R1; *keySize = 66; break;
+        case ETSI_KEY_TYPE_BRAINPOOLP256R1:
+            *curveId = ECC_BRAINPOOLP256R1; *keySize = 32; break;
+        case ETSI_KEY_TYPE_BRAINPOOLP384R1:
+            *curveId = ECC_BRAINPOOLP384R1; *keySize = 48; break;
+        case ETSI_KEY_TYPE_BRAINPOOLP512R1:
+            *curveId = ECC_BRAINPOOLP512R1; *keySize = 64; break;
+        default:
+            ret = WOLFKM_BAD_ARGS;
+            break;
+    }
+    return ret;
+}
+#endif
 
+#if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
+static int NamedGroupToDhParams(EtsiKeyType keyType,
+    const DhParams** pParams, word32* pPrivKeySz, word32* pPubKeySz)
+{
+    int ret = 0;
+    const DhParams* params = NULL;
+    word32 privKeySz = 0;
+    switch (keyType) {
+    #ifdef HAVE_FFDHE_2048
+        case ETSI_KEY_TYPE_FFDHE_2048:
+            params = wc_Dh_ffdhe2048_Get(); privKeySz = 29; break;
+    #endif
+    #ifdef HAVE_FFDHE_3072
+        case ETSI_KEY_TYPE_FFDHE_3072:
+            params = wc_Dh_ffdhe3072_Get(); privKeySz = 34; break;
+    #endif
+    #ifdef HAVE_FFDHE_4096
+        case ETSI_KEY_TYPE_FFDHE_4096:
+            params = wc_Dh_ffdhe4096_Get(); privKeySz = 39; break;
+    #endif
+    #ifdef HAVE_FFDHE_6144
+        case ETSI_KEY_TYPE_FFDHE_6144:
+            params = wc_Dh_ffdhe6144_Get(); privKeySz = 46; break;
+    #endif
+    #ifdef HAVE_FFDHE_8192
+        case ETSI_KEY_TYPE_FFDHE_8192:
+            params = wc_Dh_ffdhe8192_Get(); privKeySz = 52; break;
+    #endif
+        default:
+            ret = WOLFKM_NOT_COMPILED_IN;
+            break;
+    }
+    if (pParams)
+        *pParams = params;
+    if (pPubKeySz && params)
+        *pPubKeySz = params->p_len;
+    if (pPrivKeySz)
+        *pPrivKeySz = privKeySz;
+    return ret;
+}
+#endif
+
+
+/* Public key format is same as over the wire via TLS */
+int wolfEtsiKeyComputeName(EtsiKeyType keyType,
+    const byte* pub, word32 pubSz, char* name, word32* nameSz)
+{
+    int ret = WOLFKM_NOT_COMPILED_IN;
+    word32 tmpSz;
+
+    if (pub == NULL || pubSz == 0 || name == NULL || nameSz == NULL)
+        return WOLFKM_BAD_ARGS;
+
+    memset(name, 0, *nameSz);
+    tmpSz = (*nameSz-1)/2;
+
+#ifdef HAVE_ECC
+    if (keyType >= ETSI_KEY_TYPE_SECP160K1 && 
+        keyType <= ETSI_KEY_TYPE_BRAINPOOLP512R1)
+    {
+        /* For ECC it is x963 - 1 byte (point type), pub x, pub y */
+        int curveId = ECC_CURVE_DEF, keySize = 32;
+        ecc_key key;
+
+        ret = NamedGroupToCurveInfo(keyType, &curveId, &keySize);
+        if (ret != 0)
+            return ret;
+        if (pubSz < 1)
+            return WOLFKM_BAD_ARGS;
+
+        
+        /* this handles compressed ECC keys if HAVE_COMP_KEY is defined */
+        ret = wc_ecc_init_ex(&key, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            byte pubX[MAX_ECC_BYTES*2+1];
+            byte pubY[MAX_ECC_BYTES*2+1];
+            word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
+            ret = wc_ecc_import_x963_ex(pub, pubSz, &key, curveId);
+            if (ret == 0) {
+                /* export public */
+                ret = wc_ecc_export_ex(&key,
+                    pubX, &pubXLen,
+                    pubY, &pubYLen, 
+                    NULL, NULL, WC_TYPE_HEX_STR);
+            }
+            if (ret == 0) {
+                /* compute name for key */
+                if (pubXLen > tmpSz/2) pubXLen = tmpSz/2;
+                if (pubYLen > tmpSz/2) pubYLen = tmpSz/2;
+                memcpy(name,         pubX, pubXLen);
+                memcpy(name+pubXLen, pubY, pubYLen);
+                *nameSz = pubXLen + pubYLen;
+            }
+        }
+        wc_ecc_free(&key);
+    }
+#endif
+#if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
+    if (keyType >= ETSI_KEY_TYPE_FFDHE_2048 && 
+        keyType <= ETSI_KEY_TYPE_FFDHE_8192)
+    {
+        /* For DH it is the DH public key as unsigned bin */
+        word32 pubKeySz = 0;
+        ret = NamedGroupToDhParams(keyType, NULL, NULL, &pubKeySz);
+        if (ret == 0) {
+            if (pubKeySz > tmpSz) pubKeySz = tmpSz;
+            ret = wolfByteToHexString(pub, pubKeySz, name, *nameSz);
+            if (ret > 0) {
+                *nameSz = ret;
+                ret = 0;
+            }
+        }
+    }
+#endif
+#ifdef HAVE_CURVE25519
+    if (keyType == ETSI_KEY_TYPE_X25519) {
+        /* TODO: X25519 Key Gen */
+    }
+#endif
+#ifdef HAVE_CURVE448
+    if (keyType == ETSI_KEY_TYPE_X448) {
+        /* TODO: X448 Key Gen */
+        //curveId = ECC_X448;
+        //keySize = 56;
+    }
+#endif
+    return ret;
+}
 
 #ifdef HAVE_ECC
 static int GenNewKeyEcc(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
@@ -564,38 +732,9 @@ static int GenNewKeyEcc(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
     ecc_key ecc;
 
     /* Determine ECC Key Size and Curve */
-    switch (keyType) {
-        case ETSI_KEY_TYPE_SECP160K1:
-            curveId = ECC_SECP160K1; keySize = 20; break;
-        case ETSI_KEY_TYPE_SECP160R1:
-            curveId = ECC_SECP160R1; keySize = 20; break;
-        case ETSI_KEY_TYPE_SECP160R2:
-            curveId = ECC_SECP160R2; keySize = 20; break;
-        case ETSI_KEY_TYPE_SECP192K1:
-            curveId = ECC_SECP192K1; keySize = 24; break;
-        case ETSI_KEY_TYPE_SECP192R1:
-            curveId = ECC_SECP192R1; keySize = 24; break;
-        case ETSI_KEY_TYPE_SECP224K1:
-            curveId = ECC_SECP224K1; keySize = 28; break;
-        case ETSI_KEY_TYPE_SECP224R1:
-            curveId = ECC_SECP224R1; keySize = 28; break;
-        case ETSI_KEY_TYPE_SECP256K1:
-            curveId = ECC_SECP256K1; keySize = 32; break;
-        case ETSI_KEY_TYPE_SECP256R1:
-            curveId = ECC_SECP256R1; keySize = 32; break;
-        case ETSI_KEY_TYPE_SECP384R1:
-            curveId = ECC_SECP384R1; keySize = 48; break;
-        case ETSI_KEY_TYPE_SECP521R1:
-            curveId = ECC_SECP521R1; keySize = 66; break;
-        case ETSI_KEY_TYPE_BRAINPOOLP256R1:
-            curveId = ECC_BRAINPOOLP256R1; keySize = 32; break;
-        case ETSI_KEY_TYPE_BRAINPOOLP384R1:
-            curveId = ECC_BRAINPOOLP384R1; keySize = 48; break;
-        case ETSI_KEY_TYPE_BRAINPOOLP512R1:
-            curveId = ECC_BRAINPOOLP512R1; keySize = 64; break;
-        default:
-            break;
-    }
+    ret = NamedGroupToCurveInfo(keyType, &curveId, &keySize);
+    if (ret != 0)
+        return ret;
 
     ret = wc_ecc_init(&ecc);
     if (ret != 0) {
@@ -652,33 +791,9 @@ static int GenNewKeyDh(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
     byte privKey[MAX_DH_PRIV_SZ];
     byte pubKey[MAX_DH_PUB_SZ];
 
-    switch (keyType) {
-    #ifdef HAVE_FFDHE_2048
-        case ETSI_KEY_TYPE_FFDHE_2048:
-            params = wc_Dh_ffdhe2048_Get(); privKeySz = 29; break;
-    #endif
-    #ifdef HAVE_FFDHE_3072
-        case ETSI_KEY_TYPE_FFDHE_3072:
-            params = wc_Dh_ffdhe3072_Get(); privKeySz = 34; break;
-    #endif
-    #ifdef HAVE_FFDHE_4096
-        case ETSI_KEY_TYPE_FFDHE_4096:
-            params = wc_Dh_ffdhe4096_Get(); privKeySz = 39; break;
-    #endif
-    #ifdef HAVE_FFDHE_6144
-        case ETSI_KEY_TYPE_FFDHE_6144:
-            params = wc_Dh_ffdhe6144_Get(); privKeySz = 46; break;
-    #endif
-    #ifdef HAVE_FFDHE_8192
-        case ETSI_KEY_TYPE_FFDHE_8192:
-            params = wc_Dh_ffdhe8192_Get(); privKeySz = 52; break;
-    #endif
-        default:
-            break;
-    }
-
-    if (params == NULL) {
-        return WOLFKM_NOT_COMPILED_IN;
+    ret = NamedGroupToDhParams(keyType, &params, &privKeySz, &pubKeySz);
+    if (ret != 0) {
+        return ret;
     }
 
     ret = wc_InitDhKey(&dh);
@@ -693,7 +808,6 @@ static int GenNewKeyDh(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
         params->g, params->g_len);
     if (ret == 0) {
         /* Generate a new key pair */
-        pubKeySz = params->p_len;
         ret = wc_DhGenerateKeyPair(&dh, rng,
             privKey, &privKeySz,
             pubKey, &pubKeySz);
@@ -733,7 +847,7 @@ static int GenNewKeyDh(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 
     return ret;
 }
-#endif /* !NO_DH */
+#endif /* !NO_DH && WOLFSSL_DH_EXTRA */
 
 int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 {
@@ -822,7 +936,8 @@ int wolfEtsiKeyPrint(EtsiKey* key)
         ret = wc_InitDhKey(&dhKey);
         if (ret == 0) {
             word32 idx = 0;
-            ret = wc_DhKeyDecode((byte*)key->response, &idx, &dhKey, key->responseSz);
+            ret = wc_DhKeyDecode((byte*)key->response, &idx, &dhKey,
+                key->responseSz);
             if (ret == 0) {
                 byte pubKey[MAX_DH_PUB_SZ];
                 word32 pubKeyLen = sizeof(pubKey);

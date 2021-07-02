@@ -99,7 +99,9 @@ typedef enum EtsiKeyType {
     ETSI_KEY_TYPE_MAX = ETSI_KEY_TYPE_FFDHE_8192,
 } EtsiKeyType;
 
+#ifndef ETSI_MAX_KEY_NAME
 #define ETSI_MAX_KEY_NAME 64
+#endif
 
 typedef struct EtsiKey {
     enum EtsiKeyType type;
@@ -180,6 +182,9 @@ WOLFKM_API int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl);
 WOLFKM_API int wolfEtsiKeyGetPtr(EtsiKey* key, byte** response, word32* responseSz);
 /* Generate a new key */
 WOLFKM_API int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng);
+/* Compute name for public key based on TLS key share */
+WOLFKM_API int wolfEtsiKeyComputeName(EtsiKeyType keyType,
+    const byte* pub, word32 pubSz, char* name, word32* nameSz);
 /* print ETSI key data - for debugging / testing */
 WOLFKM_API int  wolfEtsiKeyPrint(EtsiKey* key);
 /* release ETSI key resources */

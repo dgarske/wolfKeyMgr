@@ -285,3 +285,17 @@ int wolfSigIgnore(int sig)
 
     return 0;
 }
+
+int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz)
+{
+    int i, calcSz = (int)(inSz*2)+1;
+    const char* hex = "0123456789ABCDEF";
+    if (in == NULL || out == NULL || outSz < calcSz)
+        return WOLFKM_BAD_ARGS;
+    for(i=0; i<inSz; i++) {
+        *out++ = hex[((*in++)>>4) & 0xF];
+        *out++ = hex[ (*in++)     & 0xF];
+    }
+    *out++ = '\0';
+    return calcSz;
+}
