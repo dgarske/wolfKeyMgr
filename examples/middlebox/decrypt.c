@@ -157,6 +157,7 @@ static int etsi_client_find(char* urlStr, EtsiKey* key, int namedGroup,
     return ret;
 }
 
+#ifdef WOLFSSL_SNIFFER_KEY_CALLBACK
 static int myKeyCb(void* vSniffer, int namedGroup,
     const unsigned char* srvPub, unsigned int srvPubSz,
     const unsigned char* cliPub, unsigned int cliPubSz,
@@ -179,7 +180,7 @@ static int myKeyCb(void* vSniffer, int namedGroup,
     }
     return ret;
 }
-
+#endif
 
 static void FreeAll(void)
 {
@@ -373,7 +374,9 @@ int main(int argc, char** argv)
 #endif
     ssl_Trace("./tracefile.txt", err);
     ssl_EnableRecovery(1, -1, err);
+#ifdef WOLFSSL_SNIFFER_KEY_CALLBACK
     ssl_SetKeyCallback(myKeyCb, NULL);
+#endif
 
     if (argc == 1) {
         char cmdLineArg[128];
