@@ -47,6 +47,7 @@ WOLFKM_API void wolfPrintBin(const byte* buffer, word32 length);
 WOLFKM_API int wolfSaveFile(const char* file, byte* buffer, word32 length);
 
 WOLFKM_API int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz);
+WOLFKM_API int wolfHexStringToByte(const char* in, word32 inSz, byte* out, word32 outSz);
 
 WOLFKM_API int wolfSigIgnore(int sig);
 

@@ -289,13 +289,40 @@ int wolfSigIgnore(int sig)
 int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz)
 {
     int i, calcSz = (int)(inSz*2)+1;
-    const char* hex = "0123456789ABCDEF";
+    const char* kHexStr = "0123456789ABCDEF";
     if (in == NULL || out == NULL || outSz < calcSz)
         return WOLFKM_BAD_ARGS;
-    for(i=0; i<inSz; i++) {
-        *out++ = hex[((*in++)>>4) & 0xF];
-        *out++ = hex[ (*in++)     & 0xF];
+    for (i = 0; i < inSz; i++) {
+        *out++ = kHexStr[((*in++)>>4) & 0xF];
+        *out++ = kHexStr[ (*in++)     & 0xF];
     }
     *out++ = '\0';
     return calcSz;
+}
+
+int wolfHexStringToByte(const char* in, word32 inSz, byte* out, word32 outSz)
+{
+    int i, calcSz = (int)(inSz/2), nibble;
+    if (in == NULL || out == NULL || outSz < calcSz)
+        return WOLFKM_BAD_ARGS;
+    for (i = 0; i < inSz; i++) {
+        char ch = (char)in[i];
+        if (ch >= '0' && ch <= '9')
+            ch -= '0';
+        else if (ch >= 'A' && ch <= 'F')
+            ch -= 'A' - 10;
+        else if (ch >= 'a' && ch <= 'f')
+            ch -= 'a' - 10;
+        else
+            break; /* invalid or done */
+
+        if (nibble == 4) {
+            out++;
+            nibble = 0;
+        }
+
+        *out |= ((byte)ch) << nibble;
+        nibble += 4;
+    }
+    return i;
 }

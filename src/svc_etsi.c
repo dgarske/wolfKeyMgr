@@ -145,7 +145,6 @@ static int SetupKeyPackage(EtsiSvcCtx* svcCtx, EtsiSvcThread* etsiThread)
             sizeof(headers)/sizeof(HttpHeader), (byte*)svcCtx->key.response,
             svcCtx->key.responseSz);
         if (ret != 0) {
-            pthread_mutex_unlock(&svcCtx->lock);
             XLOG(WOLFKM_LOG_ERROR, "Error encoding HTTP response: %d\n", ret);
             return ret;
         }
@@ -156,6 +155,27 @@ static int SetupKeyPackage(EtsiSvcCtx* svcCtx, EtsiSvcThread* etsiThread)
 
     return ret;
 }
+
+#ifdef WOLFKM_VAULT
+static int SetupKeyFindResponse(SvcConn* conn, wolfVaultItem* item)
+{
+    int ret = 0;
+    HttpHeader headers[2];
+    headers[0].type = HTTP_HDR_CONTENT_TYPE;
+    headers[0].string = "application/pkcs8";
+    headers[1].type = HTTP_HDR_CONNECTION;
+    headers[1].string = "Keep-Alive";
+
+    /* Wrap key in HTTP server response */
+    conn->requestSz = sizeof(conn->request);
+    ret = wolfHttpServer_EncodeResponse(0, NULL, 
+        conn->request, &conn->requestSz, headers, 
+        sizeof(headers)/sizeof(HttpHeader), (byte*)item->data,
+        item->dataSz);
+
+    return ret;
+}
+#endif
 
 static void* KeyPushWorker(void* arg)
 {
@@ -183,7 +203,7 @@ static void* KeyPushWorker(void* arg)
     return NULL;
 }
 
-int wolfEtsiSvc_DoResponse(SvcConn* conn)
+static int wolfEtsiSvc_DoResponse(SvcConn* conn)
 {
     int ret;
     EtsiSvcThread* etsiThread;
@@ -197,10 +217,6 @@ int wolfEtsiSvc_DoResponse(SvcConn* conn)
         XLOG(WOLFKM_LOG_ERROR, "ETSI HTTP Response / Key not found!\n");
         return WOLFKM_BAD_KEY;
     }
-
-    /* send already setup key */
-    memcpy(conn->request, etsiThread->httpRspBuf, etsiThread->httpRspSz);
-    conn->requestSz = etsiThread->httpRspSz;
 
     /* send response, which is in the reused request buffer */
     ret = wolfKeyMgr_DoSend(conn, (byte*)conn->request, conn->requestSz);
@@ -279,14 +295,40 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     if (ret > 0)
         XLOG(WOLFKM_LOG_DEBUG, "Context: %s\n", etsiConn->contextStr);
 
-
-    /* If generated key doesn't match, force it now */
-    if (etsiConn->groupNum > 0 && 
-            etsiThread->keyType != (EtsiKeyType)etsiConn->groupNum) {
+    if (etsiConn->groupNum > 0) {
         pthread_mutex_lock(&svcCtx->lock);
-        ret = GenNewKey(svcCtx, (EtsiKeyType)etsiConn->groupNum);
-        if (ret == 0) {
-            ret = SetupKeyPackage(svcCtx, etsiThread);
+
+#ifdef WOLFKM_VAULT
+        /* If "find" request (fingerprint) populated */
+        if (strlen(etsiConn->fingerprint) > 0) {
+            wolfVaultItem item;
+            memset(&item, 0, sizeof(item));
+            item.nameSz = (word32)sizeof(item.name);
+            ret = wolfHexStringToByte(etsiConn->fingerprint,
+                strlen(etsiConn->fingerprint), item.name, item.nameSz);
+            if (ret > 0) {
+                item.nameSz = ret;
+                ret = 0;
+            }
+            if (ret == 0) {
+                ret = wolfVaultGet(svcCtx->vault, &item, etsiConn->groupNum,
+                    item.name, item.nameSz);
+            }
+            if (ret == 0) {
+                ret = SetupKeyFindResponse(conn, &item);
+            }
+        }
+        else
+#endif
+        if (etsiThread->keyType != (EtsiKeyType)etsiConn->groupNum) {
+            /* If generated key doesn't match, force it now */
+            ret = GenNewKey(svcCtx, (EtsiKeyType)etsiConn->groupNum);
+            if (ret == 0) {
+                ret = SetupKeyPackage(svcCtx, etsiThread);
+
+                memcpy(conn->request, etsiThread->httpRspBuf, etsiThread->httpRspSz);
+                conn->requestSz = etsiThread->httpRspSz;
+            }
         }
         pthread_mutex_unlock(&svcCtx->lock);
     }
@@ -324,12 +366,17 @@ int wolfEtsiSvc_DoNotify(SvcConn* conn)
     /* update key */
     pthread_mutex_lock(&svcCtx->lock);
     ret = SetupKeyPackage(svcCtx, etsiThread);
+    if (ret == 0) {
+        /* send already setup key */
+        memcpy(conn->request, etsiThread->httpRspBuf, etsiThread->httpRspSz);
+        conn->requestSz = etsiThread->httpRspSz;
+    }
     pthread_mutex_unlock(&svcCtx->lock);
 
     /* push key to active push threads */
     if (ret == 0 && etsiConn != NULL && 
-            etsiConn->req.type == HTTP_METHOD_PUT) {
-        /* send updated key - already populated in httpRspBuf */
+            etsiConn->req.type == HTTP_METHOD_PUT) {    
+        /* send updated key */
         ret = wolfEtsiSvc_DoResponse(conn);
     }
 
