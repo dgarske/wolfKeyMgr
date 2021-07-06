@@ -218,7 +218,7 @@ double wolfGetCurrentTime(void)
 }
 
 #define LINE_LEN 16
-void wolfPrintBin(const byte* buffer, word32 length)
+void wolfPrintBinLevel(enum log_level_t level, const byte* buffer, word32 length)
 {
     word32 i, sz;
     char line[(LINE_LEN * 4) + 4], *tmp;
@@ -248,11 +248,16 @@ void wolfPrintBin(const byte* buffer, word32 length)
             else
                 tmp += sprintf(tmp, ".");
         }
-        XLOG(WOLFKM_LOG_DEBUG, "%s\n", line);
+        XLOG(level, "%s\n", line);
 
         buffer += sz;
         length -= sz;
     }
+}
+
+void wolfPrintBin(const byte* buffer, word32 length)
+{
+    wolfPrintBinLevel(WOLFKM_LOG_DEBUG, buffer, length);
 }
 
 int wolfSaveFile(const char* file, byte* buffer, word32 length)
@@ -300,29 +305,32 @@ int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz)
     return calcSz;
 }
 
+static char HexToByte(char ch)
+{
+    if (ch >= '0' && ch <= '9')
+        ch -= '0';
+    else if (ch >= 'A' && ch <= 'F')
+        ch -= 'A' - 10;
+    else if (ch >= 'a' && ch <= 'f')
+        ch -= 'a' - 10;
+    else
+        ch = 0;
+    return ch;
+}
+
 int wolfHexStringToByte(const char* in, word32 inSz, byte* out, word32 outSz)
 {
-    int i, calcSz = (int)(inSz/2), nibble;
-    if (in == NULL || out == NULL || outSz < calcSz)
+    int i, calcSz = 0;
+    char cl, ch;
+
+    if (in == NULL || out == NULL || outSz < (inSz/2))
         return WOLFKM_BAD_ARGS;
-    for (i = 0; i < inSz; i++) {
-        char ch = (char)in[i];
-        if (ch >= '0' && ch <= '9')
-            ch -= '0';
-        else if (ch >= 'A' && ch <= 'F')
-            ch -= 'A' - 10;
-        else if (ch >= 'a' && ch <= 'f')
-            ch -= 'a' - 10;
-        else
-            break; /* invalid or done */
 
-        if (nibble == 4) {
-            out++;
-            nibble = 0;
-        }
-
-        *out |= ((byte)ch) << nibble;
-        nibble += 4;
+    for (i = 0; i < inSz; i+=2) {
+        cl = HexToByte((char)in[i]);
+        ch = HexToByte((char)in[i+1]);
+        *out++ = (((byte)ch) << 4) | (byte)cl;
+        calcSz++;
     }
-    return i;
+    return calcSz;
 }

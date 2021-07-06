@@ -665,7 +665,6 @@ int wolfEtsiKeyComputeName(EtsiKeyType keyType,
         if (pubSz < 1)
             return WOLFKM_BAD_ARGS;
 
-        
         /* this handles compressed ECC keys if HAVE_COMP_KEY is defined */
         ret = wc_ecc_init_ex(&key, NULL, INVALID_DEVID);
         if (ret == 0) {

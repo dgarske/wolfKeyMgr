@@ -68,6 +68,8 @@ struct wolfVaultCtx {
     void*           authCbCtx;
 };
 
+static void wolfVaultPrintItem(const char* desc, VaultItem_t* item);
+
 static size_t wolfVaultGetSize(wolfVaultCtx* ctx)
 {
     size_t sz = 0;
@@ -78,11 +80,30 @@ static size_t wolfVaultGetSize(wolfVaultCtx* ctx)
     return sz;
 }
 
+static int wolfVaultCreateNew(wolfVaultCtx* ctx, const char* file)
+{
+    int ret = WOLFKM_BAD_FILE;
+
+    /* create vault file */
+    ctx->fd = fopen(file, "wb+");
+    if (ctx->fd != NULL) {
+        /* write header */
+        memset(&ctx->header, 0, sizeof(VaultHeader_t));
+        ctx->header.id = VAULT_HEADER_ID;
+        ctx->header.version = VAULT_HEADER_VER;
+        ctx->header.headerSz = sizeof(VaultHeader_t);
+        ctx->header.securityType = VAULT_SEC_TYPE_NONE;
+        ret = (int)fwrite(&ctx->header, 1, sizeof(VaultHeader_t), ctx->fd);
+        ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
+    }
+    return ret;
+}
+
 int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
 {
-    int ret = 0;
+    int ret = WOLFKM_BAD_FILE;
     wolfVaultCtx* ctx_new;
-    size_t vaultSz;
+    size_t vaultSz = 0;
 
     if (ctx == NULL) 
         return WOLFKM_BAD_ARGS;
@@ -96,26 +117,7 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
 
     /* try opening vault file */
     ctx_new->fd = fopen(file, "rb+");
-    if (ctx_new->fd == NULL) {
-        /* create vault file */
-        ctx_new->fd = fopen(file, "wb+");
-        if (ctx_new->fd != NULL) {
-            /* write header */
-            memset(&ctx_new->header, 0, sizeof(VaultHeader_t));
-            ctx_new->header.id = VAULT_HEADER_ID;
-            ctx_new->header.version = VAULT_HEADER_VER;
-            ctx_new->header.headerSz = sizeof(VaultHeader_t);
-            ctx_new->header.securityType = VAULT_SEC_TYPE_NONE;
-            ret = (int)fwrite(&ctx_new->header, 1, sizeof(VaultHeader_t),
-                ctx_new->fd);
-            ret = (ret == sizeof(VaultHeader_t)) ? 0 : WOLFKM_BAD_FILE;
-            vaultSz = 0;
-        }
-        else {
-            ret = WOLFKM_BAD_FILE;
-        }
-    }
-    else {
+    if (ctx_new->fd != NULL) {
         byte* headPtr = (byte*)&ctx_new->header;
         uint32_t headSz = (uint32_t)sizeof(uint32_t)*3;
 
@@ -157,11 +159,20 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
         }
     }
 
+    if (ret != 0) {
+        /* resetting vault */
+        XLOG(WOLFKM_LOG_ERROR, "Vault open failed, creating new\n");
+        ret = wolfVaultCreateNew(ctx_new, file);
+        vaultSz = 0;
+    }
+    
     if (ret == 0) {
         XLOG(WOLFKM_LOG_INFO, "Vault %s opened (%lu bytes)\n", file, vaultSz);
     }
     else {
-        fclose(ctx_new->fd);
+        if (ctx_new->fd != NULL)
+            fclose(ctx_new->fd);
+        wc_FreeMutex(&ctx_new->lock);
         free(ctx_new);
         ctx_new = NULL;
     }
@@ -224,6 +235,8 @@ int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz
     ctx->item.timestamp = wolfGetCurrentTimeT();
     ctx->item.dataSz = dataSz;
     headSz = (word32)VAULT_ITEM_HEAD_SZ(&ctx->item);
+
+    wolfVaultPrintItem("Add", &ctx->item);
 
     ret = fseek(ctx->fd, 0, SEEK_END);
     if (ret == 0) {
@@ -316,6 +329,8 @@ int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type,
     while (ret == 0) {
         ret = wolfVaultGetItemHeader(ctx, itemPos);
         if (ret == 0) {
+            wolfVaultPrintItem("Get", &ctx->item);
+
             if (ctx->item.type == type && ctx->item.nameSz == nameSz &&
                 (memcmp(ctx->item.name, name, ctx->item.nameSz) == 0)) {
                 /* found item, get data and return */
@@ -460,6 +475,15 @@ void wolfVaultPrintInfo(wolfVaultCtx* ctx)
     XLOG(WOLFKM_LOG_INFO, "Security Type: %d\n", ctx->header.securityType);
     XLOG(WOLFKM_LOG_INFO, "Item Count: %d\n", ctx->header.vaultCount);
     XLOG(WOLFKM_LOG_INFO, "Total Size: %lu\n", ctx->header.vaultSz);    
+}
+
+static void wolfVaultPrintItem(const char* desc, VaultItem_t* item)
+{
+    if (item == NULL)
+        return;
+    XLOG(WOLFKM_LOG_INFO, "%s Item: Type %d, Name %d, Data %d, Timestamp %lu\n",
+        desc, item->type, item->nameSz, item->dataSz, item->timestamp);
+    wolfPrintBinLevel(WOLFKM_LOG_INFO, item->name, item->nameSz);
 }
 
 #endif /* WOLFKM_VAULT */

@@ -232,7 +232,7 @@ static int wolfEtsiSvc_DoResponse(SvcConn* conn)
 /* the key request handler */
 int wolfEtsiSvc_DoRequest(SvcConn* conn)
 {
-    int ret;
+    int ret = 0;
     SvcInfo* svc;
     EtsiSvcCtx* svcCtx;
     EtsiSvcConn* etsiConn;
@@ -269,15 +269,14 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     wolfHttpRequestPrint(&etsiConn->req);
 
     /* Get fingerprint */
-    ret = wolfHttpUriGetItem(etsiConn->req.uri, "fingerprints=",
-        etsiConn->fingerprint, sizeof(etsiConn->fingerprint));
-    if (ret > 0)
+    if (wolfHttpUriGetItem(etsiConn->req.uri, "fingerprints=",
+        etsiConn->fingerprint, sizeof(etsiConn->fingerprint)) > 0) {
         XLOG(WOLFKM_LOG_DEBUG, "Fingerprint: %s\n", etsiConn->fingerprint);
+    }
 
     /* Get groups - borrow contextStr variable */
-    ret = wolfHttpUriGetItem(etsiConn->req.uri, "groups=",
-        etsiConn->contextStr, sizeof(etsiConn->contextStr));
-    if (ret > 0) {
+    if (wolfHttpUriGetItem(etsiConn->req.uri, "groups=",
+        etsiConn->contextStr, sizeof(etsiConn->contextStr)) > 0) {
         const char* groupName;
         etsiConn->groupNum = (word32)strtol(etsiConn->contextStr, NULL, 16);
         groupName = wolfEtsiKeyGetTypeStr((EtsiKeyType)etsiConn->groupNum);
@@ -290,51 +289,63 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     }
 
     /* Get context string */
-    ret = wolfHttpUriGetItem(etsiConn->req.uri, "contextstr=",
-        etsiConn->contextStr, sizeof(etsiConn->contextStr));
-    if (ret > 0)
+    if (wolfHttpUriGetItem(etsiConn->req.uri, "contextstr=",
+        etsiConn->contextStr, sizeof(etsiConn->contextStr)) > 0) {
         XLOG(WOLFKM_LOG_DEBUG, "Context: %s\n", etsiConn->contextStr);
-
-    if (etsiConn->groupNum > 0) {
-        pthread_mutex_lock(&svcCtx->lock);
+    }
 
 #ifdef WOLFKM_VAULT
-        /* If "find" request (fingerprint) populated */
-        if (strlen(etsiConn->fingerprint) > 0) {
-            wolfVaultItem item;
-            memset(&item, 0, sizeof(item));
-            item.nameSz = (word32)sizeof(item.name);
-            ret = wolfHexStringToByte(etsiConn->fingerprint,
-                strlen(etsiConn->fingerprint), item.name, item.nameSz);
-            if (ret > 0) {
-                item.nameSz = ret;
-                ret = 0;
-            }
-            if (ret == 0) {
-                ret = wolfVaultGet(svcCtx->vault, &item, etsiConn->groupNum,
-                    item.name, item.nameSz);
-            }
+    /* If "find" request (fingerprint) populated */
+    if (etsiConn->groupNum > 0 && strlen(etsiConn->fingerprint) > 0) {
+        wolfVaultItem item;
+        memset(&item, 0, sizeof(item));
+        item.nameSz = (word32)sizeof(item.name);
+        ret = wolfHexStringToByte(etsiConn->fingerprint,
+            strlen(etsiConn->fingerprint), item.name, item.nameSz);
+        if (ret > 0) {
+            item.nameSz = ret;
+            ret = 0;
+        }
+        if (ret == 0) {
+            ret = wolfVaultGet(svcCtx->vault, &item, etsiConn->groupNum,
+                item.name, item.nameSz);
             if (ret == 0) {
                 ret = SetupKeyFindResponse(conn, &item);
             }
+            wolfVaultFreeItem(&item);            
         }
-        else
+    }
+    else
 #endif
-        if (etsiThread->keyType != (EtsiKeyType)etsiConn->groupNum) {
+    {
+        if (etsiConn->groupNum > 0 && 
+            etsiThread->keyType != (EtsiKeyType)etsiConn->groupNum)
+        {
+            pthread_mutex_lock(&svcCtx->lock);
             /* If generated key doesn't match, force it now */
             ret = GenNewKey(svcCtx, (EtsiKeyType)etsiConn->groupNum);
             if (ret == 0) {
                 ret = SetupKeyPackage(svcCtx, etsiThread);
-
-                memcpy(conn->request, etsiThread->httpRspBuf, etsiThread->httpRspSz);
-                conn->requestSz = etsiThread->httpRspSz;
             }
+            pthread_mutex_unlock(&svcCtx->lock);
         }
-        pthread_mutex_unlock(&svcCtx->lock);
+
+        /* copy thread key to send buffer */
+        if (ret == 0 && etsiThread->httpRspSz > sizeof(conn->request)) {
+            ret = WOLFKM_BAD_KEY;
+        }
+        if (ret == 0) {
+            memcpy(conn->request, etsiThread->httpRspBuf, etsiThread->httpRspSz);
+            conn->requestSz = etsiThread->httpRspSz;
+        }
     }
 
     /* Send Response */
-    return wolfEtsiSvc_DoResponse(conn);
+    if (ret == 0) {
+        ret = wolfEtsiSvc_DoResponse(conn);
+    }
+
+    return ret;
 }
 
 void wolfEtsiSvc_ConnClose(SvcConn* conn)

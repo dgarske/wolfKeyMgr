@@ -33,12 +33,16 @@
 #define EXIT_FAILURE 1
 #endif
 
+#define REQ_TYPE_GET  1
+#define REQ_TYPE_PUSH 2
+#define REQ_TYPE_FIND 3
 
 typedef struct WorkThreadInfo {
     const char* host;
     int requests;
     int timeoutSec;
-    int useGet;
+    int requestType;
+    const char* fingerprint;
     char* saveResp;
     word16 port;
     const char* keyFile;
@@ -82,11 +86,11 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
 /* ETSI Asymmetric Key Request */
 static int DoKeyRequest(EtsiClientCtx* client, WorkThreadInfo* info)
 {
-    int ret;
+    int ret = WOLFKM_BAD_ARGS;
 
     /* push: will wait for server to push new keys */
     /* get:  will ask server for key and return */
-    if (info->useGet) {
+    if (info->requestType == REQ_TYPE_GET) {
         ret = wolfEtsiClientGet(client, &info->key, info->keyType, NULL, NULL,
             info->timeoutSec);
         /* positive return means new key returned */
@@ -103,9 +107,14 @@ static int DoKeyRequest(EtsiClientCtx* client, WorkThreadInfo* info)
             sleep(1); /* wait 1 second */
         }
     }
-    else {
+    else if (info->requestType == REQ_TYPE_PUSH) {
         /* blocking call and new keys from server will issue callback */
         ret = wolfEtsiClientPush(client, info->keyType, NULL, NULL, keyCb, info);
+    }
+    else if (info->requestType == REQ_TYPE_FIND) {
+        /* blocking call and new keys from server will issue callback */
+        ret = wolfEtsiClientFind(client, &info->key, info->keyType,
+            info->fingerprint, NULL, info->timeoutSec);
     }
 
     if (ret != 0) {
@@ -180,6 +189,7 @@ static void Usage(void)
     printf("-A <pem>    TLS CA Certificate, default %s\n", ETSI_TEST_CLIENT_CA);
     printf("-K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default %s)\n",
         wolfEtsiKeyGetTypeStr(ETSI_TEST_KEY_TYPE));
+    printf("-F <name>   Find key using public key (hex string)\n");
 }
 
 int main(int argc, char** argv)
@@ -201,11 +211,11 @@ int main(int argc, char** argv)
     info.keyPass = ETSI_TEST_CLIENT_PASS;
     info.clientCertFile = ETSI_TEST_CLIENT_CERT;
     info.caFile = ETSI_TEST_CLIENT_CA;
-    info.useGet = 1;
+    info.requestType = REQ_TYPE_GET;
     info.keyType = ETSI_TEST_KEY_TYPE;
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:")) != -1) {
+    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:F:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -239,7 +249,7 @@ int main(int argc, char** argv)
                 /* keeping -g GET option for backwards compatibility (on by default) */
                 break;
             case 'u':
-                info.useGet = 0;
+                info.requestType = REQ_TYPE_PUSH;
                 break;
             case 's' :
                 info.timeoutSec = atoi(optarg);
@@ -270,6 +280,10 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+            case 'F':
+                info.requestType = REQ_TYPE_FIND;
+                info.fingerprint = optarg;
+                break;
             default:
                 Usage();
                 exit(EX_USAGE);

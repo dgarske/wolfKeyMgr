@@ -44,6 +44,7 @@ WOLFKM_API time_t wolfGetCurrentTimeT(void);
 
 WOLFKM_API int wolfLoadFileBuffer(const char* fileName, byte** buffer, word32* sz);
 WOLFKM_API void wolfPrintBin(const byte* buffer, word32 length);
+WOLFKM_API void wolfPrintBinLevel(enum log_level_t level, const byte* buffer, word32 length);
 WOLFKM_API int wolfSaveFile(const char* file, byte* buffer, word32 length);
 
 WOLFKM_API int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz);
