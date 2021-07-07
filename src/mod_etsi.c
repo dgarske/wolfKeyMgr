@@ -944,8 +944,11 @@ int wolfEtsiKeyPrint(EtsiKey* key)
                 ret = wc_export_int(&dhKey.pub, pubKey, &pubKeyLen,
                     MAX_DH_PUB_SZ, WC_TYPE_HEX_STR);
                 if (ret == 0) {
+                    int i;
                     XLOG(WOLFKM_LOG_INFO, "DH Pub: %d\n", pubKeyLen);
-                    XLOG(WOLFKM_LOG_INFO, "\t%s\n", (char*)pubKey);
+                    for (i=0; i<pubKeyLen*2; i+=128) {
+                        XLOG(WOLFKM_LOG_INFO, "\t%.128s\n", (char*)pubKey+i);
+                    }
                 }
             }
             wc_FreeDhKey(&dhKey);
