@@ -149,12 +149,40 @@ etsi_test 0.9
 -c <pem>    TLS Client Certificate, default certs/client-cert.pem
 -A <pem>    TLS CA Certificate, default certs/ca-cert.pem
 -K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default SECP256R1)
+-F <name>   Find key using public key (hex string)
 ```
 
 This client also support stress testing options:
 * Use the thread pool "-t" to spin up more threads.
 * Use the ETSI test client "-r" to make additional requests per thread.
+* Use the "-F" command to find keys. This is a hex string with public key.
 
+#### ETSI Fingerprint Names
+
+We are using the fingerprint to identify an ephemeral key to lookup using the following:
+* ECC: Public X and Y limited to 32 digits each (64 total)
+* DH: Public key truncated to 64 digits.
+
+The fingerprint used in the HTTP GET is converted to a hex string up to 128 characters.
+
+For example: An ECC public key printed like this:
+
+```sh
+ECC Pub X: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC
+ECC Pub Y: 38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
+
+# Retrieved using:
+$ ./examples/etsi_test/etsi_test -F 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
+
+# Example Key Manager output:
+HTTP GET
+Version: HTTP/1.1
+URI: /.well-known/enterprise-transport-security/keys?fingerprints=5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018&groups=0x0017
+Headers: 1
+    Accept: : application/pkcs8
+Fingerprint: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018
+Group: SECP256R1 (23)
+```
 
 ### HTTP Server / Client
 
@@ -305,6 +333,12 @@ where the SHA-256 digest of the static Diffie-Hellman public key as transmitted 
 
 See Recommendation ITU-T X.509 (10/2016) | ISO/IEC 9594-8: "Information technology - Open Systems Interconnection - The Directory: Public-key and attribute certificate frameworks".
 
+## Features Missing
+* Find error response message (currently disconnects with socket FIN)
+* X509 Visibility support
+* ED25519 and ED448
+* TLS v1.2 ephemeral key support
+* Vault encryption
 
 ## Support
 

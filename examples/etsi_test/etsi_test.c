@@ -112,7 +112,7 @@ static int DoKeyRequest(EtsiClientCtx* client, WorkThreadInfo* info)
         ret = wolfEtsiClientPush(client, info->keyType, NULL, NULL, keyCb, info);
     }
     else if (info->requestType == REQ_TYPE_FIND) {
-        /* blocking call and new keys from server will issue callback */
+        /* find key from server  call and new keys from server will issue callback */
         ret = wolfEtsiClientFind(client, &info->key, info->keyType,
             info->fingerprint, NULL, info->timeoutSec);
         if (ret > 0) {
