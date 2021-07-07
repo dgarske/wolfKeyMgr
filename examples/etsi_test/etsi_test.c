@@ -115,6 +115,11 @@ static int DoKeyRequest(EtsiClientCtx* client, WorkThreadInfo* info)
         /* blocking call and new keys from server will issue callback */
         ret = wolfEtsiClientFind(client, &info->key, info->keyType,
             info->fingerprint, NULL, info->timeoutSec);
+        if (ret > 0) {
+            /* use same "push" callback to test key use / print */
+            keyCb(client, &info->key, info);
+            ret = 0;
+        }
     }
 
     if (ret != 0) {

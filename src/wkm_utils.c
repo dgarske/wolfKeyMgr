@@ -329,7 +329,7 @@ int wolfHexStringToByte(const char* in, word32 inSz, byte* out, word32 outSz)
     for (i = 0; i < inSz; i+=2) {
         cl = HexToByte((char)in[i]);
         ch = HexToByte((char)in[i+1]);
-        *out++ = (((byte)ch) << 4) | (byte)cl;
+        *out++ = (((byte)cl) << 4) | (byte)ch;
         calcSz++;
     }
     return calcSz;

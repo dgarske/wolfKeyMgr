@@ -38,7 +38,7 @@ static int wkmTlsReadCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     cbCtx = (wolfTlsCbCtx*)ctx;
 
     ret = wolfSocketRead(cbCtx->sockFd, (byte*)buf, sz);
-    if (ret < 0) {
+    if (ret <= 0) {
         int err = wolfSocketLastError(ret);
         if (err == SOCKET_EWOULDBLOCK || err == SOCKET_EAGAIN) {
             return WOLFSSL_CBIO_ERR_WANT_READ;
@@ -75,7 +75,7 @@ static int wkmTlsWriteCb(WOLFSSL* ssl, char* buf, int sz, void* ctx)
     cbCtx = (wolfTlsCbCtx*)ctx;
 
     ret = wolfSocketWrite(cbCtx->sockFd, (byte*)buf, sz);
-    if (ret < 0) {
+    if (ret <= 0) {
         int err = wolfSocketLastError(ret);
 
         if (err == SOCKET_EWOULDBLOCK || err == SOCKET_EAGAIN) {
@@ -332,18 +332,16 @@ int wolfTlsRead(WOLFSSL* ssl, byte* p, int* len, int timeoutSec)
             err = wolfSSL_get_error(ssl, 0);
         }
         if (ret == 0 || err == WOLFSSL_ERROR_WANT_READ) {
-            ret = wolfSockSelect(cbCtx->sockFd, 1, 1);
-            if (ret == WKM_SOCKET_SELECT_RECV_READY  ||
-                ret == WKM_SOCKET_SELECT_TIMEOUT) {
-                ret = 0; /* try again */
-                if (timeoutSec > 0)
-                    timeoutSec--;
-            }
-            else {
-                ret = WOLFKM_BAD_TIMEOUT;
-            }
+            ret = wolfSockSelect(cbCtx->sockFd, timeoutSec, 1);
+            if (ret == WKM_SOCKET_SELECT_RECV_READY)
+                ret = 0; /* data ready */
+            else if (ret == WKM_SOCKET_SELECT_ERROR_READY)
+                ret = WOLFKM_BAD_SOCKET; /* socket error */
+            else
+                ret = WOLFKM_BAD_TIMEOUT; /* timeout */
+            err = 0; /* reset error */
         }
-    } while (ret == 0 && timeoutSec > 0);
+    } while (ret == 0);
 
     if (ret > 0) {
         *len = ret;
@@ -351,7 +349,7 @@ int wolfTlsRead(WOLFSSL* ssl, byte* p, int* len, int timeoutSec)
     else if (timeoutSec <= 0) {
         ret = WOLFKM_BAD_TIMEOUT;
     }
-    if (ret < 0) {
+    else if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "wolfTlsRead error %d: %s\n",
             err, wolfSSL_ERR_reason_error_string(err));        
     }
@@ -377,12 +375,16 @@ int wolfTlsWrite(WOLFSSL* ssl, byte* p, int len)
         if (ret < 0) {
             err = wolfSSL_get_error(ssl, 0);
         }
-        if (ret == 0 || err == WOLFSSL_ERROR_WANT_READ) {
+        if (ret == 0 || err == WOLFSSL_ERROR_WANT_WRITE) {
+            /* no timeout available, so block for up to 1 second */
             ret = wolfSockSelect(cbCtx->sockFd, 1, 0);
-            if (ret == WKM_SOCKET_SELECT_SEND_READY ||
-                ret == WKM_SOCKET_SELECT_TIMEOUT) {
-                ret = 0; /* try again */
-            }
+            if (ret == WKM_SOCKET_SELECT_SEND_READY)
+                ret = 0; /* data ready */
+            else if (ret == WKM_SOCKET_SELECT_ERROR_READY)
+                ret = WOLFKM_BAD_SOCKET; /* socket error */
+            else
+                ret = WOLFKM_BAD_TIMEOUT; /* timeout */
+            err = 0; /* reset error */
         }
     } while (ret == 0);
     if (ret < 0) {
