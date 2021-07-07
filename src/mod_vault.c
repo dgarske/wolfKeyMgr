@@ -342,8 +342,8 @@ int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type,
         /* skip to next item */
         itemPos += VAULT_ITEM_SZ(&ctx->item);
         /* check if at end of file */
-        if (itemPos > ctx->header.headerSz + ctx->header.vaultSz) {
-            if (rolloverCount++ > 1) {
+        if (itemPos >= ctx->header.headerSz + ctx->header.vaultSz) {
+            if (++rolloverCount > 1) {
                 ret = WOLFKM_BAD_FILE; /* not found */
                 break;
             }
