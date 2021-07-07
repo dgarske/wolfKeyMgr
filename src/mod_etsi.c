@@ -928,7 +928,7 @@ int wolfEtsiKeyPrint(EtsiKey* key)
         }
     }
 #endif
-#ifndef NO_DH
+#if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
     if (keyAlgo == WC_PK_TYPE_DH) {
         /* example for loading DHE key */
         DhKey dhKey;
