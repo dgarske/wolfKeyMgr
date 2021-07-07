@@ -938,11 +938,14 @@ int wolfEtsiKeyPrint(EtsiKey* key)
             ret = wc_DhKeyDecode((byte*)key->response, &idx, &dhKey,
                 key->responseSz);
             if (ret == 0) {
-                byte pubKey[MAX_DH_PUB_SZ];
+                byte pubKey[MAX_DH_PUB_SZ*2+1];
                 word32 pubKeyLen = sizeof(pubKey);
-                ret = wc_DhExportKeyPair(&dhKey, NULL, NULL, pubKey, &pubKeyLen);
+
+                ret = wc_export_int(&dhKey.pub, pubKey, &pubKeyLen,
+                    MAX_DH_PUB_SZ, WC_TYPE_HEX_STR);
                 if (ret == 0) {
                     XLOG(WOLFKM_LOG_INFO, "DH Pub: %d\n", pubKeyLen);
+                    XLOG(WOLFKM_LOG_INFO, "\t%s\n", (char*)pubKey);
                 }
             }
             wc_FreeDhKey(&dhKey);
