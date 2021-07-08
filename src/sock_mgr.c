@@ -367,7 +367,6 @@ static SvcConn* ServiceConnNew(EventThread* me)
         conn->start     = 0.0f;
         conn->requestSz = 0;
         conn->svc       = svc;
-        conn->svcThreadCtx = me->svcThreadCtx;
         conn->me        = me;
         IncrementTotalConnections(conn);
 
@@ -404,11 +403,6 @@ static void WorkerExit(void* arg)
         next = conn->next;
         ServiceConnFree(conn);
         conn = next;
-    }
-
-    /* issue callback to service signaling thread exit / free */
-    if (svc && svc->freeThreadCb) {
-        svc->freeThreadCb(svc, me->svcThreadCtx);
     }
 
     event_del(me->notify);
@@ -560,7 +554,6 @@ static void ThreadEventProcess(int fd, short which, void* arg)
             memset(&conn_lcl, 0, sizeof(conn_lcl));
             conn = &conn_lcl;
             conn->svc          = me->svc;
-            conn->svcThreadCtx = me->svcThreadCtx;
             conn->me           = me;
         }
         while (conn) {
@@ -639,12 +632,7 @@ static void SetupThread(SvcInfo* svc, EventThread* me)
         exit(EXIT_FAILURE);
     }
     ConnQueueInit(me->connections);
-
-    /* issue callback to service to init */
     me->svc = svc;
-    if (svc->initThreadCb) {
-        svc->initThreadCb(svc, &me->svcThreadCtx);
-    }
 }
 
 

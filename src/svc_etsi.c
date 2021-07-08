@@ -52,8 +52,6 @@ static SvcInfo etsiService = {
     /* Callbacks */
     .requestCb = wolfEtsiSvc_DoRequest,
     .timeoutCb = wolfEtsiSvc_HandleTimeout,
-    .initThreadCb = wolfEtsiSvc_WorkerInit,
-    .freeThreadCb = wolfEtsiSvc_WorkerFree,
     .notifyCb = wolfEtsiSvc_DoNotify,
     .closeCb = wolfEtsiSvc_ConnClose,
 
@@ -437,20 +435,6 @@ int wolfEtsiSvc_HandleTimeout(SvcConn* conn)
         return 0; /* keep open (return non-zero value to close connection) */
     }
     return 1; /* close connection */
-}
-
-/* Called for startup of each worker thread */
-int wolfEtsiSvc_WorkerInit(SvcInfo* svc, void** svcThreadCtx)
-{
-    (void)svc;
-    (void)svcThreadCtx;
-    return 0;
-}
-
-void wolfEtsiSvc_WorkerFree(SvcInfo* svc, void* svcThreadCtx)
-{
-    (void)svc;
-    (void)svcThreadCtx;
 }
 
 SvcInfo* wolfEtsiSvc_Init(int renewSec, EtsiKeyType keyTypeDef)

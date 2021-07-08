@@ -30,9 +30,6 @@ WOLFKM_LOCAL SvcInfo* wolfEtsiSvc_Init(int renewSec, EtsiKeyType keyTypeDef);
 WOLFKM_LOCAL int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase, const char* listenPort);
 WOLFKM_LOCAL void wolfEtsiSvc_Cleanup(SvcInfo* svc);
 
-WOLFKM_LOCAL int wolfEtsiSvc_WorkerInit(SvcInfo* svc, void** svcThreadCtx);
-WOLFKM_LOCAL void wolfEtsiSvc_WorkerFree(SvcInfo* svc, void* svcThreadCtx);
-
 WOLFKM_LOCAL int wolfEtsiSvc_DoRequest(SvcConn* conn);
 WOLFKM_LOCAL int wolfEtsiSvc_HandleTimeout(SvcConn* conn);
 WOLFKM_LOCAL int wolfEtsiSvc_DoNotify(SvcConn* conn);

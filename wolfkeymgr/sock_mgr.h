@@ -85,11 +85,9 @@ struct SvcInfo {
     const char* desc;
 
     /* service callbacks */
-    initThreadFunc  initThreadCb;
     svcRequestFunc  requestCb;
     svcTimeoutFunc  timeoutCb;
     svcNotifyFunc   notifyCb;
-    freeThreadFunc  freeThreadCb;
     svcCloseFunc    closeCb;
     
     /* TLS certificate / key - As DER/ASN.1*/
@@ -144,7 +142,6 @@ struct SvcConn {
     word32              requestSz;    /* bytes in request buffer */
     byte                request[MAX_REQUEST_SIZE]; /* full input request */
     SvcInfo*            svc;
-    void*               svcThreadCtx; /* context for the thread */
     void*               svcConnCtx;   /* context for the connection specific to the service */
     double              start;        /* response processing time start */
     EventThread*        me;
@@ -167,7 +164,6 @@ struct EventThread {
     int                notifyRecv;     /* receiving end of notification pipe */
     int                notifySend;     /* sending end of notification pipe */
     SvcInfo*           svc;
-    void*              svcThreadCtx;
     SvcConnList        freeSvcConns;   /* free connection list */
     SvcConnList        activeSvcConns; /* active connection list */
 };
