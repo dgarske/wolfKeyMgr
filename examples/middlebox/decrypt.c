@@ -132,6 +132,7 @@ static int etsi_client_get(char* urlStr, EtsiKey* key)
     return ret;
 }
 
+#ifdef WOLFSSL_SNIFFER_KEY_CALLBACK
 static int etsi_client_find(char* urlStr, EtsiKey* key, int namedGroup, 
     const byte* pub, word32 pubSz)
 {
@@ -160,7 +161,6 @@ static int etsi_client_find(char* urlStr, EtsiKey* key, int namedGroup,
     return ret;
 }
 
-#ifdef WOLFSSL_SNIFFER_KEY_CALLBACK
 static int myKeyCb(void* vSniffer, int namedGroup,
     const unsigned char* srvPub, unsigned int srvPubSz,
     const unsigned char* cliPub, unsigned int cliPubSz,
