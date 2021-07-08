@@ -230,17 +230,20 @@ static void* KeyPushWorker(void* arg)
 
     do {
         keyGenCount = 0;
+        nextExpires = 0;
 
         /* renew any expired keys */
         pthread_mutex_lock(&svcCtx->lock);
         now = wolfGetCurrentTimeT();
         for (i=0; i<ETSI_SVC_MAX_ACTIVE_KEYS; i++) {
-            if (svcCtx->keys[i].expires > 0 && now >= svcCtx->keys[i].expires) {
-                (void)GenNewKey(svcCtx, svcCtx->keys[i].type, &svcCtx->keys[i]);
-                keyGenCount++;
+            if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN && svcCtx->keys[i].expires > 0) {
+                if (now >= svcCtx->keys[i].expires) {
+                    (void)GenNewKey(svcCtx, svcCtx->keys[i].type, &svcCtx->keys[i]);
+                    keyGenCount++;
+                }
+                if (nextExpires == 0 || nextExpires > svcCtx->keys[i].expires)
+                    nextExpires = svcCtx->keys[i].expires;
             }
-            if (nextExpires == 0 || nextExpires < svcCtx->keys[i].expires)
-                nextExpires = svcCtx->keys[i].expires;
         }
         renewSec = (nextExpires > now) ? nextExpires - now : svcCtx->renewSec;
         pthread_mutex_unlock(&svcCtx->lock);
@@ -251,6 +254,7 @@ static void* KeyPushWorker(void* arg)
         }
 
         /* wait seconds */
+        XLOG(WOLFKM_LOG_INFO, "Next key renewal %d seconds\n", renewSec);
         sleep(renewSec);
     } while (1);
 
