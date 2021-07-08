@@ -59,7 +59,7 @@ enum {
 
 static pcap_t* pcap = NULL;
 static pcap_if_t* alldevs = NULL;
-
+static int isOfflinePcap = 0;
 
 static EtsiClientCtx* gEtsiClient;
 
@@ -168,6 +168,12 @@ static int myKeyCb(void* vSniffer, int namedGroup,
 {
     int ret;
     static EtsiKey key;
+
+    if (!isOfflinePcap) {
+        /* decrypt is real-time, don't use find */
+        return 0;
+    }
+
     ret = etsi_client_find(NULL, &key, namedGroup, srvPub, srvPubSz);
     if (ret >= 0) {
         byte* keyBuf = NULL;
@@ -345,13 +351,21 @@ static int load_key(const char* name, const char* server, int port,
     return ret;
 }
 
+static void TrimNewLine(char* str)
+{
+    word32 strSz = 0;
+    if (str)
+        strSz = (word32)strlen(str);
+    if (strSz > 0 && (str[strSz-1] == '\n' || str[strSz-1] == '\r'))
+        str[strSz-1] = '\0';
+}
+
 int main(int argc, char** argv)
 {
     int          ret = 0;
     int          hadBadPacket = 0;
     int          inum = 0;
     int          port = 0, portDef = HTTPS_TEST_PORT;
-    int          saveFile = 0;
     int          i = 0, defDev = 0;
     int          frame = ETHER_IF_FRAME_LEN;
     char         err[PCAP_ERRBUF_SIZE];
@@ -474,13 +488,10 @@ int main(int argc, char** argv)
         memset(keyFilesBuf, 0, sizeof(keyFilesBuf));
         memset(keyFilesUser, 0, sizeof(keyFilesUser));
         if (fgets(keyFilesUser, sizeof(keyFilesUser), stdin)) {
-            word32 strSz;
-            if (keyFilesUser[0] != '\r' && keyFilesUser[0] != '\n') {
+            TrimNewLine(keyFilesUser);
+            if (strlen(keyFilesUser) > 0) {
                 keyFilesSrc = keyFilesUser;
             }
-            strSz = (word32)strlen(keyFilesUser);
-            if (keyFilesUser[strSz-1] == '\n')
-                keyFilesUser[strSz-1] = '\0';
         }
         strncpy(keyFilesBuf, keyFilesSrc, sizeof(keyFilesBuf));
 
@@ -489,6 +500,7 @@ int main(int argc, char** argv)
         printf("Enter alternate SNI [default: none]: ");
         memset(cmdLineArg, 0, sizeof(cmdLineArg));
         if (fgets(cmdLineArg, sizeof(cmdLineArg), stdin)) {
+            TrimNewLine(cmdLineArg);
             if (strlen(cmdLineArg) > 0) {
                 sniName = cmdLineArg;
             }
@@ -517,7 +529,7 @@ int main(int argc, char** argv)
         }
     }
     else if (argc >= 2) {
-        saveFile = 1;
+        isOfflinePcap = 1;
         pcap = pcap_open_offline(argv[1], err);
         if (pcap == NULL) {
             printf("pcap_open_offline failed %s\n", err);
@@ -606,7 +618,7 @@ int main(int argc, char** argv)
                 ssl_FreeZeroDecodeBuffer(&data, ret, err);
             }
         }
-        else if (saveFile)
+        else if (isOfflinePcap)
             break;      /* we're done reading file */
     }
     FreeAll();

@@ -111,8 +111,8 @@ static int GenNewKey(EtsiSvcCtx* svcCtx, EtsiKeyType keyType, EtsiKey* key)
     #endif
     }
     else {
-        XLOG(WOLFKM_LOG_ERROR, "Failed generating %s key! %d\n",
-            keyTypeStr, ret);
+        XLOG(WOLFKM_LOG_ERROR, "Failed generating %s key! %s (%d)\n",
+            keyTypeStr, wolfKeyMgr_GetError(ret), ret);
     }
 
     return ret;

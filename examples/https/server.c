@@ -78,20 +78,20 @@ int main(int argc, char* argv[])
         ret = etsi_client_get(ctx);
         if (ret != 0) {
             mStop = 1;
-            goto exit;
+            goto end_sess;
         }
 
         ret = wolfTlsAccept(ctx, listenFd, &ssl, &clientAddr,
             HTTPS_TEST_TIMEOUT_SEC);
         if (ret == WOLFKM_BAD_TIMEOUT) continue;
-        if (ret != 0) goto exit;
+        if (ret != 0) goto end_sess;
         
         printf("TLS Accept %s\n", wolfSocketAddrStr(&clientAddr));
 
         /* Get HTTP request and print */
         dataSz = (int)sizeof(data);
         ret = wolfTlsRead(ssl, data, &dataSz, HTTPS_TEST_TIMEOUT_SEC);
-        if (ret < 0) goto exit;
+        if (ret < 0) goto end_sess;
         
         ret = wolfHttpServer_ParseRequest(&req, data, dataSz);
         if (ret == 0) {
@@ -112,7 +112,7 @@ int main(int argc, char* argv[])
             ret = wolfTlsWrite(ssl, data, dataSz);
         }
 
-exit:
+end_sess:
 
         /* Done - send TLS shutdown message */
         if (ssl) {
@@ -125,6 +125,7 @@ exit:
         }
     } while (mStop == 0);
 
+exit:
     if (listenFd != WKM_SOCKET_INVALID)
         wolfSocketClose(listenFd);
     if (ctx)
