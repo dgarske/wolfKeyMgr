@@ -662,8 +662,6 @@ int wolfEtsiKeyComputeName(EtsiKeyType keyType,
         ret = NamedGroupToCurveInfo(keyType, &curveId, &keySize);
         if (ret != 0)
             return ret;
-        if (pubSz < 1)
-            return WOLFKM_BAD_ARGS;
 
         /* this handles compressed ECC keys if HAVE_COMP_KEY is defined */
         ret = wc_ecc_init_ex(&key, NULL, INVALID_DEVID);
@@ -673,7 +671,7 @@ int wolfEtsiKeyComputeName(EtsiKeyType keyType,
             word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
             ret = wc_ecc_import_x963_ex(pub, pubSz, &key, curveId);
             if (ret == 0) {
-                /* export public */
+                /* export public - do not trust length from wc_ecc_export_ex */
                 ret = wc_ecc_export_ex(&key,
                     pubX, &pubXLen,
                     pubY, &pubYLen, 
@@ -681,8 +679,9 @@ int wolfEtsiKeyComputeName(EtsiKeyType keyType,
             }
             if (ret == 0) {
                 /* compute name for key */
-                if (pubXLen > tmpSz/2) pubXLen = tmpSz/2;
-                if (pubYLen > tmpSz/2) pubYLen = tmpSz/2;
+                pubXLen = pubYLen = keySize*2;
+                if (pubXLen > tmpSz) pubXLen = tmpSz;
+                if (pubYLen > tmpSz) pubYLen = tmpSz;
                 memcpy(name,         pubX, pubXLen);
                 memcpy(name+pubXLen, pubY, pubYLen);
                 *nameSz = pubXLen + pubYLen;

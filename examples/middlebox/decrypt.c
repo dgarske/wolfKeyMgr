@@ -186,6 +186,7 @@ static int myKeyCb(void* vSniffer, int namedGroup,
             wc_AllocDer(&privKey, keySz, PRIVATEKEY_TYPE, heap);
         }
         memcpy(privKey->buffer, keyBuf, keySz);
+        ret = 0; /* mark success */
     }
     return ret;
 }
