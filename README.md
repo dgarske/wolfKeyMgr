@@ -42,19 +42,7 @@ Client side
 
 ## Key Manager Build and Install
 
-1. Install libevent version 2.0+
-
-```sh
-$ curl -L https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
-$ tar xzvf libevent-2.1.12-stable.tar.gz
-$ cd libevent-2.1.12-stable
-$ ./configure --disable-openssl
-$ make
-$ make check   # (optional, but highly recommended)
-$ sudo make install
-```
-
-2. Install wolfssl version v4.8.0+
+1. Install wolfssl version v4.8.0+
 
 ```sh
 $ ./autogen.sh
@@ -74,17 +62,39 @@ Notes:
 * Requires at least wolfSSL v4.7.0 with PR's:
    - https://github.com/wolfSSL/wolfssl/pull/4062
    - https://github.com/wolfSSL/wolfssl/pull/4125
+   - https://github.com/wolfSSL/wolfssl/pull/4181
 
-3. Building wolfKeyMgr on *nix from git repository
+2. Install libevent version 2.0+
 
-    Run the autogen script to generate configure, you'll need the autoconf tools
-    installed, then proceed to the next step.
+```sh
+$ curl -L https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
+$ tar xzvf libevent-2.1.12-stable.tar.gz
+$ cd libevent-2.1.12-stable
+$ ./configure --disable-openssl
+$ make
+$ make check   # (optional, but highly recommended)
+$ sudo make install
+```
+
+3. Install libpcap for middle-box decryption example (or build with `--disable-sniffer`)
+
+```
+Mac OS/X: `brew install libpcap`
+Debian/Ubuntu: `sudo apt install libpcap-dev`
+RedHat/CentOS: 'sudo yum install libpcap-dev`
+Windows: Download and install `WinPcap`
+```
+
+4. Building wolfKeyMgr on *nix from git repository
+
+Run the autogen.sh script to generate configure, you'll need the autoconf tools
+installed, then proceed to the next step.
 
 ```sh
 $ ./autogen.sh
 ```
 
-4. Building wolfKeyMgr on *nix from a release
+5. Building wolfKeyMgr on *nix from a release
 
 ```sh
 $ ./configure
