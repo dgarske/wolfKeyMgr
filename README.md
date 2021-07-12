@@ -252,7 +252,20 @@ usage: ./decrypt or ./decrypt dumpFile keyServerURL [server] [port] [password]
 3. Run the middle-box decryption `./examples/middlebox/decrypt` and use the default parameters.
 4. Open a web browser to `https://localhost` or run the HTTP client example `./examples/https/client`.
 5. In the middle-box decryption window you will see the decrypted HTTPS traffic.
+co
 
+Notes:
+
+1) Most browsers will show a security warning because the certificate common name for localhost is a security risk. Here is not to bypass this for each browser:
+* FireFox: "Warning: Potential Security Risk Ahead". Click "Advanced". Click "Accept the Risk and Continue"
+* Chrome: Launch Chrome browser and then visit: `chrome://flags/#allow-insecure-localhost`. Using “Allow invalid certificates for resources loaded from localhost” drop-down change the setting from Disabled to Enabled. Relaunch Chrome browser to enable the feature. Doing this will “Allow insecure connections on localhost in Chrome” and fix the issue.
+
+2) Some browsers behave different with localhost and will not send the SNI extension, which may cause issues. Switching to a physical ethernet interface and IP address (example https://192.168.0.4:443) may work better.
+
+3) To generate a different common name in the self-signed certificate see `wolfKeyMgr/certs/gen-certs.sh` and modify `CN=` then re-run `./certs/gen-certs.sh` or manually run the following command:
+`openssl req -new -x509 -nodes -key ./certs/test-key.pem -out ./certs/test-cert.pem -sha256 -days 7300 -batch -subj "/C=US/ST=CA/L=Seattle/O=wolfSSL/OU=Development/CN=localhost/emailAddress=info@wolfssl.com"`. For testing it might be useful to setup a fake domain in `/etc/hosts`.
+
+4) If you get "Permission denied" errors try adding `sudo` to the commands.
 
 
 ## ETSI Security
