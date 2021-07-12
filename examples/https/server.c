@@ -24,6 +24,8 @@
 #include "wolfkeymgr/mod_etsi.h"
 #include "examples/test_config.h"
 
+#include <signal.h>        /* signal */
+
 static volatile int mStop = 0;
 static WKM_SOCKET_T listenFd = WKM_SOCKET_INVALID;
 
