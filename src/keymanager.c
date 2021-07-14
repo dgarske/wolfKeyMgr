@@ -77,7 +77,6 @@ int main(int argc, char** argv)
     SvcInfo* etsiSvc = NULL;
     int sec;
     word32 timeoutSec  = WOLFKM_DEFAULT_TIMEOUT, renewSec = WOLFKM_KEY_RENEW_TIMEOUT;
-    int disableMutualAuth = 0; /* on by default */
     const char* serverKey = WOLFKM_ETSISVC_KEY;
     const char* serverKeyPass = WOLFKM_ETSISVC_KEY_PASSWORD;
     const char* serverCert = WOLFKM_ETSISVC_CERT;
@@ -88,7 +87,7 @@ int main(int argc, char** argv)
     const char* listenPort = WOLFKM_ETSISVC_PORT;
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?bis:t:o:f:l:dk:w:c:A:r:K:v:p:P:")) != -1) {
+    while ((ch = getopt(argc, argv, "?bis:t:o:f:l:k:w:c:A:r:K:v:p:P:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -128,9 +127,6 @@ int main(int argc, char** argv)
                     perror("loglevel [1:4] only");
                     exit(EX_USAGE);
                 }
-                break;
-            case 'd':
-                disableMutualAuth = 1;
                 break;
             case 'k':
                 serverKey = optarg;

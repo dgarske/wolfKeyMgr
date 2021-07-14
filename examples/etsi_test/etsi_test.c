@@ -71,9 +71,11 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
 
     /* test use-case setting static ephemeral key */
     if (info->ctx) {
+    #ifdef WOLFSSL_STATIC_EPHEMERAL
         ret = wolfSSL_CTX_set_ephemeral_key(info->ctx,
             keyAlgo, (char*)key->response, key->responseSz,
             WOLFSSL_FILETYPE_ASN1);
+    #endif
     }
     wolfEtsiKeyPrint(key);
     if (info->saveResp != NULL) {

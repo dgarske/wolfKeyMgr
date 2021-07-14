@@ -522,26 +522,37 @@ const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type)
 
 int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx)
 {
+    int ret;
+#ifdef WOLFSSL_STATIC_EPHEMERAL
     int keyAlgo;
+#endif
 
     if (key == NULL || ctx == NULL)
         return WOLFKM_BAD_ARGS;
 
+#ifdef WOLFSSL_STATIC_EPHEMERAL
     /* determine key algo */
     keyAlgo = wolfEtsiKeyGetPkType(key);
 
-    return wolfSSL_CTX_set_ephemeral_key(ctx, keyAlgo, 
+    ret = wolfSSL_CTX_set_ephemeral_key(ctx, keyAlgo, 
         (char*)key->response, key->responseSz, WOLFSSL_FILETYPE_ASN1);
+#else
+    ret = WOLFKM_NOT_COMPILED_IN;
+#endif
+    return ret;
 }
 
 int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl)
 {
     int ret;
+#ifdef WOLFSSL_STATIC_EPHEMERAL
     int keyAlgo;
+#endif
 
     if (key == NULL || ssl == NULL)
         return WOLFKM_BAD_ARGS;
 
+#ifdef WOLFSSL_STATIC_EPHEMERAL
     /* determine key algo */
     keyAlgo = wolfEtsiKeyGetPkType(key);
 
@@ -551,6 +562,9 @@ int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl)
         /* TODO: handle return code */
         (void)wolfSSL_UseKeyShare(ssl, key->type);
     }
+#else
+    ret = WOLFKM_NOT_COMPILED_IN;
+#endif
     return ret;
 }
 
@@ -849,7 +863,7 @@ static int GenNewKeyDh(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 
 int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 {
-    int ret;
+    int ret = WOLFKM_NOT_COMPILED_IN;
  
     if (key == NULL || rng == NULL) 
         return WOLFKM_BAD_ARGS;
