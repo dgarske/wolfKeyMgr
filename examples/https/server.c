@@ -172,7 +172,7 @@ static int etsi_client_get(WOLFSSL_CTX* ctx)
             }
         }
         else {
-            ret = MEMORY_E;
+            ret = WOLFKM_BAD_MEMORY;
         }
     }
     if (gEtsiClient) {

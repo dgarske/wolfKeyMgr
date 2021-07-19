@@ -102,7 +102,7 @@ static int etsi_client_connect(char* urlStr)
             }
         }
         else {
-            ret = MEMORY_E;
+            ret = WOLFKM_BAD_MEMORY;
         }
     }
     return ret;
