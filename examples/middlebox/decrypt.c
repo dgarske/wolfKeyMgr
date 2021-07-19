@@ -479,7 +479,11 @@ int main(int argc, char** argv)
         SNPRINTF(filter, sizeof(filter), "tcp and port %d", port);
 
         ret = pcap_compile(pcap, &fp, filter, 0, 0);
-        if (ret != 0) printf("pcap_compile failed %s\n", pcap_geterr(pcap));
+        if (ret != 0) {
+            printf("pcap_compile failed %s\n", pcap_geterr(pcap));
+            printf("Try using `sudo` permissions with middlebox/decrypt\n");
+            exit(EXIT_FAILURE);
+        }
 
         ret = pcap_setfilter(pcap, &fp);
         if (ret != 0) printf("pcap_setfilter failed %s\n", pcap_geterr(pcap));
