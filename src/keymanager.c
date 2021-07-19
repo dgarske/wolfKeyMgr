@@ -41,7 +41,6 @@ static void Usage(void)
     printf("-r <num>    Key renewal timeout, default %d\n", WOLFKM_KEY_RENEW_TIMEOUT);
     printf("-t <num>    Thread pool size, default  %ld\n",
                                                  sysconf(_SC_NPROCESSORS_CONF));
-    printf("-d          TLS Disable Mutual Authentication\n");
     printf("-k <pem>    TLS Server TLS Key, default %s\n", WOLFKM_ETSISVC_KEY);
     printf("-w <pass>   TLS Server Key Password, default %s\n", WOLFKM_ETSISVC_KEY_PASSWORD);
     printf("-c <pem>    TLS Server Certificate, default %s\n", WOLFKM_ETSISVC_CERT);
