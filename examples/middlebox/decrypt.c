@@ -405,7 +405,7 @@ int main(int argc, char** argv)
 
         for (d = alldevs; d; d=d->next) {
             printf("%d. %s", ++i, d->name);
-            if (strcmp(d->name, "lo0") == 0) {
+            if (strcmp(d->name, "lo") == 0 || strcmp(d->name, "lo0") == 0) {
                 defDev = i;
             }
             if (d->description)
@@ -422,10 +422,13 @@ int main(int argc, char** argv)
         memset(cmdLineArg, 0, sizeof(cmdLineArg));
         if (fgets(cmdLineArg, sizeof(cmdLineArg), stdin))
             inum = atoi(cmdLineArg);
-        if (inum == 0)
+        if (inum == 0) {
+            if (defDev == 0) defDev = 1;
             inum = defDev;
-        else if (inum < 1 || inum > i)
+        }
+        if (inum < 1 || inum > i) {
             err_sys("Interface number out of range");
+        }
 
         /* Jump to the selected adapter */
         for (d = alldevs, i = 0; i < inum - 1; d = d->next, i++);

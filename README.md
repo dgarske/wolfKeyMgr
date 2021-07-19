@@ -59,19 +59,18 @@ Notes:
 
 * To enable all Intel (AESNI/AVX) speedups use `--enable-intelasm --enable-sp --enable-sp-asm`
 * To enable all ARMv8 (aarch64) speedups use `--enable-armasm --enable-sp --enable-sp-asm`
-* Requires at least wolfSSL v4.7.0 with PR's:
-   - https://github.com/wolfSSL/wolfssl/pull/4062
-   - https://github.com/wolfSSL/wolfssl/pull/4125
+* Requires at least wolfSSL v4.8.0 with PR's:
    - https://github.com/wolfSSL/wolfssl/pull/4181
 
 2. Install libevent version 2.0+
 
-Most platforms have a `libevent-dev` package available. Example: `sudo apt install libevent-dev`.
+Most platforms have a `libevent-dev` package available.
+Example: `sudo apt install libevent-dev`.
 
 To build manually:
 
 ```sh
-$ curl -L https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz --output libevent-2.1.12-stable.tar.gz
+$ curl -o libevent-2.1.12-stable.tar.gz -L https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz
 $ tar xzvf libevent-2.1.12-stable.tar.gz
 $ cd libevent-2.1.12-stable
 $ ./configure --disable-openssl
