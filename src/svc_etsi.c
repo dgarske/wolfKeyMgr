@@ -181,9 +181,9 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
         strftime(expiresStr, sizeof(expiresStr), HTTP_DATE_FMT, &tm);
 
         /* Wrap key in HTTP server response */
-        conn->requestSz = sizeof(conn->request);
+        conn->responseSz = sizeof(conn->response);
         ret = wolfHttpServer_EncodeResponse(0, NULL, 
-            conn->request, &conn->requestSz, headers, 
+            conn->response, &conn->responseSz, headers, 
             sizeof(headers)/sizeof(HttpHeader), (byte*)key->response,
             key->responseSz);
     }
@@ -203,9 +203,9 @@ static int SetupKeyFindResponse(SvcConn* conn, wolfVaultItem* item)
     headers[1].string = "Keep-Alive";
 
     /* Wrap key in HTTP server response */
-    conn->requestSz = sizeof(conn->request);
+    conn->responseSz = sizeof(conn->response);
     ret = wolfHttpServer_EncodeResponse(0, NULL, 
-        conn->request, &conn->requestSz, headers, 
+        conn->response, &conn->responseSz, headers, 
         sizeof(headers)/sizeof(HttpHeader), (byte*)item->data,
         item->dataSz);
 
@@ -269,18 +269,18 @@ static int wolfEtsiSvc_DoResponse(SvcConn* conn)
         XLOG(WOLFKM_LOG_ERROR, "Bad ETSI response pointers\n");
         return WOLFKM_BAD_ARGS;
     }
-    if (conn->requestSz == 0) {
+    if (conn->responseSz == 0) {
         XLOG(WOLFKM_LOG_ERROR, "ETSI HTTP Response / Key not found!\n");
         return WOLFKM_BAD_KEY;
     }
 
     /* send response, which is in the reused request buffer */
-    ret = wolfKeyMgr_DoSend(conn, (byte*)conn->request, conn->requestSz);
+    ret = wolfKeyMgr_DoSend(conn, (byte*)conn->response, conn->responseSz);
     if (ret < 0) {
         XLOG(WOLFKM_LOG_ERROR, "ETSI DoSend failed: %d\n", ret);
         return WOLFKM_BAD_SEND;
     }
-    XLOG(WOLFKM_LOG_INFO, "Sent ETSI Response (%d bytes)\n", conn->requestSz);
+    XLOG(WOLFKM_LOG_INFO, "Sent ETSI Response (%d bytes)\n", conn->responseSz);
 
     return ret;
 }

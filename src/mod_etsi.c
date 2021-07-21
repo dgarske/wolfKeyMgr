@@ -234,6 +234,7 @@ static int EtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
         XLOG(WOLFKM_LOG_INFO, "EtsiClientMakeRequest failed: %d\n", ret);
         return ret;
     }
+    XLOG(WOLFKM_LOG_DEBUG, "HTTP Sending: %s\n", (char*)request);
 
     /* send GET key request */
     wc_LockMutex(&client->lock);

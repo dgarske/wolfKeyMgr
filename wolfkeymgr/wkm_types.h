@@ -59,6 +59,12 @@
     #error This service requires ECC, DH, X25519 or X448 support
 #endif
 
+#ifndef MAX_REQUEST_SIZE
+#define MAX_REQUEST_SIZE  (1*1024)
+#endif
+#ifndef MAX_RESPONSE_SIZE
+#define MAX_RESPONSE_SIZE (2*1024)
+#endif
 
 /* key manager errors */
 enum  {

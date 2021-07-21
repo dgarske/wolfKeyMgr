@@ -366,6 +366,7 @@ static SvcConn* ServiceConnNew(EventThread* me)
         conn->ssl       = NULL;
         conn->start     = 0.0f;
         conn->requestSz = 0;
+        conn->responseSz= 0;
         conn->svc       = svc;
         conn->me        = me;
         IncrementTotalConnections(conn);

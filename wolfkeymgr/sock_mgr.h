@@ -50,7 +50,6 @@ extern "C" {
 
 /* program constants */
 #define MAX_SOCKADDR_SZ   32
-#define MAX_REQUEST_SIZE (16*1024)
 #define MAX_SERVICES      1
 
 /* program types */
@@ -140,7 +139,9 @@ struct SvcConn {
     struct bufferevent* stream;       /* buffered stream */
     WOLFSSL*            ssl;          /* ssl object */
     word32              requestSz;    /* bytes in request buffer */
-    byte                request[MAX_REQUEST_SIZE]; /* full input request */
+    byte                request[MAX_REQUEST_SIZE];   /* full input request */
+    word32              responseSz;   /* bytes in response buffer */
+    byte                response[MAX_RESPONSE_SIZE]; /* full response */
     SvcInfo*            svc;
     void*               svcConnCtx;   /* context for the connection specific to the service */
     double              start;        /* response processing time start */

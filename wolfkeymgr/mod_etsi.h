@@ -33,10 +33,10 @@ extern "C" {
 
 
 #ifndef ETSI_MAX_REQUEST_SZ
-#define ETSI_MAX_REQUEST_SZ  1024
+#define ETSI_MAX_REQUEST_SZ  MAX_REQUEST_SIZE
 #endif
 #ifndef ETSI_MAX_RESPONSE_SZ
-#define ETSI_MAX_RESPONSE_SZ 1024
+#define ETSI_MAX_RESPONSE_SZ MAX_RESPONSE_SIZE
 #endif
 
 /* Determine max build-time DH key sizes */
