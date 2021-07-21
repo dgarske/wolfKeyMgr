@@ -33,7 +33,6 @@ extern "C" {
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/aes.h>
-#include <wolfssl/wolfcrypt/pwdbased.h>
 
 #ifndef WOLFKM_VAULT_NAME_MAX_SZ
 #define WOLFKM_VAULT_NAME_MAX_SZ 64
@@ -51,26 +50,17 @@ typedef struct wolfVaultItem {
     byte   name[WOLFKM_VAULT_NAME_MAX_SZ]; /* name is hash of public key or leading bits from it */
 } wolfVaultItem;
 
-/* open vault file using password */
+/* open vault file */
 WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file);
 
-
-#define VAULT_SEC_TYPE_NONE             0 /* no encryption */
-#define VAULT_SEC_TYPE_RSA_AESXTS256    1 /* use RSA private key to decrypt the AES symmetric key */
-#define VAULT_SEC_TYPE_PBKDF2_AESXTS256 2 /* derive symmetric key using wc_PBKDF2 from password */
-
-/* setup encryption for file - or authenticate existing */
-typedef int (*VaultAuthCbFunc)(wolfVaultCtx* ctx, word32 secType, char* key, word32* keySz, void* cbCtx);
-WOLFKM_API int wolfVaultAuth(wolfVaultCtx* ctx, word32 secType, VaultAuthCbFunc cb, void* cbCtx);
+/* setup authentication callback to get encryption key */
+typedef int (*VaultAuthCbFunc)(wolfVaultCtx* ctx, byte* key, word32 keySz, void* cbCtx);
+WOLFKM_API int wolfVaultAuth(wolfVaultCtx* ctx, VaultAuthCbFunc cb, void* cbCtx);
 
 /* add item to vault */
 WOLFKM_API int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz, const byte* data, word32 dataSz);
 /* get copy of item from vault */
 WOLFKM_API int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, const byte* name, word32 nameSz);
-/* search and return item from vault */
-WOLFKM_API int wolfVaultFind(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
-/* search next and return item from vault */
-WOLFKM_API int wolfVaultFindNext(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type, word32 timestamp);
 /* free a wolfVaultItem structure */
 WOLFKM_API void wolfVaultFreeItem(wolfVaultItem* item);
 /* delete a single item from the vault */

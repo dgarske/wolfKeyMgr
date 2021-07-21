@@ -513,20 +513,59 @@ void wolfEtsiSvc_Cleanup(SvcInfo* svc)
     }
 }
 
-static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, word32 secType, char* key,
-    word32* keySz, void* cbCtx)
+static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
+    void* cbCtx)
 {
-    int ret = 0;
+    int ret;
     EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)cbCtx;
 
-    if (secType == VAULT_SEC_TYPE_RSA_AESXTS256) {
-    #if 0
-        /* TODO: use the RSA private key to decrypt the provided symmetric key */
-        svcCtx->keyBuffer
-        svcCtx->keyBufferSz
-        int wc_RsaPrivateDecryptInline(byte* in, word32 inLen, byte** out, RsaKey* key)
-    #endif
+#if 1
+    /* For testing use fixed key */
+    static byte k1[] = {
+        0x1e, 0xa6, 0x61, 0xc5, 0x8d, 0x94, 0x3a, 0x0e,
+        0x48, 0x01, 0xe4, 0x2f, 0x4b, 0x09, 0x47, 0x14,
+        0x9e, 0x7f, 0x9f, 0x8e, 0x3e, 0x68, 0xd0, 0xc7,
+        0x50, 0x52, 0x10, 0xbd, 0x31, 0x1a, 0x0e, 0x7c,
+        0xd6, 0xe1, 0x3f, 0xfd, 0xf2, 0x41, 0x8d, 0x8d,
+        0x19, 0x11, 0xc0, 0x04, 0xcd, 0xa5, 0x8d, 0xa3,
+        0xd6, 0x19, 0xb7, 0xe2, 0xb9, 0x14, 0x1e, 0x58,
+        0x31, 0x8e, 0xea, 0x39, 0x2c, 0xf4, 0x1b, 0x08
+    };
+    if (keySz > sizeof(k1))
+        keySz = sizeof(k1);
+    memcpy(key, k1, keySz);
+    ret = 0;
+#else
+    /* TODO: Setting up authentication key */
+    /* TODO: !NO_RSA
+    WC_RNG rng;
+    RsaKey key;
+
+    /* do we have an encrypted key available? */
+
+    /* Generate key for encryption */
+    ret = wc_InitRng(&rng, NULL);
+    if (ret == 0) {
+        ret = wc_RNG_GenerateBlock(&rng, key, keySz);
+        wc_FreeRng(&rnd);
     }
+
+    /* use long term private RSA key to encrypt key */
+    ret = wc_InitRsaKey(&key, NULL);
+    if (ret == 0) {
+        byte in[256], *out = NULL;
+        word32 inLen = (word32)sizeof(in);
+        word32 idx = 0;
+        ret = wc_RsaPrivateKeyDecode(svcCtx->keyBuffer, &idx, &key, svcCtx->keyBufferSz);
+
+        if (ret == 0) {
+            ret = wc_RsaPrivateDecryptInline(in, inLen, &out, &key);
+        }
+
+        wc_FreeRsaKey(&key);
+    }
+#endif
+
     (void)key;
     (void)keySz;
     (void)svcCtx;
@@ -547,8 +586,7 @@ int wolfEtsiSvc_SetVaultFile(SvcInfo* svc, const char* vaultFile)
     if (ret == 0) {
         wolfVaultPrintInfo(svcCtx->vault);
 
-        ret = wolfVaultAuth(svcCtx->vault, VAULT_SEC_TYPE_RSA_AESXTS256,
-            wolfEtsiSvcVaultAuthCb, svcCtx);
+        ret = wolfVaultAuth(svcCtx->vault, wolfEtsiSvcVaultAuthCb, svcCtx);
     }
 #endif
     return ret;
