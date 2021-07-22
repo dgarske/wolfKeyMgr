@@ -32,7 +32,6 @@ extern "C" {
 /* wolfssl headers */
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/aes.h>
 
 #ifndef WOLFKM_VAULT_NAME_MAX_SZ
 #define WOLFKM_VAULT_NAME_MAX_SZ 64

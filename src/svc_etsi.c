@@ -26,6 +26,7 @@
 #include <wolfssl/wolfcrypt/rsa.h>
 
 #ifndef ETSI_SVC_MAX_ACTIVE_KEYS
+/* maximum number of supported algorithms */
 #define ETSI_SVC_MAX_ACTIVE_KEYS 4
 #endif
 
@@ -33,8 +34,7 @@
 typedef struct EtsiSvcCtx {
     /* latest shared key data */
     EtsiKey         keys[ETSI_SVC_MAX_ACTIVE_KEYS];
-    EtsiKeyType     keyTypeDef; /* default key type */
-    word32          renewSec;
+    EtsiSvcConfig   config;
 
     WC_RNG          rng;
     pthread_mutex_t lock;   /* shared lock */
@@ -47,7 +47,7 @@ typedef struct EtsiSvcCtx {
 static EtsiSvcCtx gSvcCtx;
 
 /* the top level service */
-static SvcInfo etsiService = {
+static SvcInfo gEtsiService = {
     .desc = "ETSI",
 
     /* Callbacks */
@@ -102,7 +102,8 @@ static int GenNewKey(EtsiSvcCtx* svcCtx, EtsiKeyType keyType, EtsiKey* key)
 
     ret = wolfEtsiKeyGen(key, keyType, &svcCtx->rng);
     if (ret == 0) {
-        key->expires = wolfGetCurrentTimeT() + svcCtx->renewSec;
+        key->expires = wolfGetCurrentTimeT() + svcCtx->config.renewSec;
+
     #ifdef WOLFKM_VAULT
         ret = AddKeyToVault(svcCtx, key);
         if (ret != 0) {
@@ -226,7 +227,7 @@ static void* KeyPushWorker(void* arg)
     /* generate default key */
     pthread_mutex_lock(&svcCtx->lock);
     key = &svcCtx->keys[0];
-    (void)GenNewKey(svcCtx, svcCtx->keyTypeDef, key);
+    (void)GenNewKey(svcCtx, svcCtx->config.keyTypeDef, key);
     pthread_mutex_unlock(&svcCtx->lock);
 
     do {
@@ -237,16 +238,22 @@ static void* KeyPushWorker(void* arg)
         pthread_mutex_lock(&svcCtx->lock);
         now = wolfGetCurrentTimeT();
         for (i=0; i<ETSI_SVC_MAX_ACTIVE_KEYS; i++) {
-            if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN && svcCtx->keys[i].expires > 0) {
+            if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN && 
+                                                  svcCtx->keys[i].expires > 0) {
                 if (now >= svcCtx->keys[i].expires) {
-                    (void)GenNewKey(svcCtx, svcCtx->keys[i].type, &svcCtx->keys[i]);
+                    int ret = GenNewKey(svcCtx, svcCtx->keys[i].type,
+                        &svcCtx->keys[i]);
+                    (void)ret; /* ignore failures, error logged in GenNewKey */
                     keyGenCount++;
                 }
-                if (nextExpires == 0 || nextExpires > svcCtx->keys[i].expires)
+                if (nextExpires == 0 || nextExpires > svcCtx->keys[i].expires) {
                     nextExpires = svcCtx->keys[i].expires;
+                }
             }
         }
-        renewSec = (nextExpires > now) ? nextExpires - now : svcCtx->renewSec;
+        renewSec = (nextExpires > now) ? 
+            nextExpires - now :
+            svcCtx->config.renewSec;
         pthread_mutex_unlock(&svcCtx->lock);
 
         if (keyGenCount > 0) {
@@ -334,7 +341,8 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
         const char* groupName;
         etsiConn->groupNum = (word32)strtol(etsiConn->contextStr, NULL, 16);
         groupName = wolfEtsiKeyGetTypeStr((EtsiKeyType)etsiConn->groupNum);
-        XLOG(WOLFKM_LOG_DEBUG, "Group: %s (%d)\n", groupName, etsiConn->groupNum);
+        XLOG(WOLFKM_LOG_DEBUG, "Group: %s (%d)\n",
+            groupName, etsiConn->groupNum);
         if (groupName == NULL) {
             etsiConn->groupNum = 0;
         }
@@ -442,11 +450,15 @@ int wolfEtsiSvc_HandleTimeout(SvcConn* conn)
     return 1; /* close connection */
 }
 
-SvcInfo* wolfEtsiSvc_Init(int renewSec, EtsiKeyType keyTypeDef)
+SvcInfo* wolfEtsiSvc_Init(const EtsiSvcConfig* config)
+
 {
     int ret;
-    SvcInfo* svc = &etsiService;
+    SvcInfo* svc = &gEtsiService;
     EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)svc->svcCtx;
+
+    /* capture configuration */
+    memcpy(&svcCtx->config, config, sizeof(*config));
 
     ret = wc_InitRng(&svcCtx->rng);
     if (ret != 0) {
@@ -456,13 +468,11 @@ SvcInfo* wolfEtsiSvc_Init(int renewSec, EtsiKeyType keyTypeDef)
 
     pthread_mutex_init(&svcCtx->lock, NULL);
 
-    svcCtx->renewSec = renewSec;
-    svcCtx->keyTypeDef = keyTypeDef;
-
     return svc;
 }
 
-int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase, const char* listenPort)
+int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase,
+    const char* listenPort)
 {
     int ret;
     EtsiSvcCtx* svcCtx;
@@ -478,13 +488,13 @@ int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase, const char* lis
         return WOLFKM_BAD_MEMORY;
     }
 
-    /* setup listening events */
-    ret = wolfKeyMgr_AddListeners(svc, AF_INET6, listenPort, mainBase);  /* 6 may contain a 4 */
+    /* setup listening events - IPv6 may contain a IPv4 */
+    ret = wolfKeyMgr_AddListeners(svc, AF_INET6, listenPort, mainBase);
     if (ret < 0)
         ret = wolfKeyMgr_AddListeners(svc, AF_INET, listenPort, mainBase);
     if (ret < 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one ETSI listener,"
-                               "already running?\n");
+        XLOG(WOLFKM_LOG_ERROR, "Failed to bind at least one %s listener,"
+                               "already running?\n", svc->desc);
     }
 
     return ret;
@@ -521,31 +531,47 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
 {
     int ret;
     SvcInfo* svc = (SvcInfo*)cbCtx;
-
-#if 1
-    /* Setup authentication key */
-    RsaKey rsa;
     WC_RNG rng;
-    word32 idx = 0, privKeySz = WOLFKM_VAULT_ENC_KEYSZ;
+    int newKey = 0;
     static byte zeroBuffer[WOLFKM_VAULT_ENC_KEYSZ];
+#ifndef NO_RSA
+    RsaKey rsa;
+    word32 idx = 0, privKeySz = WOLFKM_VAULT_ENC_KEYSZ;
+#endif
 
+    ret = wc_InitRng(&rng);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* Setup encryption key (if needed) */
+    if (memcmp(keyEnc, zeroBuffer, keyEncSz) == 0) {        
+        /* Generate key for encryption */
+        ret = wc_RNG_GenerateBlock(&rng, key, keySz);
+
+        newKey = 1;
+    }
+
+#ifndef NO_RSA
     /* use long term private RSA key to encrypt key */
     ret = wc_InitRsaKey(&rsa, NULL);
     if (ret != 0) {
+        wc_FreeRng(&rng);
         return ret;
     }
-    ret = wc_InitRng(&rng);
-    if (ret != 0) {
-        wc_FreeRsaKey(&rsa);
-        return ret;
-    }
-
+     
     /* Decode the RSA long term private key */
     ret = wc_RsaPrivateKeyDecode(svc->keyBuffer, &idx, &rsa, svc->keyBufferSz);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Error %s (%d) decoding RSA key buffer\n",
+            wolfKeyMgr_GetError(ret), ret);
+    }
+
     if (ret == 0) {
         privKeySz = wc_RsaEncryptSize(&rsa);
-        if (keyEncSz > privKeySz) {
-            XLOG(WOLFKM_LOG_ERROR, "Vault Auth: Invalid key size %d!\n", keyEncSz);
+        if (privKeySz > keyEncSz) {
+            XLOG(WOLFKM_LOG_ERROR, "Vault Auth: Invalid key size %d!\n",
+                keyEncSz);
             ret = WOLFKM_BAD_ARGS;
         }
     }
@@ -556,57 +582,52 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
     }
 #endif
 
-    if (ret == 0) {
-        /* has the encrypted key been setup? */
-        if (memcmp(keyEnc, zeroBuffer, keyEncSz) == 0) {        
-            /* Generate key for encryption */
-            ret = wc_RNG_GenerateBlock(&rng, key, keySz);
-
-            /* use long term private RSA key to encrypt key */
-            if (ret == 0) {
-                ret = wc_RsaPublicEncrypt(key, keySz, keyEnc, privKeySz, &rsa, &rng);
-                if (ret > 0) {
-                    ret = 0; /* success - padded length is privKeySz */
-                }
+    if (ret == 0 && !newKey) {
+        /* use long term private RSA key to decrypt key */
+        ret = wc_RsaPrivateDecrypt(keyEnc, privKeySz, key, keySz, &rsa);
+        if (ret > 0) {
+            if (ret != keySz) {
+                XLOG(WOLFKM_LOG_WARN, "Vault Auth: "
+                    "Decrypted key size %d not expected %d\n", ret, keySz);
             }
+            ret = 0; /* success */
         }
         else {
-            /* use long term private RSA key to decrypt key */
-            ret = wc_RsaPrivateDecrypt(keyEnc, privKeySz, key, keySz, &rsa);
-            if (ret == keySz) {
-                ret = 0; /* success */
-            }
-            else {
-                XLOG(WOLFKM_LOG_ERROR, "Vault Auth: decrypted key size %d invalid\n", ret);
-                ret = WOLFKM_BAD_KEY;
-            }
+            XLOG(WOLFKM_LOG_ERROR, "Vault Auth: decrypt key error %s (%d)\n",
+                wolfKeyMgr_GetError(ret), ret);
         }
     }
 
-    if (ret != 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Vault Auth: error %d\n", ret);
+    if (newKey || ret != 0) {
+        XLOG(WOLFKM_LOG_WARN, "Vault Auth: Setting up new encryption key\n");
+        if (!newKey) {
+            /* Generate key for encryption */
+            ret = wc_RNG_GenerateBlock(&rng, key, keySz);
+        }
+    
+        /* use long term private RSA key to encrypt key */
+        ret = wc_RsaPublicEncrypt(key, keySz, keyEnc, privKeySz, &rsa,
+            &rng);
+        if (ret > 0) {
+            if (ret != privKeySz) {
+                XLOG(WOLFKM_LOG_WARN, "Vault Auth: "
+                    "Encrypted key size %d not expected %d\n", ret, privKeySz);
+            }
+            ret = 0; /* success */
+        }
+        else {
+            XLOG(WOLFKM_LOG_ERROR, "Vault Auth: encrypt key error %s (%d)\n",
+                wolfKeyMgr_GetError(ret), ret);
+        }
     }
 
-    wc_FreeRng(&rng);
     wc_FreeRsaKey(&rsa);
 
 #else
-    /* For testing use fixed key */
-    static byte k1[] = {
-        0x1e, 0xa6, 0x61, 0xc5, 0x8d, 0x94, 0x3a, 0x0e,
-        0x48, 0x01, 0xe4, 0x2f, 0x4b, 0x09, 0x47, 0x14,
-        0x9e, 0x7f, 0x9f, 0x8e, 0x3e, 0x68, 0xd0, 0xc7,
-        0x50, 0x52, 0x10, 0xbd, 0x31, 0x1a, 0x0e, 0x7c,
-        0xd6, 0xe1, 0x3f, 0xfd, 0xf2, 0x41, 0x8d, 0x8d,
-        0x19, 0x11, 0xc0, 0x04, 0xcd, 0xa5, 0x8d, 0xa3,
-        0xd6, 0x19, 0xb7, 0xe2, 0xb9, 0x14, 0x1e, 0x58,
-        0x31, 0x8e, 0xea, 0x39, 0x2c, 0xf4, 0x1b, 0x08
-    };
-    if (keySz > sizeof(k1))
-        keySz = sizeof(k1);
-    memcpy(key, k1, keySz);
-    ret = 0;
+    #error Vault encryption not supported!
 #endif
+
+    wc_FreeRng(&rng);
 
     (void)key;
     (void)keySz;

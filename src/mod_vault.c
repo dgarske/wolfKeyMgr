@@ -20,9 +20,13 @@
  */
 
 #include "wolfkeymgr/mod_vault.h"
+#include <wolfssl/wolfcrypt/aes.h>
+#include <wolfssl/wolfcrypt/sha256.h>
 #include <stdio.h>
 
 #ifdef WOLFKM_VAULT
+
+/* #define DEBUG_VAULT */
 
 #define VAULT_HEADER_ID  0x666C6F57U /* Wolf - little endian */
 #define VAULT_ITEM_ID    0x6B636150U /* Pack - little endian */
@@ -191,7 +195,7 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
 
 static int wolfVaultSetupKey(wolfVaultCtx* ctx)
 {
-    int ret = 0;
+    int ret;
 
 #ifdef WOLFSSL_AES_XTS
     /* make sure key has been setup */
@@ -200,14 +204,17 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
         word32 keySz = (word32)sizeof(key);
 
         /* get the key and init the structure */
+        ret = 0;
         if (ctx->authCb == NULL) {
             XLOG(WOLFKM_LOG_ERROR, "Vault authentication callback not setup!\n");
-            return WOLFKM_BAD_ARGS;
+            ret = WOLFKM_BAD_ARGS;
         }
 
-        memset(key, 0, sizeof(key));
-        ret = ctx->authCb(ctx, key, keySz, ctx->header.keyEnc,
-            (word32)sizeof(ctx->header.keyEnc), ctx->authCbCtx);
+        if (ret == 0) {
+            memset(key, 0, sizeof(key));
+            ret = ctx->authCb(ctx, key, keySz, ctx->header.keyEnc,
+                (word32)sizeof(ctx->header.keyEnc), ctx->authCbCtx);
+        }
         if (ret == 0) {
             ret = wc_AesXtsSetKey(&ctx->aesEnc, key, keySz, AES_ENCRYPTION,
                 NULL, INVALID_DEVID);
@@ -216,11 +223,21 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
             ret = wc_AesXtsSetKey(&ctx->aesDec, key, keySz, AES_DECRYPTION,
                 NULL, INVALID_DEVID);
         }
-        ctx->aesInit = 1;
+        if (ret == 0) {
+            ctx->aesInit = 1;
+        }
+        else {
+            XLOG(WOLFKM_LOG_ERROR, "Error %d setting up AES key!\n", ret);
+        }
+    }
+    else {
+        ret = 0;
     }
 #else
-    ret = WOLFKM_NOT_COMPILED_IN;
+    XLOG(WOLFKM_LOG_WARN, "Vault not encrypted (AES XTS not available)!"\n);
+    ret = 0; /* if XTS is not enabled then store un-encrypted */
 #endif
+    (void)ctx;
 
     return ret;
 }
@@ -232,15 +249,9 @@ static int wolfVaultDecrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
     int ret;
 
 #ifdef WOLFSSL_AES_XTS
-    /* make sure key has been setup */
-    ret = wolfVaultSetupKey(ctx);
-    if (ret != 0)
-        return ret;
-
     /* AES Decrypt - Sector/Tweak is file position */
     ret = wc_AesXtsDecryptSector(&ctx->aesDec, data, data, dataSz,
         (word64)sector);
-
 #else
     ret = 0; /* if XTS is not enabled then store un-encrypted */
 #endif
@@ -259,11 +270,6 @@ static int wolfVaultEncrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
     int ret;
 
 #ifdef WOLFSSL_AES_XTS
-    /* make sure key has been setup */
-    ret = wolfVaultSetupKey(ctx);
-    if (ret != 0)
-        return ret;
-
     /* AES XTS Encrypt - Sector/Tweak is file position */
     ret = wc_AesXtsEncryptSector(&ctx->aesEnc, data, data, dataSz,
         (word64)sector);
@@ -308,6 +314,13 @@ int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz
     ret = wc_LockMutex(&ctx->lock);
     if (ret != 0)
         return ret;
+
+    /* make sure key has been setup */
+    ret = wolfVaultSetupKey(ctx);
+    if (ret != 0) {
+        wc_UnLockMutex(&ctx->lock);
+        return ret;
+    }
 
     memset(&ctx->item, 0, sizeof(VaultItem_t));
     if (nameSz > WOLFKM_VAULT_NAME_MAX_SZ)
@@ -386,6 +399,12 @@ static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
 {
     int ret = 0;
     size_t sector = 0;
+
+    /* make sure key has been setup */
+    ret = wolfVaultSetupKey(ctx);
+    if (ret != 0) {
+        return ret;
+    }
 
     /* populate header */
     memset(item, 0, sizeof(wolfVaultItem));
@@ -551,9 +570,11 @@ static void wolfVaultPrintItem(enum log_level_t level, const char* desc,
 {
     if (item == NULL)
         return;
-    XLOG(level, "%s Item: Type %d, Name %d, Data %d, Timestamp %lu\n",
+    XLOG(level, "Vault %s Item: Type %d, Name %d, Data %d, Timestamp %lu\n",
         desc, item->type, item->nameSz, item->dataSz, item->timestamp);
+#ifdef DEBUG_VAULT
     wolfPrintBinLevel(level, item->name, item->nameSz);
+#endif
 }
 
 #endif /* WOLFKM_VAULT */

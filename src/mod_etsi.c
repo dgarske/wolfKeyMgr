@@ -896,6 +896,8 @@ int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 
     if (ret == 0) {
         key->type = keyType;
+
+        wolfEtsiKeyPrint(key);
     }
 
     return ret;

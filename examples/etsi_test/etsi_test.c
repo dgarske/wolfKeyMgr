@@ -78,9 +78,15 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
             WOLFSSL_FILETYPE_ASN1);
     #endif
     }
-    wolfEtsiKeyPrint(key);
+    if (ret == 0) {
+        ret = wolfEtsiKeyPrint(key);
+    }
     if (info->saveResp != NULL) {
         wolfSaveFile(info->saveResp, (byte*)key->response, key->responseSz);
+    }
+
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_INFO, "Key Error: %s (%d)\n", wolfKeyMgr_GetError(ret), ret);
     }
 
     return ret; /* non-zero will close client */

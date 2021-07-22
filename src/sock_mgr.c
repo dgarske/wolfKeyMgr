@@ -536,7 +536,7 @@ static void ReadCb(struct bufferevent* bev, void* ctx)
    wakeup pipe */
 static void ThreadEventProcess(int fd, short which, void* arg)
 {
-    char         buffer[1]; /* at least size of kCancel and kWake */
+    char         buffer[1]; /* at least size of kCancel, kNotify and kWake */
     EventThread* me = (EventThread*)arg;
     ConnItem*    item;
 

@@ -26,7 +26,14 @@
 extern "C" {
 #endif
 
-WOLFKM_LOCAL SvcInfo* wolfEtsiSvc_Init(int renewSec, EtsiKeyType keyTypeDef);
+typedef struct EtsiSvcConfig {
+    EtsiKeyType     keyTypeDef; /* default key type */
+    word32          renewSec;
+    word32          maxUseCount;
+} EtsiSvcConfig;
+
+
+WOLFKM_LOCAL SvcInfo* wolfEtsiSvc_Init(const EtsiSvcConfig* config);
 WOLFKM_LOCAL int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase, const char* listenPort);
 WOLFKM_LOCAL void wolfEtsiSvc_Cleanup(SvcInfo* svc);
 

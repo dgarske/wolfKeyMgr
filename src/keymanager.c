@@ -39,6 +39,7 @@ static void Usage(void)
     printf("-o <num>    Max open files, default  %d\n", WOLFKM_DEFAULT_FILES);
     printf("-s <num>    Seconds to timeout, default %d\n", WOLFKM_DEFAULT_TIMEOUT);
     printf("-r <num>    Key renewal timeout, default %d\n", WOLFKM_KEY_RENEW_TIMEOUT);
+    printf("-u <num>    Key renewal max use count, default %d\n", WOLFKM_KEY_RENEW_MAX_USES);
     printf("-t <num>    Thread pool size, default  %ld\n",
                                                  sysconf(_SC_NPROCESSORS_CONF));
     printf("-k <pem>    TLS Server TLS Key, default %s\n", WOLFKM_ETSISVC_KEY);
@@ -64,29 +65,33 @@ int main(int argc, char** argv)
 {
     int ret;
     int ch;
-    int daemon        = 0;
-    int core          = 0;
-    int poolSize      = (int)sysconf(_SC_NPROCESSORS_CONF);
-    int maxFiles      = WOLFKM_DEFAULT_FILES;
+    int daemon = 0;
+    int core = 0;
+    int poolSize = (int)sysconf(_SC_NPROCESSORS_CONF);
+    int maxFiles = WOLFKM_DEFAULT_FILES;
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
-    char*  logName    = WOLFKM_DEFAULT_LOG_NAME;
-    char*  pidName    = WOLFKM_DEFAULT_PID;
-    struct event_base*      mainBase = NULL;    /* main thread's base  */
-    FILE*                   pidF = 0;
+    char* logName = WOLFKM_DEFAULT_LOG_NAME;
+    char* pidName = WOLFKM_DEFAULT_PID;
+    struct event_base* mainBase = NULL;    /* main thread's base  */
+    FILE* pidF = 0;
     SvcInfo* etsiSvc = NULL;
-    int sec;
-    word32 timeoutSec  = WOLFKM_DEFAULT_TIMEOUT, renewSec = WOLFKM_KEY_RENEW_TIMEOUT;
+    word32 timeoutSec  = WOLFKM_DEFAULT_TIMEOUT;
     const char* serverKey = WOLFKM_ETSISVC_KEY;
     const char* serverKeyPass = WOLFKM_ETSISVC_KEY_PASSWORD;
     const char* serverCert = WOLFKM_ETSISVC_CERT;
     const char* caCert = WOLFKM_ETSISVC_CA;
     SignalArg sigArgInt, sigArgTerm;
-    EtsiKeyType keyTypeDef = WOLFKM_ETSISVC_DEF_KEY_TYPE;
     const char* vaultFile = WOLFKM_ETSISVC_VAULT;
     const char* listenPort = WOLFKM_ETSISVC_PORT;
+    EtsiSvcConfig config;
+
+    memset(&config, 0, sizeof(config));
+    config.keyTypeDef = WOLFKM_ETSISVC_DEF_KEY_TYPE;
+    config.renewSec = WOLFKM_KEY_RENEW_TIMEOUT;
+    config.maxUseCount = WOLFKM_KEY_RENEW_MAX_USES;
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?bis:t:o:f:l:k:w:c:A:r:K:v:p:P:")) != -1) {
+    while ((ch = getopt(argc, argv, "?bis:t:o:f:l:k:w:c:A:r:u:K:v:p:P:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -98,13 +103,15 @@ int main(int argc, char** argv)
                 core = 1;
                 break;
             case 's' :
-                sec = atoi(optarg);
+            {
+                int sec = atoi(optarg);
                 if (sec < 0) {
                     perror("timeout positive values only accepted");
                     exit(EX_USAGE);
                 }
                 timeoutSec = (word32)sec;
                 break;
+            }
             case 't' :
                 poolSize = atoi(optarg);
                 break;
@@ -140,13 +147,25 @@ int main(int argc, char** argv)
                 caCert = optarg;
                 break;
             case 'r':
-                sec = atoi(optarg);
+            {
+                int sec = atoi(optarg);
                 if (sec < 0) {
-                    perror("timeout positive values only accepted");
+                    perror("key renew must be positive value");
                     exit(EX_USAGE);
                 }
-                renewSec = (word32)sec;
+                config.renewSec = (word32)sec;
                 break;
+            }
+            case 'u':
+            {
+                int uses = atoi(optarg);
+                if (uses < 0) {
+                    perror("key max uses must be positive value");
+                    exit(EX_USAGE);
+                }
+                config.maxUseCount = (word32)uses;
+                break;
+            }
             case 'K':
             {
                 /* find key type */
@@ -155,7 +174,7 @@ int main(int argc, char** argv)
                     const char* keyStr = wolfEtsiKeyGetTypeStr((EtsiKeyType)i);
                     if (keyStr != NULL) {
                         if (strncmp(optarg, keyStr, strlen(keyStr)) == 0) {
-                            keyTypeDef = (EtsiKeyType)i;
+                            config.keyTypeDef = (EtsiKeyType)i;
                             break;
                         }
                     }
@@ -235,7 +254,7 @@ int main(int argc, char** argv)
     wolfKeyMgr_SetMaxFiles(maxFiles);
 
     /********** ETSI Service **********/
-    etsiSvc = wolfEtsiSvc_Init(renewSec, keyTypeDef);
+    etsiSvc = wolfEtsiSvc_Init(&config);
     if (etsiSvc) {
         /* set socket timeut */
         wolfKeyMgr_SetTimeout(etsiSvc, timeoutSec);

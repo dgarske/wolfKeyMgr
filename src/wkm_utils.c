@@ -30,9 +30,12 @@
 static FILE* logFile = NULL;
 static enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
 
+const char* wolfSSL_ERR_reason_error_string(unsigned long e);
+const char* wc_GetErrorString(int error);
 
 const char* wolfKeyMgr_GetError(int err)
 {
+    if (err < WOLFKM_ERROR_BEGIN) {
     switch (err) {
         case WOLFKM_BAD_ARGS:
             return "Bad Function arguments";
@@ -58,8 +61,15 @@ const char* wolfKeyMgr_GetError(int err)
             return "Bad Header Request Type";
 
         default:
-            XLOG(WOLFKM_LOG_ERROR, "Unknown error %d\n", err); 
             break;
+    }
+    }
+    else {
+    #ifdef WOLFCRYPT_ONLY
+        return wc_GetErrorString(error);
+    #else
+        return wolfSSL_ERR_reason_error_string(err);
+    #endif
     }
     return "Unknown error number";
 }

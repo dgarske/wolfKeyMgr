@@ -110,6 +110,7 @@ typedef struct EtsiKey {
     word32 responseSz;
     byte   response[ETSI_MAX_RESPONSE_SZ];
     time_t expires; /* from HTTP HTTP_HDR_EXPIRES */
+    word32 uses; /* times this key has been used */
 
     /* flags */
     unsigned char isDynamic:1; /* key is dynamically allocated */
