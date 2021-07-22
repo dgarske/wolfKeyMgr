@@ -37,6 +37,9 @@ extern "C" {
 #ifndef WOLFKM_VAULT_NAME_MAX_SZ
 #define WOLFKM_VAULT_NAME_MAX_SZ 64
 #endif
+#ifndef WOLFKM_VAULT_ENC_KEYSZ
+#define WOLFKM_VAULT_ENC_KEYSZ (2048/8)
+#endif
 
 /* opaque type for wolfVaultCtx (pointer reference only) */
 typedef struct wolfVaultCtx wolfVaultCtx;
@@ -53,8 +56,9 @@ typedef struct wolfVaultItem {
 /* open vault file */
 WOLFKM_API int wolfVaultOpen(wolfVaultCtx** ctx, const char* file);
 
+/* key: the AES key to use for encryption/decryption, keyEnc: optional data to store in vault header */
+typedef int (*VaultAuthCbFunc)(wolfVaultCtx* ctx, byte* key, word32 keySz, byte* keyEnc, word32 keyEncSz, void* cbCtx);
 /* setup authentication callback to get encryption key */
-typedef int (*VaultAuthCbFunc)(wolfVaultCtx* ctx, byte* key, word32 keySz, void* cbCtx);
 WOLFKM_API int wolfVaultAuth(wolfVaultCtx* ctx, VaultAuthCbFunc cb, void* cbCtx);
 
 /* add item to vault */

@@ -27,6 +27,7 @@
 #define VAULT_HEADER_ID  0x666C6F57U /* Wolf - little endian */
 #define VAULT_ITEM_ID    0x6B636150U /* Pack - little endian */
 #define VAULT_HEADER_VER 1
+#define VAULT_HASH_SZ    16 /* SHA256 */
 
 /* struct stored to file - header is not encrypted */
 typedef struct VaultHeader {
@@ -36,7 +37,9 @@ typedef struct VaultHeader {
 
     uint32_t vaultCount;   /* number of items in vault */
     size_t   vaultSz;      /* size not including header */
-    uint8_t  hash[16];     /* hash or hmac of vault file */
+
+    uint8_t  hash[VAULT_HASH_SZ]; /* hash of entire vault file */
+    uint8_t  keyEnc[WOLFKM_VAULT_ENC_KEYSZ];
 } VaultHeader_t;
 
 /* struct for item stored to file - item header not encrypted */
@@ -46,6 +49,7 @@ typedef struct VaultItem {
     uint32_t nameSz;
     uint32_t dataSz;
     time_t   timestamp;
+    uint8_t  hash[VAULT_HASH_SZ]; /* hash of encrypted data for integrity */
     uint8_t  name[WOLFKM_VAULT_NAME_MAX_SZ]; /* actual size stored is nameSz */
     /* then data - only data is encrypted */
 } VaultItem_t;
@@ -192,7 +196,7 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
 #ifdef WOLFSSL_AES_XTS
     /* make sure key has been setup */
     if (!ctx->aesInit) {
-        byte key[32];
+        byte key[AES_256_KEY_SIZE];
         word32 keySz = (word32)sizeof(key);
 
         /* get the key and init the structure */
@@ -201,7 +205,9 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
             return WOLFKM_BAD_ARGS;
         }
 
-        ret = ctx->authCb(ctx, key, keySz, ctx->authCbCtx);
+        memset(key, 0, sizeof(key));
+        ret = ctx->authCb(ctx, key, keySz, ctx->header.keyEnc,
+            (word32)sizeof(ctx->header.keyEnc), ctx->authCbCtx);
         if (ret == 0) {
             ret = wc_AesXtsSetKey(&ctx->aesEnc, key, keySz, AES_ENCRYPTION,
                 NULL, INVALID_DEVID);

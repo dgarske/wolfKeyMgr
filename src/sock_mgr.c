@@ -1273,14 +1273,14 @@ int wolfKeyMgr_LoadKeyFile(SvcInfo* svc, const char* fileName, int fileType,
             svc->keyBuffer, svc->keyBufferSz, 
             svc->keyBuffer, svc->keyBufferSz,
             password);
+        if (ret <= 0) {
+            XLOG(WOLFKM_LOG_ERROR, "Error converting Key file %s from PEM to DER: %d\n",
+                fileName, ret);
+            free(svc->keyBuffer); svc->keyBuffer = NULL;
+            return WOLFKM_BAD_KEY;
+        }
+        svc->keyBufferSz = ret;
     }
-    if (ret <= 0) {
-        XLOG(WOLFKM_LOG_ERROR, "Error converting Key file %s from PEM to DER: %d\n",
-            fileName, ret);
-        free(svc->keyBuffer); svc->keyBuffer = NULL;
-        return WOLFKM_BAD_KEY;
-    }
-    svc->keyBufferSz = ret;
 
     XLOG(WOLFKM_LOG_INFO, "loaded key file %s\n", fileName);
     return 0;

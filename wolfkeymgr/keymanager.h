@@ -50,8 +50,8 @@
 #define WOLFKM_ETSISVC_PORT         "8119"
 #define WOLFKM_ETSISVC_KEY_PASSWORD "wolfssl"
 #define WOLFKM_ETSISVC_CA           "./certs/ca-cert.pem"
-#define WOLFKM_ETSISVC_KEY          "./certs/server-key.pem"
-#define WOLFKM_ETSISVC_CERT         "./certs/server-cert.pem"
+#define WOLFKM_ETSISVC_KEY          "./certs/server-rsa-key.pem"
+#define WOLFKM_ETSISVC_CERT         "./certs/server-rsa-cert.pem"
 #define WOLFKM_ETSISVC_VAULT        "./wolfkeymgr.vault"
 
 /* Determine default ETSI key type */

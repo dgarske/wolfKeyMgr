@@ -23,6 +23,7 @@
 #include "wolfkeymgr/mod_http.h"
 #include "wolfkeymgr/mod_etsi.h"
 #include "wolfkeymgr/mod_vault.h"
+#include <wolfssl/wolfcrypt/rsa.h>
 
 #ifndef ETSI_SVC_MAX_ACTIVE_KEYS
 #define ETSI_SVC_MAX_ACTIVE_KEYS 4
@@ -513,13 +514,83 @@ void wolfEtsiSvc_Cleanup(SvcInfo* svc)
     }
 }
 
+/* key: returned AES key */
+/* keyEnc: key information stored in vault header */
 static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
-    void* cbCtx)
+    byte* keyEnc, word32 keyEncSz, void* cbCtx)
 {
     int ret;
-    EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)cbCtx;
+    SvcInfo* svc = (SvcInfo*)cbCtx;
 
 #if 1
+    /* Setup authentication key */
+    RsaKey rsa;
+    WC_RNG rng;
+    word32 idx = 0, privKeySz = WOLFKM_VAULT_ENC_KEYSZ;
+    static byte zeroBuffer[WOLFKM_VAULT_ENC_KEYSZ];
+
+    /* use long term private RSA key to encrypt key */
+    ret = wc_InitRsaKey(&rsa, NULL);
+    if (ret != 0) {
+        return ret;
+    }
+    ret = wc_InitRng(&rng);
+    if (ret != 0) {
+        wc_FreeRsaKey(&rsa);
+        return ret;
+    }
+
+    /* Decode the RSA long term private key */
+    ret = wc_RsaPrivateKeyDecode(svc->keyBuffer, &idx, &rsa, svc->keyBufferSz);
+    if (ret == 0) {
+        privKeySz = wc_RsaEncryptSize(&rsa);
+        if (keyEncSz > privKeySz) {
+            XLOG(WOLFKM_LOG_ERROR, "Vault Auth: Invalid key size %d!\n", keyEncSz);
+            ret = WOLFKM_BAD_ARGS;
+        }
+    }
+
+#ifdef WC_RSA_BLINDING
+    if (ret == 0) {
+        ret = wc_RsaSetRNG(&rsa, &rng);
+    }
+#endif
+
+    if (ret == 0) {
+        /* has the encrypted key been setup? */
+        if (memcmp(keyEnc, zeroBuffer, keyEncSz) == 0) {        
+            /* Generate key for encryption */
+            ret = wc_RNG_GenerateBlock(&rng, key, keySz);
+
+            /* use long term private RSA key to encrypt key */
+            if (ret == 0) {
+                ret = wc_RsaPublicEncrypt(key, keySz, keyEnc, privKeySz, &rsa, &rng);
+                if (ret > 0) {
+                    ret = 0; /* success - padded length is privKeySz */
+                }
+            }
+        }
+        else {
+            /* use long term private RSA key to decrypt key */
+            ret = wc_RsaPrivateDecrypt(keyEnc, privKeySz, key, keySz, &rsa);
+            if (ret == keySz) {
+                ret = 0; /* success */
+            }
+            else {
+                XLOG(WOLFKM_LOG_ERROR, "Vault Auth: decrypted key size %d invalid\n", ret);
+                ret = WOLFKM_BAD_KEY;
+            }
+        }
+    }
+
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Vault Auth: error %d\n", ret);
+    }
+
+    wc_FreeRng(&rng);
+    wc_FreeRsaKey(&rsa);
+
+#else
     /* For testing use fixed key */
     static byte k1[] = {
         0x1e, 0xa6, 0x61, 0xc5, 0x8d, 0x94, 0x3a, 0x0e,
@@ -535,40 +606,13 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
         keySz = sizeof(k1);
     memcpy(key, k1, keySz);
     ret = 0;
-#else
-    /* TODO: Setting up authentication key */
-    /* TODO: !NO_RSA
-    WC_RNG rng;
-    RsaKey key;
-
-    /* do we have an encrypted key available? */
-
-    /* Generate key for encryption */
-    ret = wc_InitRng(&rng, NULL);
-    if (ret == 0) {
-        ret = wc_RNG_GenerateBlock(&rng, key, keySz);
-        wc_FreeRng(&rnd);
-    }
-
-    /* use long term private RSA key to encrypt key */
-    ret = wc_InitRsaKey(&key, NULL);
-    if (ret == 0) {
-        byte in[256], *out = NULL;
-        word32 inLen = (word32)sizeof(in);
-        word32 idx = 0;
-        ret = wc_RsaPrivateKeyDecode(svcCtx->keyBuffer, &idx, &key, svcCtx->keyBufferSz);
-
-        if (ret == 0) {
-            ret = wc_RsaPrivateDecryptInline(in, inLen, &out, &key);
-        }
-
-        wc_FreeRsaKey(&key);
-    }
 #endif
 
     (void)key;
     (void)keySz;
-    (void)svcCtx;
+    (void)keyEnc;
+    (void)keyEncSz;
+    (void)svc;
     return ret;
 }
 
@@ -586,7 +630,7 @@ int wolfEtsiSvc_SetVaultFile(SvcInfo* svc, const char* vaultFile)
     if (ret == 0) {
         wolfVaultPrintInfo(svcCtx->vault);
 
-        ret = wolfVaultAuth(svcCtx->vault, wolfEtsiSvcVaultAuthCb, svcCtx);
+        ret = wolfVaultAuth(svcCtx->vault, wolfEtsiSvcVaultAuthCb, svc);
     }
 #endif
     return ret;
