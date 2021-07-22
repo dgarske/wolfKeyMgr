@@ -61,6 +61,7 @@ certs/server-*.pem
 certs/client-*.der
 certs/client-*.pem
 certs/serial.old
+certs/1*.pem
 tracefile.txt
 
 # test files
