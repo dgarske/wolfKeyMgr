@@ -17,13 +17,14 @@ Based on:
 * HTTPS server supports GET/PUT requests using HTTP/1.1
 * The CA key can be local PKCS #8 (simple password/encrypted), PKCS #11 HSM or TPM 2.0
 * TLS v1.3 is used for securing connections to server
+* Secure key vault protected with RSA and AES XTS
 
 ## Layout of files
 
 * keymanager.c: The main entry point
 * sock_mgr.c: The libevent socket manager
 * svc_[]: Services exposed (ETSI)
-* mod_[]: Modules for support (HTTP, TLS, Socket, ETSI)
+* mod_[]: Modules for support (HTTP, TLS, Socket, ETSI and Vault)
 * wkm_[]: Generic wolf / KeyManager functions
 
 ## ETSI Design
@@ -272,10 +273,10 @@ Notes:
 
 ## Features Missing
 * Find error response message (currently disconnects with socket FIN)
-* X509 Visibility support
 * ED25519 and ED448
+* X509 Visibility support
 * TLS v1.2 ephemeral key support
-* Vault encryption
+* Allow vault encryption with ECC key or PWBKDF2
 
 ## Support
 
