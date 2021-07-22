@@ -40,6 +40,11 @@ extern "C" {
 #define WOLFKM_VAULT_ENC_KEYSZ (2048/8)
 #endif
 
+/* build-time option to disable vault encryption */
+#ifndef WOLFKM_NO_VAULT_ENC
+#define WOLFKM_VAULT_ENC
+#endif
+
 /* opaque type for wolfVaultCtx (pointer reference only) */
 typedef struct wolfVaultCtx wolfVaultCtx;
 

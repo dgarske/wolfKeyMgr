@@ -17,7 +17,7 @@ Based on:
 * HTTPS server supports GET/PUT requests using HTTP/1.1
 * The CA key can be local PKCS #8 (simple password/encrypted), PKCS #11 HSM or TPM 2.0
 * TLS v1.3 is used for securing connections to server
-* Secure key vault protected with RSA and AES XTS
+* Secure key vault protected with RSA and AES GCM
 
 ## Layout of files
 
@@ -50,7 +50,7 @@ $ ./autogen.sh
 $ git clone https://github.com/wolfssl/wolfssl
 $ cd wolfssl
 $ ./autogen.sh
-$ ./configure --enable-sniffer --enable-xts CFLAGS="-DWOLFSSL_DH_EXTRA"
+$ ./configure --enable-sniffer CFLAGS="-DWOLFSSL_DH_EXTRA"
 $ make
 $ make check   # (optional, but highly recommended)
 $ sudo make install
@@ -60,7 +60,7 @@ Notes:
 
 * To enable all Intel (AESNI/AVX) speedups use `--enable-intelasm --enable-sp --enable-sp-asm`
 * To enable all ARMv8 (aarch64) speedups use `--enable-armasm --enable-sp --enable-sp-asm`
-* Requires at least wolfSSL v4.8.0 with PR's:
+* Requires at least wolfSSL v4.8.0 with PR:
    - https://github.com/wolfSSL/wolfssl/pull/4181
 
 2. Install libevent version 2.0+
@@ -82,32 +82,25 @@ $ sudo make install
 
 3. Install libpcap for middle-box decryption example (or build with `--disable-sniffer`)
 
-```
-Mac OS/X: `brew install libpcap`
-Debian/Ubuntu: `sudo apt install libpcap-dev`
-RedHat/CentOS: 'sudo yum install libpcap-dev`
-Windows: Download and install `WinPcap`
-```
+* Mac OS/X: `brew install libpcap`
+* Debian/Ubuntu: `sudo apt install libpcap-dev`
+* RedHat/CentOS: 'sudo yum install libpcap-dev`
+* Windows: Download and install `WinPcap`
 
-4. Building wolfKeyMgr on *nix from git repository
-
-Run the autogen.sh script to generate configure, you'll need the autoconf tools
-installed, then proceed to the next step.
+4. Building wolfKeyMgr on *nix
 
 ```sh
-$ ./autogen.sh
-```
-
-5. Building wolfKeyMgr on *nix from a release
-
-```sh
+$ ./autogen.sh # if cloned from git repository
 $ ./configure
 $ make
 $ make check   # (optional, but highly recommended)
 $ sudo make install
 ```
 
-Note: A custom install location can be specified using: `./configure --prefix=/opt/local`
+Notes:
+* A custom install location can be specified using: `./configure --prefix=/opt/local`
+* `autogen.sh` is script to generate configure, you'll need the autoconf tools
+installed, then proceed to the next step.
 
 
 ## Examples

@@ -139,14 +139,18 @@ AS_IF([ test "x$ENABLED_SNIFFER" = "xyes" ],
 
 # VAULT
 AC_ARG_ENABLE([vault],
-    [AS_HELP_STRING([--enable-vault],[Enable key storage and retrieval (default: enabled)])],
+    [AS_HELP_STRING([--enable-vault],[Enable key storage and retrieval (use =clear to disable encryption) (default: enabled)])],
     [ ENABLED_VAULT=$enableval ],
     [ ENABLED_VAULT=yes ]
     )
 
-if test "x$ENABLED_VAULT" = "xyes"
+if test "x$ENABLED_VAULT" != "xno"
 then
     CFLAGS="$CFLAGS -DWOLFKM_VAULT"
+    if test "x$ENABLED_VAULT" == "xclear"
+    then
+        CFLAGS="$CFLAGS -DWOLFKM_NO_VAULT_ENC"
+    fi
 fi
 
 

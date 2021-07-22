@@ -26,12 +26,10 @@
 
 #ifdef WOLFKM_VAULT
 
-/* #define DEBUG_VAULT */
-
 #define VAULT_HEADER_ID  0x666C6F57U /* Wolf - little endian */
 #define VAULT_ITEM_ID    0x6B636150U /* Pack - little endian */
 #define VAULT_HEADER_VER 1
-#define VAULT_HASH_SZ    16 /* SHA256 */
+#define VAULT_HASH_SZ    16 /* AES_BLOCK_SIZE and SHA256 Digest */
 
 /* struct stored to file - header is not encrypted */
 typedef struct VaultHeader {
@@ -42,8 +40,10 @@ typedef struct VaultHeader {
     uint32_t vaultCount;   /* number of items in vault */
     size_t   vaultSz;      /* size not including header */
 
+#ifdef WOLFKM_VAULT_ENC
     uint8_t  hash[VAULT_HASH_SZ]; /* hash of entire vault file */
     uint8_t  keyEnc[WOLFKM_VAULT_ENC_KEYSZ];
+#endif
 } VaultHeader_t;
 
 /* struct for item stored to file - item header not encrypted */
@@ -53,7 +53,7 @@ typedef struct VaultItem {
     uint32_t nameSz;
     uint32_t dataSz;
     time_t   timestamp;
-    uint8_t  hash[VAULT_HASH_SZ]; /* hash of encrypted data for integrity */
+    uint8_t  tag[VAULT_HASH_SZ]; /* integrity of encrypted data GCM auth tag */
     uint8_t  name[WOLFKM_VAULT_NAME_MAX_SZ]; /* actual size stored is nameSz */
     /* then data - only data is encrypted */
 } VaultItem_t;
@@ -72,10 +72,9 @@ struct wolfVaultCtx {
     VaultAuthCbFunc authCb;
     void*           authCbCtx;
 
-#ifdef WOLFSSL_AES_XTS
-    XtsAes aesEnc;
-    XtsAes aesDec;
-    byte   aesInit:1; /* has AES been initialized (key set) */
+#if defined(WOLFKM_VAULT_ENC) && defined(HAVE_AESGCM)
+    Aes  aes;
+    byte aesInit:1; /* has AES been initialized (key set) */
 #endif
 };
 
@@ -193,11 +192,12 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
     return ret;
 }
 
+#ifdef WOLFKM_VAULT_ENC
 static int wolfVaultSetupKey(wolfVaultCtx* ctx)
 {
-    int ret;
+    int ret = WOLFKM_NOT_COMPILED_IN;
 
-#ifdef WOLFSSL_AES_XTS
+#ifdef HAVE_AESGCM
     /* make sure key has been setup */
     if (!ctx->aesInit) {
         byte key[AES_256_KEY_SIZE];
@@ -216,12 +216,7 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
                 (word32)sizeof(ctx->header.keyEnc), ctx->authCbCtx);
         }
         if (ret == 0) {
-            ret = wc_AesXtsSetKey(&ctx->aesEnc, key, keySz, AES_ENCRYPTION,
-                NULL, INVALID_DEVID);
-        }
-        if (ret == 0) {
-            ret = wc_AesXtsSetKey(&ctx->aesDec, key, keySz, AES_DECRYPTION,
-                NULL, INVALID_DEVID);
+            ret = wc_AesGcmSetKey(&ctx->aes, key, keySz);
         }
         if (ret == 0) {
             ctx->aesInit = 1;
@@ -234,9 +229,9 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
         ret = 0;
     }
 #else
-    XLOG(WOLFKM_LOG_WARN, "Vault not encrypted (AES XTS not available)!"\n);
-    ret = 0; /* if XTS is not enabled then store un-encrypted */
+    #error Vault encryption requires AES GCM
 #endif
+
     (void)ctx;
 
     return ret;
@@ -244,16 +239,17 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
 
 /* Caller needs to handle ctx->lock */
 static int wolfVaultDecrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
-    size_t sector)
+    size_t sector, const byte* tag, word32 tagSz)
 {
-    int ret;
+    int ret = WOLFKM_NOT_COMPILED_IN;
 
-#ifdef WOLFSSL_AES_XTS
-    /* AES Decrypt - Sector/Tweak is file position */
-    ret = wc_AesXtsDecryptSector(&ctx->aesDec, data, data, dataSz,
-        (word64)sector);
-#else
-    ret = 0; /* if XTS is not enabled then store un-encrypted */
+#ifdef HAVE_AESGCM
+    byte iv[GCM_NONCE_MID_SZ];
+    memset(iv, 0, sizeof(iv));
+    memcpy(iv, &sector, sizeof(sector));
+
+    ret = wc_AesGcmDecrypt(&ctx->aes, data, data, dataSz, iv, sizeof(iv),
+        tag, tagSz, NULL, 0);
 #endif
     (void)ctx;
     (void)data;
@@ -265,16 +261,17 @@ static int wolfVaultDecrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
 
 /* Caller needs to handle ctx->lock */
 static int wolfVaultEncrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
-    size_t sector)
+    size_t sector, byte* tag, word32 tagSz)
 {
-    int ret;
+    int ret = WOLFKM_NOT_COMPILED_IN;
 
-#ifdef WOLFSSL_AES_XTS
-    /* AES XTS Encrypt - Sector/Tweak is file position */
-    ret = wc_AesXtsEncryptSector(&ctx->aesEnc, data, data, dataSz,
-        (word64)sector);
-#else
-    ret = 0; /* if XTS is not enabled then store un-encrypted */
+#ifdef HAVE_AESGCM
+    byte iv[GCM_NONCE_MID_SZ];
+    memset(iv, 0, sizeof(iv));
+    memcpy(iv, &sector, sizeof(sector));
+
+    ret = wc_AesGcmEncrypt(&ctx->aes, data, data, dataSz, iv, sizeof(iv),
+        tag, tagSz, NULL, 0);
 #endif
     (void)ctx;
     (void)data;
@@ -283,6 +280,7 @@ static int wolfVaultEncrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
 
     return ret;
 }
+#endif /* WOLFKM_VAULT_ENC */
 
 int wolfVaultAuth(wolfVaultCtx* ctx, VaultAuthCbFunc cb, void* cbCtx)
 {
@@ -315,44 +313,55 @@ int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz
     if (ret != 0)
         return ret;
 
+#ifdef WOLFKM_VAULT_ENC
     /* make sure key has been setup */
     ret = wolfVaultSetupKey(ctx);
     if (ret != 0) {
         wc_UnLockMutex(&ctx->lock);
         return ret;
     }
+#endif
 
+    /* build vault item internal version */
     memset(&ctx->item, 0, sizeof(VaultItem_t));
-    if (nameSz > WOLFKM_VAULT_NAME_MAX_SZ)
-        nameSz = WOLFKM_VAULT_NAME_MAX_SZ;
     ctx->item.id = VAULT_ITEM_ID;
     ctx->item.type = type;
+    if (nameSz > WOLFKM_VAULT_NAME_MAX_SZ)
+        nameSz = WOLFKM_VAULT_NAME_MAX_SZ;
     ctx->item.nameSz = nameSz;
     memcpy(ctx->item.name, name, nameSz);
     ctx->item.timestamp = wolfGetCurrentTimeT();
     ctx->item.dataSz = dataSz;
     headSz = (word32)VAULT_ITEM_HEAD_SZ(&ctx->item);
 
-    wolfVaultPrintItem(WOLFKM_LOG_INFO, "Add", &ctx->item);
-
+    /* add to end of file */
     ret = fseek(ctx->fd, 0, SEEK_END);
     if (ret == 0) {
         ctx->itemPos = ftell(ctx->fd);
-
-        ret = (int)fwrite(&ctx->item, 1, headSz, ctx->fd);
-        ret = (ret == (int)headSz) ? 0 : WOLFKM_BAD_FILE;
     }
+
+#ifdef WOLFKM_VAULT_ENC
     if (ret == 0) {
         dataEnc = malloc(dataSz);
         if (dataEnc == NULL)
             ret = WOLFKM_BAD_MEMORY;
     }
     if (ret == 0) {
-        /* get file position (used for tweak on cipher) */
-        size_t sector = (size_t)ftell(ctx->fd);
-
         memcpy(dataEnc, data, dataSz);
-        ret = wolfVaultEncrypt(ctx, dataEnc, dataSz, sector);
+
+        ret = wolfVaultEncrypt(ctx, dataEnc, dataSz, ctx->itemPos,
+            ctx->item.tag, sizeof(ctx->item.tag));
+    }
+#else
+    dataEnc = (byte*)data;
+#endif
+
+    wolfVaultPrintItem(WOLFKM_LOG_INFO, "Add", &ctx->item);
+
+    /* write item header and data */
+    if (ret == 0) {
+        ret = (int)fwrite(&ctx->item, 1, headSz, ctx->fd);
+        ret = (ret == (int)headSz) ? 0 : WOLFKM_BAD_FILE;
     }
     if (ret == 0) {
         ret = (int)fwrite(dataEnc, 1, dataSz, ctx->fd);
@@ -361,19 +370,23 @@ int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz
     if (ret == 0) {
         ctx->header.vaultCount++;
         ctx->header.vaultSz += headSz + dataSz;
-        /* TODO: Extend SHA or HMAC? */
+        /* TODO: Extend header hash? */
     }
+#ifdef WOLFKM_VAULT_ENC
     if (dataEnc) {
         free(dataEnc);
     }
+#endif
     wc_UnLockMutex(&ctx->lock);
     return ret;
 }
 
 static int wolfVaultGetItemHeader(wolfVaultCtx* ctx, size_t itemPos)
 {
-    int ret = fseek(ctx->fd, itemPos, SEEK_SET);
+    int ret;
     word32 headSz = VAULT_ITEM_PRE_SZ();
+
+    ret = fseek(ctx->fd, itemPos, SEEK_SET);
     if (ret == 0) {
         /* read pre-header */
         ret = (int)fread(&ctx->item, 1, headSz, ctx->fd);
@@ -400,11 +413,13 @@ static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
     int ret = 0;
     size_t sector = 0;
 
+#ifdef WOLFKM_VAULT_ENC
     /* make sure key has been setup */
     ret = wolfVaultSetupKey(ctx);
     if (ret != 0) {
         return ret;
     }
+#endif
 
     /* populate header */
     memset(item, 0, sizeof(wolfVaultItem));
@@ -425,9 +440,12 @@ static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
         ret = (int)fread(item->data, 1, item->dataSz, ctx->fd);
         ret = (ret == (int)item->dataSz) ? 0 : WOLFKM_BAD_FILE;
     }
+#ifdef WOLFKM_VAULT_ENC
     if (ret == 0) {
-        ret = wolfVaultDecrypt(ctx, item->data, item->dataSz, sector);
+        ret = wolfVaultDecrypt(ctx, item->data, item->dataSz, ctx->itemPos,
+            ctx->item.tag, sizeof(ctx->item.tag));
     }
+#endif
     /* on error release allocated memory */
     if (ret != 0 && item->data) {
         free(item->data);

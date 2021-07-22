@@ -524,6 +524,7 @@ void wolfEtsiSvc_Cleanup(SvcInfo* svc)
     }
 }
 
+#if defined(WOLFKM_VAULT) && defined(WOLFKM_VAULT_ENC)
 /* key: returned AES key */
 /* keyEnc: key information stored in vault header */
 static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
@@ -636,6 +637,7 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
     (void)svc;
     return ret;
 }
+#endif
 
 int wolfEtsiSvc_SetVaultFile(SvcInfo* svc, const char* vaultFile)
 {
@@ -645,14 +647,18 @@ int wolfEtsiSvc_SetVaultFile(SvcInfo* svc, const char* vaultFile)
     if (svc == NULL || vaultFile == NULL)
         return WOLFKM_BAD_ARGS;
 
-#ifdef WOLFKM_VAULT
+
     svcCtx = (EtsiSvcCtx*)svc->svcCtx;
+#ifdef WOLFKM_VAULT
     ret = wolfVaultOpen(&svcCtx->vault, vaultFile);
     if (ret == 0) {
         wolfVaultPrintInfo(svcCtx->vault);
 
+    #ifdef WOLFKM_VAULT_ENC
         ret = wolfVaultAuth(svcCtx->vault, wolfEtsiSvcVaultAuthCb, svc);
+    #endif
     }
 #endif
+    (void)svcCtx;
     return ret;
 }
