@@ -40,8 +40,8 @@ typedef struct VaultHeader {
     uint32_t vaultCount;   /* number of items in vault */
     size_t   vaultSz;      /* size not including header */
 
+    uint8_t  hash[VAULT_HASH_SZ]; /* integrity for vault file (TODO) */
 #ifdef WOLFKM_VAULT_ENC
-    uint8_t  hash[VAULT_HASH_SZ]; /* hash of entire vault file */
     uint8_t  keyEnc[WOLFKM_VAULT_ENC_KEYSZ];
 #endif
 } VaultHeader_t;
