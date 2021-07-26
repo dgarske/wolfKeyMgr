@@ -21,6 +21,38 @@
 
 #include "wolfkeymgr/mod_vault.h"
 
+#if defined(WOLFKM_VAULT) && defined(WOLFKM_VAULT_ENC)
+/* key: returned AES key */
+/* keyEnc: key information stored in vault header */
+static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
+    byte* keyEnc, word32 keyEncSz, void* cbCtx)
+{
+    int ret;
+
+    /* For testing use fixed key */
+    static byte k1[] = {
+        0x1e, 0xa6, 0x61, 0xc5, 0x8d, 0x94, 0x3a, 0x0e,
+        0x48, 0x01, 0xe4, 0x2f, 0x4b, 0x09, 0x47, 0x14,
+        0x9e, 0x7f, 0x9f, 0x8e, 0x3e, 0x68, 0xd0, 0xc7,
+        0x50, 0x52, 0x10, 0xbd, 0x31, 0x1a, 0x0e, 0x7c,
+        0xd6, 0xe1, 0x3f, 0xfd, 0xf2, 0x41, 0x8d, 0x8d,
+        0x19, 0x11, 0xc0, 0x04, 0xcd, 0xa5, 0x8d, 0xa3,
+        0xd6, 0x19, 0xb7, 0xe2, 0xb9, 0x14, 0x1e, 0x58,
+        0x31, 0x8e, 0xea, 0x39, 0x2c, 0xf4, 0x1b, 0x08
+    };
+    if (keySz > sizeof(k1))
+        keySz = sizeof(k1);
+    memcpy(key, k1, keySz);
+    ret = 0;
+
+    (void)keyEnc;
+    (void)keyEncSz;
+    (void)cbCtx;
+
+    return ret;
+}
+#endif
+
 static int vault_test(void)
 {
     int ret = 0;
@@ -43,6 +75,11 @@ static int vault_test(void)
     if (ret == 0) {
         wolfVaultPrintInfo(ctx);
 
+    #ifdef WOLFKM_VAULT_ENC
+        /* setup security callback */
+        ret = wolfVaultAuth(ctx, wolfEtsiSvcVaultAuthCb, NULL);
+    #endif
+
         /* add items */
         for (i=0; i<sizeof(testItems)/sizeof(struct vaultTestItems); i++) {
             ret = wolfVaultAdd(ctx, testItems[i].type,
@@ -53,6 +90,7 @@ static int vault_test(void)
                 break;
             }
         }
+
         /* get items */
         for (i=0; i<sizeof(testItems)/sizeof(struct vaultTestItems); i++) {
             ret = wolfVaultGet(ctx, &item, testItems[i].type,
