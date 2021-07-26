@@ -187,7 +187,7 @@ static void ParseHttpResponseExpires(HttpRsp* rsp, EtsiKey* key, time_t now)
     int i;
 
     /* capture expiration */
-    for (i=0; i<rsp->headerCount; i++) {
+    for (i=0; i<(int)rsp->headerCount; i++) {
         if (rsp->headers[i].type == HTTP_HDR_EXPIRES) {
             struct tm tm;
             memset(&tm, 0, sizeof(tm));
@@ -239,7 +239,7 @@ static int EtsiClientGet(EtsiClientCtx* client, EtsiKey* key,
     /* send GET key request */
     wc_LockMutex(&client->lock);
     pos = 0;
-    while (pos < requestSz) {
+    while (pos < (int)requestSz) {
         ret = wolfTlsWrite(client->ssl, (byte*)request + pos,
             requestSz - pos);
         if (ret < 0) {
@@ -355,7 +355,7 @@ int wolfEtsiClientPush(EtsiClientCtx* client, EtsiKeyType keyType,
     /* send PUSH key request */
     wc_LockMutex(&client->lock);
     pos = 0;
-    while (pos < requestSz) {
+    while (pos < (int)requestSz) {
         ret = wolfTlsWrite(client->ssl, (byte*)request + pos,
             requestSz - pos);
         if (ret < 0) {
@@ -962,7 +962,7 @@ int wolfEtsiKeyPrint(EtsiKey* key)
                 if (ret == 0) {
                     int i;
                     XLOG(WOLFKM_LOG_INFO, "DH Pub: %d\n", pubKeyLen);
-                    for (i=0; i<pubKeyLen*2; i+=128) {
+                    for (i=0; i<(int)(pubKeyLen*2); i+=128) {
                         XLOG(WOLFKM_LOG_INFO, "\t%.128s\n", (char*)pubKey+i);
                     }
                 }

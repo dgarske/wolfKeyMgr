@@ -33,7 +33,6 @@
 #include <sys/utsname.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <assert.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
 
@@ -88,6 +87,7 @@ static inline void IncrementCurrentConnections(SvcConn* conn)
     threadStats.currentConnections++;
     if (threadStats.currentConnections > threadStats.maxConcurrent)
         threadStats.maxConcurrent = threadStats.currentConnections;
+    (void)conn;
 }
 
 
@@ -111,6 +111,7 @@ static inline void IncrementCompleted(SvcConn* conn)
 static inline void IncrementTimeouts(SvcConn* conn)
 {
     threadStats.timeouts++;
+    (void)conn;
 }
 
 
@@ -118,6 +119,7 @@ static inline void IncrementTimeouts(SvcConn* conn)
 static inline void DecrementCurrentConnections(SvcConn* conn)
 {
     threadStats.currentConnections--;
+    (void)conn;
 }
 
 
@@ -452,6 +454,8 @@ static void EventCb(struct bufferevent* bev, short what, void* ctx)
         ServiceConnFree(conn);
         return;
     }
+
+    (void)bev;
 }
 
 
@@ -481,6 +485,7 @@ static int DoRead(struct bufferevent* bev, SvcConn* conn)
             XLOG(WOLFKM_LOG_ERROR, "wolfSSL_read err = %s\n",
                                 wolfSSL_ERR_reason_error_string(err));
     }
+    (void)bev;
     return ret;
 }
 
@@ -606,6 +611,8 @@ static void ThreadEventProcess(int fd, short which, void* arg)
         bufferevent_set_timeouts(conn->stream, &conn->svc->readto, NULL);
         bufferevent_enable(conn->stream, (EV_READ | EV_WRITE));
     }
+
+    (void)which;
 }
 
 /* Individual thread setup */
@@ -786,7 +793,7 @@ static int InitServerTLS(SvcInfo* svc)
 
 /* dispatcher thread accept callback */
 static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
-              struct sockaddr* a, int slen, void* p)
+    struct sockaddr* a, int slen, void* p)
 {
     SvcInfo* svc = (SvcInfo*)p;
     static int lastThread = -1;       /* last used thread ID */
@@ -803,8 +810,10 @@ static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
     lastThread = currentId;
 
     item->fd = fd;
-    assert(slen <= sizeof(item->peerAddr));
-    memcpy(item->peerAddr, a, slen);
+    memset(item->peerAddr, 0, sizeof(item->peerAddr));
+    if (slen <= (int)sizeof(item->peerAddr)) {
+        memcpy(item->peerAddr, a, slen);
+    }
 
     TcpNoDelay(fd);
 
@@ -816,6 +825,8 @@ static void AcceptCB(struct evconnlistener* listener, evutil_socket_t fd,
     }
     XLOG(WOLFKM_LOG_INFO, "Accepted a connection, sent to thread %d\n",
         currentId);
+
+    (void)listener;
 }
 
 
@@ -845,6 +856,9 @@ void wolfKeyMgr_SignalCb(evutil_socket_t fd, short event, void* arg)
     }
 
     wolfKeyMgr_CloseLog();    
+
+    (void)fd;
+    (void)event;
 }
 
 static void StatsPrint(SvcStats* local)
@@ -912,8 +926,8 @@ void wolfKeyMgr_SetMaxFiles(int max)
     struct rlimit now;
 
     if (getrlimit(RLIMIT_NOFILE, &now) == 0) {
-        if (now.rlim_cur < max)
-            now.rlim_cur = max;
+        if (now.rlim_cur < (size_t)max)
+            now.rlim_cur = (size_t)max;
         if (now.rlim_max < now.rlim_cur)
             now.rlim_max = now.rlim_cur;
 
@@ -1183,7 +1197,7 @@ void wolfKeyMgr_ServiceCleanup(SvcInfo* svc)
 
     /* cancel each thread */
     XLOG(WOLFKM_LOG_INFO, "Sending cancel to threads\n");
-    for (i = 0; i < svc->threadPoolSize; i++) {
+    for (i = 0; i < (int)svc->threadPoolSize; i++) {
         if (write(svc->threads[i].notifySend, &kCancel, 
                 sizeof(kCancel)) != sizeof(kCancel)) {
             XLOG(WOLFKM_LOG_ERROR, "Write to cancel thread notify failed\n");
@@ -1193,7 +1207,7 @@ void wolfKeyMgr_ServiceCleanup(SvcInfo* svc)
 
     /* join each thread */
     XLOG(WOLFKM_LOG_INFO, "Joining threads\n");
-    for (i = 0; i < svc->threadPoolSize; i++) {
+    for (i = 0; i < (int)svc->threadPoolSize; i++) {
         ret = pthread_join(svc->threads[i].tid, NULL);
 
         XLOG(WOLFKM_LOG_DEBUG, "Join ret = %d\n", ret);
@@ -1232,7 +1246,7 @@ int wolfKeyMgr_NotifyAllClients(SvcInfo* svc)
 {
     int i;
     /* loop through each worker thread and notify */
-    for (i = 0; i < svc->threadPoolSize; i++) {
+    for (i = 0; i < (int)svc->threadPoolSize; i++) {
         EventThread* me = (EventThread*)&svc->threads[i];
         if (me->svc == svc) {
             if (write(me->notifySend, &kNotify, sizeof(kNotify)) != 

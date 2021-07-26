@@ -587,7 +587,7 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
         /* use long term private RSA key to decrypt key */
         ret = wc_RsaPrivateDecrypt(keyEnc, privKeySz, key, keySz, &rsa);
         if (ret > 0) {
-            if (ret != keySz) {
+            if (ret != (int)keySz) {
                 XLOG(WOLFKM_LOG_WARN, "Vault Auth: "
                     "Decrypted key size %d not expected %d\n", ret, keySz);
             }
@@ -610,7 +610,7 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
         ret = wc_RsaPublicEncrypt(key, keySz, keyEnc, privKeySz, &rsa,
             &rng);
         if (ret > 0) {
-            if (ret != privKeySz) {
+            if (ret != (int)privKeySz) {
                 XLOG(WOLFKM_LOG_WARN, "Vault Auth: "
                     "Encrypted key size %d not expected %d\n", ret, privKeySz);
             }
@@ -630,6 +630,7 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
 
     wc_FreeRng(&rng);
 
+    (void)ctx;
     (void)key;
     (void)keySz;
     (void)keyEnc;

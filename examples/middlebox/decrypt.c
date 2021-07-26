@@ -188,6 +188,13 @@ static int myKeyCb(void* vSniffer, int namedGroup,
         memcpy(privKey->buffer, keyBuf, keySz);
         ret = 0; /* mark success */
     }
+
+    (void)vSniffer;
+    (void)cliPub;
+    (void)cliPubSz;
+    (void)cbCtx;
+    (void)error;
+
     return ret;
 }
 #endif

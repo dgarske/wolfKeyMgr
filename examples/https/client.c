@@ -31,7 +31,11 @@ int main(int argc, char* argv[])
     HttpRsp rsp;
     byte data[HTTPS_TEST_MAX_DATA];
     int dataSz = (int)sizeof(data);
-    
+
+    /* TODO: Support arguments */
+    (void)argc;
+    (void)argv;
+
     wolfSSL_Init();
 
     /* log setup */

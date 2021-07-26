@@ -303,11 +303,12 @@ int wolfSigIgnore(int sig)
 
 int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz)
 {
-    int i, calcSz = (int)(inSz*2)+1;
+    int i;
+    word32 calcSz = (inSz*2)+1;
     const char* kHexStr = "0123456789ABCDEF";
     if (in == NULL || out == NULL || outSz < calcSz)
         return WOLFKM_BAD_ARGS;
-    for (i = 0; i < inSz; i++) {
+    for (i = 0; i < (int)inSz; i++) {
         *out++ = kHexStr[((*in++)>>4) & 0xF];
         *out++ = kHexStr[ (*in++)     & 0xF];
     }
@@ -330,13 +331,14 @@ static char HexToByte(char ch)
 
 int wolfHexStringToByte(const char* in, word32 inSz, byte* out, word32 outSz)
 {
-    int i, calcSz = 0;
+    int i;
+    word32 calcSz = 0;
     char cl, ch;
 
     if (in == NULL || out == NULL || outSz < (inSz/2))
         return WOLFKM_BAD_ARGS;
 
-    for (i = 0; i < inSz; i+=2) {
+    for (i = 0; i < (int)inSz; i+=2) {
         cl = HexToByte((char)in[i]);
         ch = HexToByte((char)in[i+1]);
         *out++ = (((byte)cl) << 4) | (byte)ch;

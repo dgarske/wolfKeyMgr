@@ -129,7 +129,7 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
     ctx_new->fd = fopen(file, "rb+");
     if (ctx_new->fd != NULL) {
         byte* headPtr = (byte*)&ctx_new->header;
-        uint32_t headSz = (uint32_t)sizeof(uint32_t)*3;
+        int headSz = (int)sizeof(uint32_t)*3;
 
         /* read header - front (id, version and size) */
         ret = fread(headPtr, 1, headSz, ctx_new->fd);
@@ -365,7 +365,7 @@ int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz
     }
     if (ret == 0) {
         ret = (int)fwrite(dataEnc, 1, dataSz, ctx->fd);
-        ret = (ret == dataSz) ? 0 : WOLFKM_BAD_FILE;        
+        ret = (ret == (int)dataSz) ? 0 : WOLFKM_BAD_FILE;        
     }
     if (ret == 0) {
         ctx->header.vaultCount++;
@@ -524,7 +524,9 @@ int wolfVaultDelete(wolfVaultCtx* ctx, word32 type, const byte* name,
 
     (void)ctx;
     (void)name;
+    (void)nameSz;
     (void)type;
+
     wc_UnLockMutex(&ctx->lock);
     return WOLFKM_BAD_ARGS;
 }
@@ -546,6 +548,7 @@ int wolfVaultArchive(wolfVaultCtx* ctx, word32 timestamp)
 
     (void)ctx;
     (void)timestamp;
+
     wc_UnLockMutex(&ctx->lock);
     return WOLFKM_BAD_ARGS;
 }

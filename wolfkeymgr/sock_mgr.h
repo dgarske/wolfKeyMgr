@@ -106,7 +106,7 @@ struct SvcInfo {
     pthread_mutex_t initLock;       /* for initCount */
     pthread_cond_t  initCond;       /* for initCount */
     EventThread*    threads;        /* worker thread pool */
-    int             threadPoolSize; /* our reference here */
+    unsigned int    threadPoolSize; /* our reference here */
     ConnItem*       freeConnItems;  /* free connection item list */
     pthread_mutex_t itemLock;       /* for freeItems */
     SvcStats        globalStats;    /* global (all threads) total stats */

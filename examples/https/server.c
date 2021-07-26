@@ -54,6 +54,10 @@ int main(int argc, char* argv[])
 
     signal(SIGINT, sig_handler);
 
+    /* TODO: Support arguments */
+    (void)argc;
+    (void)argv;
+
     printf("HTTPS Server: Port %d\n", HTTPS_TEST_PORT);
 
     wolfSSL_Init();

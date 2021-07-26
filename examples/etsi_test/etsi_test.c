@@ -89,6 +89,8 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
         XLOG(WOLFKM_LOG_INFO, "Key Error: %s (%d)\n", wolfKeyMgr_GetError(ret), ret);
     }
 
+    (void)client;
+
     return ret; /* non-zero will close client */
 }
 

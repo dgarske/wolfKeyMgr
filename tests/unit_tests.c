@@ -45,6 +45,7 @@ static int wolfEtsiSvcVaultAuthCb(wolfVaultCtx* ctx, byte* key, word32 keySz,
     memcpy(key, k1, keySz);
     ret = 0;
 
+    (void)ctx;
     (void)keyEnc;
     (void)keyEncSz;
     (void)cbCtx;
@@ -81,7 +82,7 @@ static int vault_test(void)
     #endif
 
         /* add items */
-        for (i=0; i<sizeof(testItems)/sizeof(struct vaultTestItems); i++) {
+        for (i=0; i<(int)(sizeof(testItems)/sizeof(struct vaultTestItems)); i++) {
             ret = wolfVaultAdd(ctx, testItems[i].type,
                 (const byte*)testItems[i].name, strlen(testItems[i].name)+1,
                 (const byte*)testItems[i].data, strlen(testItems[i].data)+1);
@@ -92,7 +93,7 @@ static int vault_test(void)
         }
 
         /* get items */
-        for (i=0; i<sizeof(testItems)/sizeof(struct vaultTestItems); i++) {
+        for (i=0; i<(int)(sizeof(testItems)/sizeof(struct vaultTestItems)); i++) {
             ret = wolfVaultGet(ctx, &item, testItems[i].type,
                 (const byte*)testItems[i].name, strlen(testItems[i].name)+1);
             if (ret == 0) {
@@ -118,13 +119,15 @@ int main(int argc, char** argv)
     int ret;
     enum log_level_t logLevel = WOLFKM_DEFAULT_LOG_LEVEL;
 
+    (void)argc;
+    (void)argv;
+
     /* log setup */
     wolfKeyMgr_SetLogFile(NULL, 0, logLevel);
     printf("Key Manager Unit Test\n");
 
     ret = vault_test();
     printf("Vault Open Test: %s\n", ret == 0 ? "pass" : "fail");
-
 
     return ret;
 }
