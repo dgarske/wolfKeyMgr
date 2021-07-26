@@ -79,13 +79,13 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
     #endif
     }
     if (ret == 0) {
-        ret = wolfEtsiKeyPrint(key);
-    }
-    if (info->saveResp != NULL) {
-        wolfSaveFile(info->saveResp, (byte*)key->response, key->responseSz);
-    }
+        wolfEtsiKeyPrint(key);
 
-    if (ret != 0) {
+        if (info->saveResp != NULL) {
+            wolfSaveFile(info->saveResp, (byte*)key->response, key->responseSz);
+        }
+    }
+    else {
         XLOG(WOLFKM_LOG_INFO, "Key Error: %s (%d)\n", wolfKeyMgr_GetError(ret), ret);
     }
 

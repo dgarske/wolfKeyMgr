@@ -140,9 +140,9 @@ static int etsi_client_find(char* urlStr, EtsiKey* key, int namedGroup,
     
     ret = etsi_client_connect(urlStr);
     if (ret == 0 && key) {
-        char name[ETSI_MAX_KEY_NAME*2+1];
+        char name[ETSI_MAX_KEY_NAME_STR];
         word32 nameSz = (word32)sizeof(name);
-        ret = wolfEtsiKeyComputeName((EtsiKeyType)namedGroup, pub, pubSz,
+        ret = wolfEtsiGetPubKeyName((EtsiKeyType)namedGroup, pub, pubSz,
             name, &nameSz);
         if (ret == 0) {
             ret = wolfEtsiClientFind(gEtsiClient, key, namedGroup, name,

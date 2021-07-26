@@ -110,7 +110,7 @@ typedef struct EtsiKey {
     word32 responseSz;
     byte   response[ETSI_MAX_RESPONSE_SZ];
     time_t expires; /* from HTTP HTTP_HDR_EXPIRES */
-    word32 uses; /* times this key has been used */
+    word32 useCount; /* times this key has been used */
 
     /* flags */
     unsigned char isDynamic:1; /* key is dynamically allocated */
@@ -183,16 +183,18 @@ WOLFKM_API int wolfEtsiKeyLoadSSL(EtsiKey* key, WOLFSSL* ssl);
 WOLFKM_API int wolfEtsiKeyGetPtr(EtsiKey* key, byte** response, word32* responseSz);
 /* Generate a new key */
 WOLFKM_API int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng);
-/* Compute name for public key based on TLS key share */
-WOLFKM_API int wolfEtsiKeyComputeName(EtsiKeyType keyType,
-    const byte* pub, word32 pubSz, char* name, word32* nameSz);
 /* print ETSI key data - for debugging / testing */
-WOLFKM_API int  wolfEtsiKeyPrint(EtsiKey* key);
+WOLFKM_API void wolfEtsiKeyPrint(EtsiKey* key);
 /* release ETSI key resources */
 WOLFKM_API void wolfEtsiKeyFree(EtsiKey* key);
 
 WOLFKM_API const char* wolfEtsiKeyNamedGroupStr(EtsiKey* key);
 WOLFKM_API const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type);
+
+/* Compute name for public key based on TLS key share */
+#define ETSI_MAX_KEY_NAME_STR (ETSI_MAX_KEY_NAME*2+1)
+WOLFKM_API int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
+    const byte* pub, word32 pubSz, char* name, word32* nameSz);
 
 /* these are required if using multiple threads sharing the wolfSSL library for init mutex protection */
 WOLFKM_API int wolfEtsiClientInit(void);
