@@ -96,16 +96,19 @@ static int vault_test(void)
         for (i=0; i<(int)(sizeof(testItems)/sizeof(struct vaultTestItems)); i++) {
             ret = wolfVaultGet(ctx, &item, testItems[i].type,
                 (const byte*)testItems[i].name, strlen(testItems[i].name)+1);
-            if (ret == 0) {
-                if (item.dataSz != strlen(testItems[i].data)+1 ||
-                    memcmp(item.data,
-                        testItems[i].data, strlen(testItems[i].data)+1) != 0)
-                {
-                    printf("Vault item data test failed\n");
-                    ret = -1;
-                }
-                wolfVaultFreeItem(&item);
+            if (ret != 0) {
+                printf("Vault get failed: %d\n", ret);
+                break;
             }
+
+            if (item.dataSz != strlen(testItems[i].data)+1 ||
+                memcmp(item.data,
+                    testItems[i].data, strlen(testItems[i].data)+1) != 0)
+            {
+                printf("Vault item data test failed\n");
+                ret = -1;
+            }
+            wolfVaultFreeItem(&item);
         }
 
         wolfVaultClose(ctx);

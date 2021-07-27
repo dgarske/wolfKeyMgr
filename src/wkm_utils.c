@@ -104,13 +104,13 @@ const char* wolfKeyMgr_GetLogLevel(enum log_level_t level)
             return "INFO";
 
         case WOLFKM_LOG_WARN:
-            return "WARNING";
+            return "WARN";
 
         case WOLFKM_LOG_ERROR:
-            return "ERROR";
+            return "ERRO";
 
         case WOLFKM_LOG_DEBUG:
-            return "DEBUG";
+            return "DEBG";
 
         default:
             return "UNKNOWN";
@@ -309,9 +309,8 @@ int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz)
     if (in == NULL || out == NULL || outSz < calcSz)
         return WOLFKM_BAD_ARGS;
     for (i = 0; i < (int)inSz; i++) {
-        *out++ = kHexStr[((*in)>>4) & 0xF];
-        *out++ = kHexStr[ (*in)     & 0xF];
-        in++;
+        *out++ = kHexStr[((in[i])>>4) & 0xF];
+        *out++ = kHexStr[ (in[i])     & 0xF];
     }
     *out++ = '\0';
     return calcSz;

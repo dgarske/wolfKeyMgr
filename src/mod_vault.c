@@ -356,7 +356,7 @@ int wolfVaultAdd(wolfVaultCtx* ctx, word32 type, const byte* name, word32 nameSz
     dataEnc = (byte*)data;
 #endif
 
-    wolfVaultPrintItem(WOLFKM_LOG_INFO, "Add", &ctx->item);
+    wolfVaultPrintItem(WOLFKM_LOG_DEBUG, "Add", &ctx->item);
 
     /* write item header and data */
     if (ret == 0) {
@@ -472,7 +472,7 @@ int wolfVaultGet(wolfVaultCtx* ctx, wolfVaultItem* item, word32 type,
     while (ret == 0) {
         ret = wolfVaultGetItemHeader(ctx, itemPos);
         if (ret == 0) {
-            wolfVaultPrintItem(WOLFKM_LOG_INFO, "Get", &ctx->item);
+            wolfVaultPrintItem(WOLFKM_LOG_DEBUG, "Get", &ctx->item);
 
             if (ctx->item.type == type && ctx->item.nameSz == nameSz &&
                 (memcmp(ctx->item.name, name, ctx->item.nameSz) == 0)) {

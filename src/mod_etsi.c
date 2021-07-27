@@ -1006,7 +1006,7 @@ void wolfEtsiKeyPrint(EtsiKey* key)
     }
 
     /* if name is not populated then calculate it */
-    if (key->nameSz == 0 || key->name[0] == '\0') {
+    if (key->nameSz == 0) {
         key->nameSz = (int)sizeof(key->name);
         ret = wolfEtsiKeyComputeName(key, key->name, &key->nameSz);
         if (ret != 0) {
@@ -1017,8 +1017,9 @@ void wolfEtsiKeyPrint(EtsiKey* key)
     pubSz = wolfByteToHexString(key->name, key->nameSz,
         pubName, sizeof(pubName));
 
-    XLOG(WOLFKM_LOG_INFO, "%s: %s (%d size, %d uses)\n",
-        keyAlgoStr, pubName, key->responseSz, key->useCount);
+    XLOG(WOLFKM_LOG_INFO, "%s: %s\n", keyAlgoStr, pubName);
+    XLOG(WOLFKM_LOG_DEBUG, "\tsize %d, uses %d, expires %lu\n",
+        key->responseSz, key->useCount, key->expires);
     (void)pubSz;
 }
 
