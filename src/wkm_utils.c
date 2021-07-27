@@ -309,8 +309,9 @@ int wolfByteToHexString(const byte* in, word32 inSz, char* out, word32 outSz)
     if (in == NULL || out == NULL || outSz < calcSz)
         return WOLFKM_BAD_ARGS;
     for (i = 0; i < (int)inSz; i++) {
-        *out++ = kHexStr[((*in++)>>4) & 0xF];
-        *out++ = kHexStr[ (*in++)     & 0xF];
+        *out++ = kHexStr[((*in)>>4) & 0xF];
+        *out++ = kHexStr[ (*in)     & 0xF];
+        in++;
     }
     *out++ = '\0';
     return calcSz;

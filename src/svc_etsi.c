@@ -104,6 +104,8 @@ static int GenNewKey(EtsiSvcCtx* svcCtx, EtsiKeyType keyType, EtsiKey* key)
     if (ret == 0) {
         key->expires = wolfGetCurrentTimeT() + svcCtx->config.renewSec;
 
+        wolfEtsiKeyPrint(key);
+
     #ifdef WOLFKM_VAULT
         ret = AddKeyToVault(svcCtx, key);
         if (ret != 0) {

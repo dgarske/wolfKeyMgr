@@ -811,8 +811,6 @@ int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 
     if (ret == 0) {
         key->type = keyType;
-
-        wolfEtsiKeyPrint(key);
     }
 
     return ret;
@@ -830,7 +828,8 @@ int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
         return WOLFKM_BAD_ARGS;
 
     memset(name, 0, *nameSz);
-    tmpSz = (*nameSz-1)/2;
+    tmpSz = *nameSz;
+    *name = 0;
 
 #ifdef HAVE_ECC
     if (keyType >= ETSI_KEY_TYPE_SECP160K1 && 
@@ -861,6 +860,7 @@ int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
             if (ret == 0) {
                 /* compute name for key */
                 pubXLen = pubYLen = keySize*2;
+                tmpSz = (tmpSz-1)/2;
                 if (pubXLen > tmpSz) pubXLen = tmpSz;
                 if (pubYLen > tmpSz) pubYLen = tmpSz;
                 memcpy(name,         pubX, pubXLen);
@@ -879,8 +879,8 @@ int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
         word32 pubKeySz = 0;
         ret = NamedGroupToDhParams(keyType, NULL, NULL, &pubKeySz);
         if (ret == 0) {
-            if (pubKeySz > tmpSz) pubKeySz = tmpSz;
-            ret = wolfByteToHexString(pub, pubKeySz, name, *nameSz);
+            if (pubKeySz > (tmpSz-1)/2) pubKeySz = (tmpSz-1)/2;
+            ret = wolfByteToHexString(pub, pubKeySz, name, tmpSz);
             if (ret > 0) {
                 *nameSz = ret;
                 ret = 0;
@@ -928,17 +928,17 @@ int wolfEtsiKeyComputeName(EtsiKey* key, byte* name, word32* nameSz)
             ret = wc_EccPrivateKeyDecode((byte*)key->response, &idx, &ecKey,
                 key->responseSz);
             if (ret == 0) {
-                byte pubX[MAX_ECC_BYTES*2+1];
-                byte pubY[MAX_ECC_BYTES*2+1];
+                byte pubX[MAX_ECC_BYTES];
+                byte pubY[MAX_ECC_BYTES];
                 word32 pubXLen = sizeof(pubX), pubYLen = sizeof(pubY);
                 ret = wc_ecc_export_ex(&ecKey,
                     pubX, &pubXLen,
                     pubY, &pubYLen, 
-                    NULL, NULL, WC_TYPE_HEX_STR);
+                    NULL, NULL, WC_TYPE_UNSIGNED_BIN);
                 if (ret == 0) {
                     /* compute name for key */
-                    if (pubXLen > tmpSz) pubXLen = tmpSz/2;
-                    if (pubYLen > tmpSz) pubYLen = tmpSz/2;
+                    if (pubXLen > tmpSz/2) pubXLen = tmpSz/2;
+                    if (pubYLen > tmpSz/2) pubYLen = tmpSz/2;
                     memcpy(name,         pubX, pubXLen);
                     memcpy(name+pubXLen, pubY, pubYLen);
                     *nameSz = pubXLen + pubYLen;
@@ -958,13 +958,12 @@ int wolfEtsiKeyComputeName(EtsiKey* key, byte* name, word32* nameSz)
             ret = wc_DhKeyDecode((byte*)key->response, &idx, &dhKey,
                 key->responseSz);
             if (ret == 0) {
-                byte pubKey[MAX_DH_PUB_SZ*2+1];
+                byte pubKey[MAX_DH_PUB_SZ];
                 word32 pubKeyLen = sizeof(pubKey);
                 ret = wc_export_int(&dhKey.pub, pubKey, &pubKeyLen,
-                    MAX_DH_PUB_SZ, WC_TYPE_HEX_STR);
+                    MAX_DH_PUB_SZ, WC_TYPE_UNSIGNED_BIN);
                 if (ret == 0) {
-                    if (pubKeyLen > tmpSz)
-                        pubKeyLen = tmpSz;
+                    if (pubKeyLen > tmpSz) pubKeyLen = tmpSz;
                     memcpy(name, pubKey, pubKeyLen);
                     *nameSz = pubKeyLen;
                 }
