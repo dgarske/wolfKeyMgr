@@ -196,6 +196,9 @@ WOLFKM_API const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type);
 WOLFKM_API int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
     const byte* pub, word32 pubSz, char* name, word32* nameSz);
 
+/* Build public name for key */
+WOLFKM_API int wolfEtsiKeyComputeName(EtsiKey* key);
+
 /* these are required if using multiple threads sharing the wolfSSL library for init mutex protection */
 WOLFKM_API int wolfEtsiClientInit(void);
 WOLFKM_API void wolfEtsiClientCleanup(void);

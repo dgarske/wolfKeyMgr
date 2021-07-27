@@ -903,19 +903,27 @@ int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
     return ret;
 }
 
-int wolfEtsiKeyComputeName(EtsiKey* key, byte* name, word32* nameSz)
+int wolfEtsiKeyComputeName(EtsiKey* key)
 {
     int ret = WOLFKM_NOT_COMPILED_IN;
-    int keyAlgo;
+    int keyAlgo, nameSz;
     word32 tmpSz;
+    byte* name;
 
-    if (key == NULL || name == NULL || nameSz == NULL) {
+    if (key == NULL) {
         return WOLFKM_BAD_ARGS;
     }
 
-    memset(name, 0, *nameSz);
-    tmpSz = *nameSz;
-    *nameSz = 0;
+    /* if name is already populated then do not calculate again */
+    if (key->nameSz > 0) {
+        return 0;
+    }
+
+    name = key->name;
+    nameSz = (int)sizeof(key->name);
+    memset(name, 0, nameSz);
+    tmpSz = nameSz;
+    nameSz = 0;
 
     keyAlgo = wolfEtsiKeyGetPkType(key);
 #ifdef HAVE_ECC
@@ -941,7 +949,7 @@ int wolfEtsiKeyComputeName(EtsiKey* key, byte* name, word32* nameSz)
                     if (pubYLen > tmpSz/2) pubYLen = tmpSz/2;
                     memcpy(name,         pubX, pubXLen);
                     memcpy(name+pubXLen, pubY, pubYLen);
-                    *nameSz = pubXLen + pubYLen;
+                    nameSz = pubXLen + pubYLen;
                 }
             }
             wc_ecc_free(&ecKey);
@@ -965,7 +973,7 @@ int wolfEtsiKeyComputeName(EtsiKey* key, byte* name, word32* nameSz)
                 if (ret == 0) {
                     if (pubKeyLen > tmpSz) pubKeyLen = tmpSz;
                     memcpy(name, pubKey, pubKeyLen);
-                    *nameSz = pubKeyLen;
+                    nameSz = pubKeyLen;
                 }
             }
             wc_FreeDhKey(&dhKey);
@@ -985,6 +993,9 @@ int wolfEtsiKeyComputeName(EtsiKey* key, byte* name, word32* nameSz)
         //curve448_key x448;
         XLOG(WOLFKM_LOG_INFO, "X448 Pub: TODO\n");
 #endif
+
+    key->nameSz = nameSz;
+
     return ret;
 }
 
@@ -1005,21 +1016,17 @@ void wolfEtsiKeyPrint(EtsiKey* key)
         return;
     }
 
-    /* if name is not populated then calculate it */
-    if (key->nameSz == 0) {
-        key->nameSz = (int)sizeof(key->name);
-        ret = wolfEtsiKeyComputeName(key, key->name, &key->nameSz);
-        if (ret != 0) {
-            XLOG(WOLFKM_LOG_ERROR, "Error %d computing key name\n", ret);
-        }
+    /* make sure public name is calculated */
+    ret = wolfEtsiKeyComputeName(key);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Error %d computing key name\n", ret);
     }
 
+    /* convert to hex string (function handles null termination) */
     pubSz = wolfByteToHexString(key->name, key->nameSz,
         pubName, sizeof(pubName));
 
     XLOG(WOLFKM_LOG_INFO, "%s: %s\n", keyAlgoStr, pubName);
-    XLOG(WOLFKM_LOG_DEBUG, "\tsize %d, uses %d, expires %lu\n",
-        key->responseSz, key->useCount, key->expires);
     (void)pubSz;
 }
 

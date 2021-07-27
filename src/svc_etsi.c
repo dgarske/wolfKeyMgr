@@ -184,6 +184,8 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
         localtime_r(&key->expires, &tm);
         strftime(expiresStr, sizeof(expiresStr), HTTP_DATE_FMT, &tm);
 
+        key->useCount++;
+
         /* Wrap key in HTTP server response */
         conn->responseSz = sizeof(conn->response);
         ret = wolfHttpServer_EncodeResponse(0, NULL, 
