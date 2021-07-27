@@ -38,7 +38,11 @@ typedef struct EtsiSvcCtx {
 
     WC_RNG          rng;
     pthread_mutex_t lock;   /* shared lock */
-    pthread_t       thread; /* key gen worker */
+
+    /* key gen worker */
+    pthread_t       kgThread;
+    pthread_mutex_t kgMutex;
+    pthread_cond_t  kgCond;
 
 #ifdef WOLFKM_VAULT
     wolfVaultCtx*   vault; /* key vault */
@@ -89,7 +93,7 @@ static int AddKeyToVault(EtsiSvcCtx* svcCtx, EtsiKey* key)
 }
 #endif
 
-static int GenNewKey(EtsiSvcCtx* svcCtx, EtsiKeyType keyType, EtsiKey* key)
+static int EtsiSvcGenNewKey(EtsiSvcCtx* svcCtx, EtsiKeyType keyType, EtsiKey* key)
 {
     int ret = WOLFKM_NOT_COMPILED_IN;
     const char* keyTypeStr = wolfEtsiKeyGetTypeStr(keyType);
@@ -176,7 +180,7 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
                 }
             }
         }
-        ret = GenNewKey(svcCtx, etsiConn->groupNum, key);
+        ret = EtsiSvcGenNewKey(svcCtx, etsiConn->groupNum, key);
     }
 
     if (ret == 0) {
@@ -184,7 +188,12 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
         localtime_r(&key->expires, &tm);
         strftime(expiresStr, sizeof(expiresStr), HTTP_DATE_FMT, &tm);
 
+        /* increment use count */
         key->useCount++;
+        if (key->useCount >= svcCtx->config.maxUseCount) {
+            /* signal key generation thread to wake */
+
+        }
 
         /* Wrap key in HTTP server response */
         conn->responseSz = sizeof(conn->response);
@@ -231,7 +240,7 @@ static void* KeyPushWorker(void* arg)
     /* generate default key */
     pthread_mutex_lock(&svcCtx->lock);
     key = &svcCtx->keys[0];
-    (void)GenNewKey(svcCtx, svcCtx->config.keyTypeDef, key);
+    (void)EtsiSvcGenNewKey(svcCtx, svcCtx->config.keyTypeDef, key);
     pthread_mutex_unlock(&svcCtx->lock);
 
     do {
@@ -245,9 +254,9 @@ static void* KeyPushWorker(void* arg)
             if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN && 
                                                   svcCtx->keys[i].expires > 0) {
                 if (now >= svcCtx->keys[i].expires) {
-                    int ret = GenNewKey(svcCtx, svcCtx->keys[i].type,
+                    int ret = EtsiSvcGenNewKey(svcCtx, svcCtx->keys[i].type,
                         &svcCtx->keys[i]);
-                    (void)ret; /* ignore failures, error logged in GenNewKey */
+                    (void)ret; /* ignore failures, error logged in EtsiSvcGenNewKey */
                     keyGenCount++;
                 }
                 if (nextExpires == 0 || nextExpires > svcCtx->keys[i].expires) {
@@ -486,8 +495,12 @@ int wolfEtsiSvc_Start(SvcInfo* svc, struct event_base* mainBase,
 
     svcCtx = (EtsiSvcCtx*)svc->svcCtx;
 
+    /* setup key gen cond signal */
+    pthread_mutex_init(&svcCtx->kgMutex, NULL);
+    pthread_cond_init(&svcCtx->kgCond, NULL);
+
     /* start key generation thread */
-    if (pthread_create(&svcCtx->thread, NULL, KeyPushWorker, svc) != 0) {
+    if (pthread_create(&svcCtx->kgThread, NULL, KeyPushWorker, svc) != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error creating keygen worker\n");
         return WOLFKM_BAD_MEMORY;
     }
@@ -524,6 +537,10 @@ void wolfEtsiSvc_Cleanup(SvcInfo* svc)
     #endif
 
         wc_FreeRng(&svcCtx->rng);
+
+        pthread_mutex_destroy(&svcCtx->kgMutex);
+        pthread_cond_destroy(&svcCtx->kgCond);
+
         pthread_mutex_destroy(&svcCtx->lock);
     }
 }
