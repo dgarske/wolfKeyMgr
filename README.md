@@ -155,13 +155,15 @@ etsi_test 0.9
 -c <pem>    TLS Client Certificate, default certs/client-cert.pem
 -A <pem>    TLS CA Certificate, default certs/ca-cert.pem
 -K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default SECP256R1)
--F <name>   Find key using public key (hex string)
+-F <fprint> Fingerprint used for multiple servers (first 80-bit of pkey hash as hex string)
+-n <name>   Find key using public key name (hex string)
 ```
 
 This client also support stress testing options:
 * Use the thread pool "-t" to spin up more threads.
 * Use the ETSI test client "-r" to make additional requests per thread.
-* Use the "-F" command to find keys. This is a hex string with public key.
+* Use the "-n" command to find key using public key name (hex string of first 64 bytes of public key).
+* Use the "-F" argument to get key for specific fingerprint (hex string of hash of public key - first 80 bits / 10 bytes)
 
 #### ETSI Fingerprint Names
 
