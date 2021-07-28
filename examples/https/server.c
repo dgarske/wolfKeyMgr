@@ -40,7 +40,7 @@ static void sig_handler(const int sig)
     mStop = 1;
 }
 
-int main(int argc, char* argv[])
+int https_server_test(int argc, char** argv)
 {
     int ret;
     WOLFSSL_CTX* ctx;
@@ -203,3 +203,10 @@ static int etsi_client_get(WOLFSSL_CTX* ctx)
     }
     return ret;
 }
+
+#ifndef NO_MAIN_DRIVER
+int main(int argc, char* argv[])
+{
+    return https_server_test(argc, argv);
+}
+#endif

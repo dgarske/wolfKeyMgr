@@ -23,7 +23,11 @@
 
 #include "wolfkeymgr/options.h"
 #include "wolfkeymgr/mod_etsi.h"
+#include "examples/middlebox/decrypt.h"
 #include "examples/test_config.h"
+
+#include <stdio.h>         /* printf */
+#include <stdlib.h>        /* EXIT_SUCCESS */
 
 #ifdef WOLFKM_SNIFFER
 
@@ -35,8 +39,6 @@
 #endif
 
 #include <pcap/pcap.h>     /* pcap stuff */
-#include <stdio.h>         /* printf */
-#include <stdlib.h>        /* EXIT_SUCCESS */
 #include <string.h>        /* strcmp */
 #include <signal.h>        /* signal */
 #include <ctype.h>         /* isprint */
@@ -368,7 +370,7 @@ static void TrimNewLine(char* str)
         str[strSz-1] = '\0';
 }
 
-int main(int argc, char** argv)
+int middlebox_decrypt_test(int argc, char** argv)
 {
     int          ret = 0;
     int          hadBadPacket = 0;
@@ -640,14 +642,18 @@ int main(int argc, char** argv)
 
     return hadBadPacket ? EXIT_FAILURE : EXIT_SUCCESS;
 }
-
-#else
-/* blank build */
-#include <stdio.h>
-#include <stdlib.h>
-int main(void)
-{
-    printf("To enable sniffer use ./configure --enable-sniffer with wolfKeyMgr and wolfSSL\n");
-    return EXIT_SUCCESS;
-}
 #endif /* WOLFKM_SNIFFER */
+
+#ifndef NO_MAIN_DRIVER
+int main(int argc, char** argv)
+{
+#ifdef WOLFKM_SNIFFER
+    return middlebox_decrypt_test(argc, argv);
+#else
+    printf("To enable sniffer use ./configure --enable-sniffer with wolfKeyMgr and wolfSSL\n");
+    (void)argc;
+    (void)argv;
+    return EXIT_SUCCESS;
+#endif
+}
+#endif /* !NO_MAIN_DRIVER */

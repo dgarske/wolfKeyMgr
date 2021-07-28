@@ -20,6 +20,7 @@
  */
 
 #include "wolfkeymgr/mod_etsi.h"
+#include "examples/etsi_test/etsi_test.h"
 #include "examples/test_config.h"
 
 #define WOLFKM_ETST_CLIENT_DEF_REQUESTS     1       /* per thread */
@@ -217,7 +218,7 @@ static void Usage(void)
     printf("-F <name>   Find key using public key (hex string)\n");
 }
 
-int main(int argc, char** argv)
+int etsi_test(int argc, char** argv)
 {
     int         ch, i;
     int         ret;
@@ -367,3 +368,10 @@ int main(int argc, char** argv)
 
     return 0;
 }
+
+#ifndef NO_MAIN_DRIVER
+int main(int argc, char** argv)
+{
+    return etsi_test(argc, argv);
+}
+#endif
