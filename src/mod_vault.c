@@ -411,7 +411,6 @@ static int wolfVaultGetItemHeader(wolfVaultCtx* ctx, size_t itemPos)
 static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
 {
     int ret = 0;
-    size_t sector = 0;
 
 #ifdef WOLFKM_VAULT_ENC
     /* make sure key has been setup */
@@ -434,9 +433,6 @@ static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
     if (item->data == NULL)
         ret = WOLFKM_BAD_MEMORY;
     if (ret == 0) {
-        /* get file position (used for tweak on cipher) */
-        sector = (size_t)ftell(ctx->fd);
-
         ret = (int)fread(item->data, 1, item->dataSz, ctx->fd);
         ret = (ret == (int)item->dataSz) ? 0 : WOLFKM_BAD_FILE;
     }
