@@ -74,8 +74,8 @@ static SvcInfo gEtsiService = {
 /* connection object */
 typedef struct EtsiSvcConn {
     HttpReq req;
-    char    fingerprint[HTTP_MAX_URI];
-    char    contextStr[HTTP_MAX_URI];
+    char    fingerprint[ETSI_MAX_FINGERPRINT_STR];
+    char    contextStr[ETSI_MAX_KEY_NAME_STR];
     word32  groupNum; /* same as enum EtsiKeyType */
 } EtsiSvcConn;
 
@@ -370,13 +370,14 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     }
 
 #ifdef WOLFKM_VAULT
-    /* If "find" request (fingerprint) populated */
-    if (etsiConn->groupNum > 0 && strlen(etsiConn->fingerprint) > 0) {
+    /* If "find" request (contextStr) populated */
+    /* find only uses contextStr, not fingerprint */
+    if (etsiConn->groupNum > 0 && strlen(etsiConn->contextStr) > 0) {
         wolfVaultItem item;
         memset(&item, 0, sizeof(item));
         item.nameSz = (word32)sizeof(item.name);
-        ret = wolfHexStringToByte(etsiConn->fingerprint,
-            strlen(etsiConn->fingerprint), item.name, item.nameSz);
+        ret = wolfHexStringToByte(etsiConn->contextStr,
+            strlen(etsiConn->contextStr), item.name, item.nameSz);
         if (ret > 0) {
             item.nameSz = ret;
             ret = 0;

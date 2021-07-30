@@ -242,7 +242,7 @@ int etsi_test(int argc, char** argv)
     info.keyType = ETSI_TEST_KEY_TYPE;
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:F:")) != -1) {
+    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:F:n:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -308,9 +308,12 @@ int etsi_test(int argc, char** argv)
                 break;
             }
             case 'F':
+                /* optional ID for server on key GET / PUT */
+                /* sha256 hash of public key - 10 bytes (80 bits) as hex string */
                 info.fingerprint = optarg;
                 break;
             case 'n':
+                /* Find key based on first 64 bytes of public key as hex string */
                 info.requestType = REQ_TYPE_FIND;
                 info.findName = optarg;
                 break;
@@ -330,7 +333,10 @@ int etsi_test(int argc, char** argv)
     wolfEtsiClientInit();
 
     if (poolSize == 0) {
-        DoRequests(&info);
+        WorkThreadCtx tctx;
+        memset(&tctx, 0, sizeof(tctx));
+        tctx.info = &info; /* shared info */
+        DoRequests(&tctx);
     }
     else {
         /* stress testing with a thread pool */

@@ -102,6 +102,12 @@ typedef enum EtsiKeyType {
 #ifndef ETSI_MAX_KEY_NAME
 #define ETSI_MAX_KEY_NAME 64
 #endif
+#define ETSI_MAX_KEY_NAME_STR (ETSI_MAX_KEY_NAME*2+1)
+
+#ifndef ETSI_MAX_FINGERPRINT
+#define ETSI_MAX_FINGERPRINT 10 /* 80-bits */
+#endif
+#define ETSI_MAX_FINGERPRINT_STR (ETSI_MAX_FINGERPRINT*2+1)
 
 typedef struct EtsiKey {
     enum EtsiKeyType type;
@@ -192,7 +198,6 @@ WOLFKM_API const char* wolfEtsiKeyNamedGroupStr(EtsiKey* key);
 WOLFKM_API const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type);
 
 /* Compute name for public key based on TLS key share */
-#define ETSI_MAX_KEY_NAME_STR (ETSI_MAX_KEY_NAME*2+1)
 WOLFKM_API int wolfEtsiGetPubKeyName(EtsiKeyType keyType,
     const byte* pub, word32 pubSz, char* name, word32* nameSz);
 
