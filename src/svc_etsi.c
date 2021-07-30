@@ -202,6 +202,9 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
             conn->response, &conn->responseSz, headers, 
             sizeof(headers)/sizeof(HttpHeader), (byte*)key->response,
             key->responseSz);
+
+        XLOG(WOLFKM_LOG_INFO, "Setup Key (idx %d, uses %d)\n",
+            i, key->useCount);
     }
 
     if (key && key->useCount >= svcCtx->config.maxUseCount) {
@@ -268,7 +271,7 @@ static void* KeyPushWorker(void* arg)
             if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN) {
                 /* check if expired or use count exceeded */
                 if ((svcCtx->keys[i].expires > 0 && now >= svcCtx->keys[i].expires) || 
-                    (svcCtx->keys[i].useCount > svcCtx->config.maxUseCount)
+                    (svcCtx->keys[i].useCount >= svcCtx->config.maxUseCount)
                 ) {
                     ret = EtsiSvcGenNewKey(svcCtx, svcCtx->keys[i].type,
                         &svcCtx->keys[i]);
@@ -299,6 +302,8 @@ static void* KeyPushWorker(void* arg)
         pthread_mutex_lock(&svcCtx->kgMutex);
         pthread_cond_timedwait(&svcCtx->kgCond, &svcCtx->kgMutex, &max_wait);
         pthread_mutex_unlock(&svcCtx->kgMutex);
+
+        XLOG(WOLFKM_LOG_DEBUG, "Key Generation Worker Wake\n");
     } while (1);
 
     return NULL;
