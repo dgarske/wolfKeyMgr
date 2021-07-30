@@ -123,7 +123,7 @@ wolfKeyManager 0.9
 -l <num>    Log Level (1=Error to 4=Debug), default 4
 -f <str>    Log file name, default None
 -o <num>    Max open files, default  1024
--s <num>    Seconds to timeout, default 60
+-s <num>    Seconds to timeout non-push connections, default 60
 -r <num>    Key renewal timeout, default 3600
 -t <num>    Thread pool size, default  16
 -k <pem>    TLS Server TLS Key, default ./certs/server-key.pem
@@ -167,11 +167,15 @@ This client also support stress testing options:
 
 #### ETSI Fingerprint Names
 
-We are using the fingerprint to identify an ephemeral key to lookup using the following:
+The fingerprint is a SHA-256 hash of the long term public key with the first 80 bits returned in big endian format. This is used when keys are served for multiple servers concurrently where each server should use a different ephemeral key. If the fingerprint is blank the same key will be returned assuming it is within the expiration and use count restrictions.
+
+#### ETSI Context Names
+
+The context is used to lookup an ephemeral key based on public key using the following scheme:
 * ECC: Public X and Y limited to 32 digits each (64 total)
 * DH: Public key truncated to 64 digits.
 
-The fingerprint used in the HTTP GET is converted to a hex string up to 128 characters.
+The "contextStr" used in the HTTP GET is converted to a hex string up to 128 characters.
 
 For example: An ECC public key printed like this:
 
@@ -180,15 +184,15 @@ ECC Pub X: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC
 ECC Pub Y: 38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
 
 # Retrieved using:
-$ ./examples/etsi_test/etsi_test -F 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
+$ ./examples/etsi_test/etsi_test -n 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
 
 # Example Key Manager output:
 HTTP GET
 Version: HTTP/1.1
-URI: /.well-known/enterprise-transport-security/keys?fingerprints=5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018&groups=0x0017
+URI: /.well-known/enterprise-transport-security/keys?fingerprints=&groups=0x0017&contextstr=5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018
 Headers: 1
     Accept: : application/pkcs8
-Fingerprint: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018
+Context: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018
 Group: SECP256R1 (23)
 ```
 
@@ -271,7 +275,7 @@ Notes:
 * ED25519 and ED448
 * X509 Visibility support
 * TLS v1.2 ephemeral key support
-* Allow vault encryption with ECC key or PWBKDF2
+
 
 ## Support
 

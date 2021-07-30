@@ -25,9 +25,13 @@
 #include "wolfkeymgr/mod_vault.h"
 #include <wolfssl/wolfcrypt/rsa.h>
 
+/* determine maximum concurrent server's (based on fingerprint) */
+#ifndef ETSI_SVC_MAX_SERVERS
+#define ETSI_SVC_MAX_SERVERS     4
+#endif
+/* determine maximum number of active keys */
 #ifndef ETSI_SVC_MAX_ACTIVE_KEYS
-/* maximum number of supported algorithms */
-#define ETSI_SVC_MAX_ACTIVE_KEYS 4
+#define ETSI_SVC_MAX_ACTIVE_KEYS (ETSI_SVC_MAX_SERVERS * 4)
 #endif
 
 /* shared context for worker threads */
@@ -134,6 +138,7 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
     struct tm tm;
     char expiresStr[100];
     EtsiKey* key = NULL;
+    int wakeKg = 0;
 
     if (conn == NULL || conn->svcConnCtx == NULL || svcCtx == NULL) {
         return WOLFKM_BAD_ARGS;
@@ -190,10 +195,6 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
 
         /* increment use count */
         key->useCount++;
-        if (key->useCount >= svcCtx->config.maxUseCount) {
-            /* signal key generation thread to wake */
-
-        }
 
         /* Wrap key in HTTP server response */
         conn->responseSz = sizeof(conn->response);
@@ -202,7 +203,19 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
             sizeof(headers)/sizeof(HttpHeader), (byte*)key->response,
             key->responseSz);
     }
+
+    if (key && key->useCount >= svcCtx->config.maxUseCount) {
+        /* wake key generation thread */
+        wakeKg = 1;
+    }
     pthread_mutex_unlock(&svcCtx->lock);
+
+    if (wakeKg) {
+        /* signal key generation thread to wake */
+        pthread_mutex_lock(&svcCtx->kgMutex);
+        pthread_cond_signal(&svcCtx->kgCond);
+        pthread_mutex_unlock(&svcCtx->kgMutex);
+    }
 
     return ret;
 }
@@ -230,12 +243,13 @@ static int SetupKeyFindResponse(SvcConn* conn, wolfVaultItem* item)
 
 static void* KeyPushWorker(void* arg)
 {
-    int i;
+    int ret, i;
     SvcInfo* svc = (SvcInfo*)arg;
     EtsiSvcCtx* svcCtx = (EtsiSvcCtx*)svc->svcCtx;
     EtsiKey* key;
     time_t now, nextExpires;
     int renewSec, keyGenCount;
+    struct timespec max_wait = {0, 0};
 
     /* generate default key */
     pthread_mutex_lock(&svcCtx->lock);
@@ -251,10 +265,12 @@ static void* KeyPushWorker(void* arg)
         pthread_mutex_lock(&svcCtx->lock);
         now = wolfGetCurrentTimeT();
         for (i=0; i<ETSI_SVC_MAX_ACTIVE_KEYS; i++) {
-            if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN && 
-                                                  svcCtx->keys[i].expires > 0) {
-                if (now >= svcCtx->keys[i].expires) {
-                    int ret = EtsiSvcGenNewKey(svcCtx, svcCtx->keys[i].type,
+            if (svcCtx->keys[i].type != ETSI_KEY_TYPE_UNKNOWN) {
+                /* check if expired or use count exceeded */
+                if ((svcCtx->keys[i].expires > 0 && now >= svcCtx->keys[i].expires) || 
+                    (svcCtx->keys[i].useCount > svcCtx->config.maxUseCount)
+                ) {
+                    ret = EtsiSvcGenNewKey(svcCtx, svcCtx->keys[i].type,
                         &svcCtx->keys[i]);
                     (void)ret; /* ignore failures, error logged in EtsiSvcGenNewKey */
                     keyGenCount++;
@@ -276,7 +292,13 @@ static void* KeyPushWorker(void* arg)
 
         /* wait seconds */
         XLOG(WOLFKM_LOG_INFO, "Next key renewal %d seconds\n", renewSec);
-        sleep(renewSec);
+
+        clock_gettime(CLOCK_REALTIME, &max_wait);
+        max_wait.tv_sec += renewSec;
+
+        pthread_mutex_lock(&svcCtx->kgMutex);
+        pthread_cond_timedwait(&svcCtx->kgCond, &svcCtx->kgMutex, &max_wait);
+        pthread_mutex_unlock(&svcCtx->kgMutex);
     } while (1);
 
     return NULL;

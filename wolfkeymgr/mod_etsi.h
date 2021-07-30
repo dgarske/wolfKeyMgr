@@ -99,26 +99,28 @@ typedef enum EtsiKeyType {
     ETSI_KEY_TYPE_MAX = ETSI_KEY_TYPE_FFDHE_8192,
 } EtsiKeyType;
 
+/* max key public name (can be reduced at build-time if desired) */
 #ifndef ETSI_MAX_KEY_NAME
 #define ETSI_MAX_KEY_NAME 64
 #endif
 #define ETSI_MAX_KEY_NAME_STR (ETSI_MAX_KEY_NAME*2+1)
 
 #ifndef ETSI_MAX_FINGERPRINT
-#define ETSI_MAX_FINGERPRINT 10 /* 80-bits */
+#define ETSI_MAX_FINGERPRINT 10 /* 80-bits - per ETSI spec */
 #endif
 #define ETSI_MAX_FINGERPRINT_STR (ETSI_MAX_FINGERPRINT*2+1)
 
 typedef struct EtsiKey {
     enum EtsiKeyType type;
+    byte   fingerprint[ETSI_MAX_FINGERPRINT];
     word32 nameSz;
-    byte   name[ETSI_MAX_KEY_NAME]; /* public info - first 32-bytes */
+    byte   name[ETSI_MAX_KEY_NAME]; /* public info - first 64-bytes */
     word32 responseSz;
     byte   response[ETSI_MAX_RESPONSE_SZ];
     time_t expires; /* from HTTP HTTP_HDR_EXPIRES */
-    word32 useCount; /* times this key has been used */
 
-    /* flags */
+    /* Internal Variables */
+    word32 useCount; /* times this key has been used */
     unsigned char isDynamic:1; /* key is dynamically allocated */
 } EtsiKey;
 

@@ -37,7 +37,7 @@ static void Usage(void)
     printf("-f <str>    Log file name, default %s\n",
                           WOLFKM_DEFAULT_LOG_NAME ? WOLFKM_DEFAULT_LOG_NAME : "None");
     printf("-o <num>    Max open files, default  %d\n", WOLFKM_DEFAULT_FILES);
-    printf("-s <num>    Seconds to timeout, default %d\n", WOLFKM_DEFAULT_TIMEOUT);
+    printf("-s <num>    Seconds to timeout non-push connections, default %d\n", WOLFKM_DEFAULT_TIMEOUT);
     printf("-r <num>    Key renewal timeout, default %d\n", WOLFKM_KEY_RENEW_TIMEOUT);
     printf("-u <num>    Key renewal max use count, default %d\n", WOLFKM_KEY_RENEW_MAX_USES);
     printf("-t <num>    Thread pool size, default  %ld\n",
