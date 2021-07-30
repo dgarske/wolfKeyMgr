@@ -396,17 +396,18 @@ int wolfEtsiSvc_DoRequest(SvcConn* conn)
     /* find only uses contextStr, not fingerprint */
     if (etsiConn->groupNum > 0 && strlen(etsiConn->contextStr) > 0) {
         wolfVaultItem item;
+        byte name[WOLFKM_VAULT_NAME_MAX_SZ];
+        word32 nameSz = (word32)sizeof(name);
         memset(&item, 0, sizeof(item));
-        item.nameSz = (word32)sizeof(item.name);
         ret = wolfHexStringToByte(etsiConn->contextStr,
-            strlen(etsiConn->contextStr), item.name, item.nameSz);
+            strlen(etsiConn->contextStr), name, nameSz);
         if (ret > 0) {
-            item.nameSz = ret;
+            nameSz = ret;
             ret = 0;
         }
         if (ret == 0) {
             ret = wolfVaultGet(svcCtx->vault, &item, etsiConn->groupNum,
-                item.name, item.nameSz);
+                name, nameSz);
             if (ret == 0) {
                 ret = SetupKeyFindResponse(conn, &item);
             }

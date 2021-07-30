@@ -99,7 +99,7 @@ typedef enum EtsiKeyType {
     ETSI_KEY_TYPE_MAX = ETSI_KEY_TYPE_FFDHE_8192,
 } EtsiKeyType;
 
-/* max key public name (can be reduced at build-time if desired) */
+/* max key public name (can be adjusted at build-time if desired) */
 #ifndef ETSI_MAX_KEY_NAME
 #define ETSI_MAX_KEY_NAME 64
 #endif

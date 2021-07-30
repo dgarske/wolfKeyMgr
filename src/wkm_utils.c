@@ -335,10 +335,10 @@ int wolfHexStringToByte(const char* in, word32 inSz, byte* out, word32 outSz)
     word32 calcSz = 0;
     char cl, ch;
 
-    if (in == NULL || out == NULL || outSz < (inSz/2))
+    if (in == NULL || out == NULL)
         return WOLFKM_BAD_ARGS;
 
-    for (i = 0; i < (int)inSz; i+=2) {
+    for (i = 0; i < (int)inSz && calcSz < outSz; i+=2) {
         cl = HexToByte((char)in[i]);
         ch = HexToByte((char)in[i+1]);
         *out++ = (((byte)cl) << 4) | (byte)ch;
