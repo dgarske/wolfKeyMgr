@@ -299,6 +299,7 @@ static void* KeyPushWorker(void* arg)
         clock_gettime(CLOCK_REALTIME, &max_wait);
         max_wait.tv_sec += renewSec;
 
+        /* wait for wake signal or timeout */
         pthread_mutex_lock(&svcCtx->kgMutex);
         pthread_cond_timedwait(&svcCtx->kgCond, &svcCtx->kgMutex, &max_wait);
         pthread_mutex_unlock(&svcCtx->kgMutex);
