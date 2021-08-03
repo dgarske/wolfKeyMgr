@@ -43,7 +43,7 @@ typedef struct WorkThreadInfo {
     int requests;
     int timeoutSec;
     int requestType;
-    const char* findName; /* contextStr */
+    const char* contextStr;
     const char* fingerprint;
     char* saveResp;
     word16 port;
@@ -134,7 +134,7 @@ static int DoKeyRequest(EtsiClientCtx* client, WorkThreadCtx* tctx)
     else if (info->requestType == REQ_TYPE_FIND) {
         /* find key from server  call and new keys from server will issue callback */
         ret = wolfEtsiClientFind(client, &tctx->key, info->keyType,
-            info->fingerprint, info->findName, info->timeoutSec);
+            info->fingerprint, info->contextStr, info->timeoutSec);
         if (ret > 0) {
             /* use same "push" callback to test key use / print */
             keyCb(client, &tctx->key, tctx);
@@ -242,7 +242,7 @@ int etsi_test(int argc, char** argv)
     info.keyType = ETSI_TEST_KEY_TYPE;
 
     /* argument processing */
-    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:F:n:")) != -1) {
+    while ((ch = getopt(argc, argv, "?eh:p:t:l:r:f:gus:k:w:c:A:K:F:C:")) != -1) {
         switch (ch) {
             case '?' :
                 Usage();
@@ -308,14 +308,13 @@ int etsi_test(int argc, char** argv)
                 break;
             }
             case 'F':
-                /* optional ID for server on key GET / PUT */
                 /* sha256 hash of public key - 10 bytes (80 bits) as hex string */
+                info.requestType = REQ_TYPE_FIND;
                 info.fingerprint = optarg;
                 break;
-            case 'n':
-                /* Find key based on first 64 bytes of public key as hex string */
-                info.requestType = REQ_TYPE_FIND;
-                info.findName = optarg;
+            case 'C':
+                /* optional ID for server on key GET / PUT */
+                info.contextStr = optarg;
                 break;
             default:
                 Usage();

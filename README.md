@@ -157,46 +157,27 @@ etsi_test 0.9
 -c <pem>    TLS Client Certificate, default certs/client-cert.pem
 -A <pem>    TLS CA Certificate, default certs/ca-cert.pem
 -K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default SECP256R1)
--F <fprint> Fingerprint used for multiple servers (first 80-bit of pkey hash as hex string)
--n <name>   Find key using public key name (hex string)
+-F <fprint> Fingerprint of ephemeral public key (first 80-bit of pkey hash as hex string)
+-C <ctxstr> Context string (used for multiple servers)
 ```
 
 This client also support stress testing options:
 * Use the thread pool "-t" to spin up more threads.
 * Use the ETSI test client "-r" to make additional requests per thread.
-* Use the "-n" command to find key using public key name (hex string of first 64 bytes of public key).
 * Use the "-F" argument to get key for specific fingerprint (hex string of hash of public key - first 80 bits / 10 bytes)
+* Use the "-C" command to include context string (used for multiple servers).
 
-#### ETSI Fingerprint Names
+#### ETSI Fingerprint
 
-The fingerprint is a SHA-256 hash of the long term public key with the first 80 bits returned in big endian format. This is used when keys are served for multiple servers concurrently where each server should use a different ephemeral key. If the fingerprint is blank the same key will be returned assuming it is within the expiration and use count restrictions.
+The fingerprint is a SHA-256 hash of the ephemeral public key with the first 80 bits (10 bytes) in big endian format. If the fingerprint is blank the current active key for that TLS group will be returned (assuming it is within the expiration and use count restrictions).
 
-#### ETSI Context Names
+The fingerprint is used to lookup an ephemeral key based on public key using the following scheme:
+* ECC: Public X and Y hashed with SHA256 (first 10 bytes)
+* DH: Public key hashed with SHA256 (first 10 bytes)
 
-The context is used to lookup an ephemeral key based on public key using the following scheme:
-* ECC: Public X and Y limited to 32 digits each (64 total)
-* DH: Public key truncated to 64 digits.
+#### ETSI Context String
 
-The "contextStr" used in the HTTP GET is converted to a hex string up to 128 characters.
-
-For example: An ECC public key printed like this:
-
-```sh
-ECC Pub X: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC
-ECC Pub Y: 38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
-
-# Retrieved using:
-$ ./examples/etsi_test/etsi_test -n 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018B
-
-# Example Key Manager output:
-HTTP GET
-Version: HTTP/1.1
-URI: /.well-known/enterprise-transport-security/keys?fingerprints=&groups=0x0017&contextstr=5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018
-Headers: 1
-    Accept: : application/pkcs8
-Context: 5D2DA665BDD597EC3AAA6AA2E999F115CED9F1016324C7F1711294C8871608CC38006E20B8EDE358CF23CED1FF46593AC0CED787C55B360F35ED3B5D2854018
-Group: SECP256R1 (23)
-```
+The context string is used to specify additional information to the key manager to distribute keys for multiple servers.
 
 ### HTTP Server / Client
 
