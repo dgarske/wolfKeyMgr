@@ -133,6 +133,8 @@ wolfKeyManager 0.9
 -K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default SECP256R1)
 ```
 
+To exit the key manager use ctrl+c.
+
 ### ETSI Test client
 
 This demonstrates secure interactions with the key manager service using the ETSI HTTPS GET/PUT commands for different key types.
@@ -270,10 +272,74 @@ Notes:
 4) If you get "Permission denied" errors try adding `sudo` to the commands.
 
 
+### Demo example output
+
+```
+% ./src/wolfkeymgr -t 2 -l 3
+Aug 03 15:05:21 2021: [INFO] Starting Key Manager
+Aug 03 15:05:21 2021: [INFO] 	To exit use ctrl+c
+Aug 03 15:05:21 2021: [INFO] loaded CA certificate file ./certs/ca-cert.pem
+Aug 03 15:05:21 2021: [INFO] loaded key file ./certs/server-rsa-key.pem
+Aug 03 15:05:21 2021: [INFO] loaded certificate file ./certs/server-rsa-cert.pem
+Aug 03 15:05:21 2021: [ERRO] Vault open failed, creating new
+Aug 03 15:05:21 2021: [INFO] Vault ./wolfkeymgr.vault opened (0 bytes)
+Aug 03 15:05:21 2021: [INFO] Version: 1
+Aug 03 15:05:21 2021: [INFO] Header Size: 296
+Aug 03 15:05:21 2021: [INFO] Item Count: 0
+Aug 03 15:05:21 2021: [INFO] Total Size: 0
+Aug 03 15:05:21 2021: [WARN] Generating new SECP256R1 key
+Aug 03 15:05:21 2021: [INFO] Binding listener :::8119
+Aug 03 15:05:21 2021: [INFO] Setting up new ETSI conn item pool
+Aug 03 15:05:21 2021: [INFO] Growing ETSI service conn pool
+Aug 03 15:05:21 2021: [INFO] Growing ETSI service conn pool
+Aug 03 15:05:21 2021: [INFO] SECP256R1: 28CC71FBBB46070FBD999E7D2E16873A9F6DEBF1BE81BC9AEEEE4B34664BCE15BF0182F4A0F325B40AE24B0B979F5704B9784FD82AD03384D0703C474C21530D
+Aug 03 15:05:21 2021: [WARN] Vault Auth: Setting up new encryption key
+Aug 03 15:05:21 2021: [INFO] Next key renewal 3600 seconds
+```
+
+```
+ % ./examples/https/server
+HTTPS Server: Port 443
+Aug 03 15:09:50 2021: [INFO] Connected to ETSI service
+```
+
+```
+ % ./examples/middlebox/decrypt
+1. lo0 (No description available)
+2. en0 (No description available)
+Enter the interface number (1-2) [default: 1]:
+server = 127.0.0.1
+server = ::1
+server = fe80::1
+Enter the port to scan [default: 443]:
+Enter the server key [default: https://localhost:8119]:
+Aug 03 15:07:33 2021: [INFO] Connected to ETSI service
+...
+
+Got ETSI static ephemeral key (121 bytes)
+Aug 03 15:07:33 2021: [INFO] SECP256R1: 28CC71FBBB46070FBD999E7D2E16873A9F6DEBF1BE81BC9AEEEE4B34664BCE15BF0182F4A0F325B40AE24B0B979F5704B9784FD82AD03384D0703C474C21530D
+Loaded key for fe80::1:443
+SSL App Data(30:323):GET / HTTP/1.1
+Host: localhost
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us
+Connection: keep-alive
+Accept-Encoding: gzip, deflate, br
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1 Safari/605.1.15
+
+
+SSL App Data(32:132):HTTP/1.1 200 OK
+Content-Type: text/html
+Connection: keep-alive
+Content-Length: 44
+
+<html><body><h1>It works!</h1></body></html>
+```
+
 ## Features Missing
 * Finish adding multiple server support with "fingerprint" (see `ETSI_SVC_MAX_SERVERS`)
 * Find error response message (currently disconnects with socket FIN)
-* ED25519 and ED448
+* Curve25519 and Curve448
 * X509 Visibility support
 * TLS v1.2 ephemeral key support
 
