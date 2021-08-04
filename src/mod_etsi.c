@@ -657,6 +657,7 @@ static int wolfKeyCalcFingerprint(EtsiKeyType keyType, const byte* pub, word32 p
     byte* fp, word32* fpSz)
 {
     int ret = 0;
+    byte digest[WC_SHA256_DIGEST_SIZE];
     word32 tmpSz;
 
     if (pub == NULL || pubSz == 0 || fp == NULL || fpSz == NULL)
@@ -666,11 +667,15 @@ static int wolfKeyCalcFingerprint(EtsiKeyType keyType, const byte* pub, word32 p
     tmpSz = *fpSz;
     *fpSz = 0;
 
-    /* TODO: SHA256 Hash Pub Key */
-
-    /* TODO: Return 10-bytes truncated */
-    memcpy(fp, pub, 10);
-    *fpSz = 10;
+    /* SHA256 Hash Pub Key */
+    ret = wc_Sha256Hash(pub, pubSz, digest);
+    if (ret == 0) {
+        /* Return 10-bytes truncated (big endian) */
+        if (tmpSz > WC_SHA256_DIGEST_SIZE)
+            tmpSz = WC_SHA256_DIGEST_SIZE;
+        memcpy(fp, pub, tmpSz);
+        *fpSz = tmpSz;
+    }
 
     (void)keyType;
     return ret;

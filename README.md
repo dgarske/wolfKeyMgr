@@ -236,7 +236,6 @@ usage: ./decrypt or ./decrypt dumpFile keyServerURL [server] [port] [password]
 3. Run the middle-box decryption `./examples/middlebox/decrypt` and use the default parameters.
 4. Open a web browser to `https://localhost` or run the HTTP client example `./examples/https/client`.
 5. In the middle-box decryption window you will see the decrypted HTTPS traffic.
-co
 
 Notes:
 
@@ -255,7 +254,7 @@ Notes:
 ### Demo example output
 
 ```
-% ./src/wolfkeymgr -t 2 -l 3
+% ./src/wolfkeymgr
 Aug 03 15:05:21 2021: [INFO] Starting Key Manager
 Aug 03 15:05:21 2021: [INFO] 	To exit use ctrl+c
 Aug 03 15:05:21 2021: [INFO] loaded CA certificate file ./certs/ca-cert.pem
