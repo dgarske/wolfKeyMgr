@@ -113,7 +113,7 @@ typedef struct EtsiKey {
     enum EtsiKeyType type;
     word32 fingerprintSz;
     byte   fingerprint[ETSI_MAX_FINGERPRINT];
-    char*  contextStr[ETSI_MAX_CONTEXT_STR];
+    char   contextStr[ETSI_MAX_CONTEXT_STR];
     word32 responseSz;
     byte   response[ETSI_MAX_RESPONSE_SZ];
     time_t expires; /* from HTTP HTTP_HDR_EXPIRES */

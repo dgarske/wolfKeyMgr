@@ -111,8 +111,8 @@ static int DoKeyRequest(EtsiClientCtx* client, WorkThreadCtx* tctx)
     /* push: will wait for server to push new keys */
     /* get:  will ask server for key and return */
     if (info->requestType == REQ_TYPE_GET) {
-        ret = wolfEtsiClientGet(client, &tctx->key, info->keyType, NULL, NULL,
-            info->timeoutSec);
+        ret = wolfEtsiClientGet(client, &tctx->key, info->keyType, NULL,
+            info->contextStr, info->timeoutSec);
         /* positive return means new key returned */
         /* zero means, same key is used */
         /* negative means error */
@@ -217,7 +217,7 @@ static void Usage(void)
     printf("-K <keyt>   Key Type: SECP256R1, FFDHE_2048, X25519 or X448 (default %s)\n",
         wolfEtsiKeyGetTypeStr(ETSI_TEST_KEY_TYPE));
     printf("-F <fprint> Fingerprint used for multiple servers (first 80-bit of pkey hash as hex string)\n");
-    printf("-n <name>   Find key using public key name (hex string)\n");
+    printf("-C <name>   Find key using public key name (hex string)\n");
 }
 
 int etsi_test(int argc, char** argv)

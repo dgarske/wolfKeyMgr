@@ -158,9 +158,12 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
     pthread_mutex_lock(&svcCtx->lock);
     for (i=0; i<ETSI_SVC_MAX_ACTIVE_KEYS; i++) {
         if ((word32)svcCtx->keys[i].type == etsiConn->groupNum) {
-            /* TODO: Filter by contextStr */
-            key = &svcCtx->keys[i];
-            break;
+            word32 ctxStrSz = (word32)strlen(etsiConn->contextStr);
+            if (ctxStrSz == 0 || (ctxStrSz == (word32)strlen(svcCtx->keys[i].contextStr) && 
+                    strncmp(svcCtx->keys[i].contextStr, etsiConn->contextStr, ctxStrSz) == 0)) {
+                key = &svcCtx->keys[i];
+                break;
+            }
         }
     }
     /* if one doesn't exist for this group then trigger generation */
@@ -193,6 +196,9 @@ static int SetupKeyPackage(SvcConn* conn, EtsiSvcCtx* svcCtx)
         /* Format Expires Time */
         localtime_r(&key->expires, &tm);
         strftime(expiresStr, sizeof(expiresStr), HTTP_DATE_FMT, &tm);
+
+        /* set contextStr */
+        strncpy(key->contextStr, etsiConn->contextStr, sizeof(key->contextStr));
 
         /* increment use count */
         key->useCount++;

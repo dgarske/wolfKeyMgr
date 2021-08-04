@@ -317,7 +317,6 @@ Content-Length: 44
 ```
 
 ## Features Missing
-* Finish adding multiple server support with "fingerprint" (see `ETSI_SVC_MAX_SERVERS`)
 * Find error response message (currently disconnects with socket FIN)
 * Curve25519 and Curve448
 * X509 Visibility support
