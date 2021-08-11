@@ -257,7 +257,7 @@ int main(int argc, char** argv)
     /********** ETSI Service **********/
     etsiSvc = wolfEtsiSvc_Init(&config);
     if (etsiSvc) {
-        /* set socket timeut */
+        /* set socket timeout */
         wolfKeyMgr_SetTimeout(etsiSvc, timeoutSec);
 
         ret = wolfKeyMgr_LoadCAFile(etsiSvc, caCert, WOLFSSL_FILETYPE_PEM);

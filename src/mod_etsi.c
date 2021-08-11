@@ -735,6 +735,96 @@ static int GenNewKeyEcc(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 }
 #endif
 
+#ifdef HAVE_CURVE25519
+static int GenNewKeyCurve25519(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
+{
+    int ret;
+    curve25519_key curveKey;
+
+    ret = wc_curve25519_init(&curveKey);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Curve25519 init failed! %d\n", ret);
+        return WOLFKM_BAD_KEY;
+    }
+        
+    ret = wc_curve25519_make_key(rng, CURVE25519_KEYSIZE, &curveKey);
+    if (ret == 0) {
+        key->responseSz = sizeof(key->response);
+        ret = wc_Curve25519PrivateKeyToDer(&curveKey, (byte*)key->response,
+            key->responseSz);
+        if (ret >= 0) {
+            key->responseSz = ret;
+            ret = 0;
+        }
+    }
+    if (ret == 0) {
+        /* export public */
+        byte pub[CURVE25519_KEYSIZE];
+        word32 pubLen = CURVE25519_KEYSIZE;
+        ret = wc_curve25519_export_public_ex(&curveKey, pub, &pubLen,
+            EC25519_LITTLE_ENDIAN);
+        if (ret == 0) {
+            /* compute fingerprint for key */
+            word32 fpSz = (word32)sizeof(key->fingerprint);
+            ret = wolfKeyCalcFingerprint(keyType, pub, pubLen,
+                key->fingerprint, &fpSz);
+        }
+    }
+    wc_curve25519_free(&curveKey);
+
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Curve25519 Key Generation Failed! %d\n", ret);
+    }
+
+    return ret;
+}
+#endif /* HAVE_CURVE25519 */
+
+#ifdef HAVE_CURVE448
+static int GenNewKeyCurve448(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
+{
+    int ret;
+    curve448_key curveKey;
+
+    ret = wc_curve448_init(&curveKey);
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Curve448 init failed! %d\n", ret);
+        return WOLFKM_BAD_KEY;
+    }
+        
+    ret = wc_curve448_make_key(rng, CURVE448_KEY_SIZE, &curveKey);
+    if (ret == 0) {
+        key->responseSz = sizeof(key->response);
+        ret = wc_Curve448PrivateKeyToDer(&curveKey, (byte*)key->response,
+            key->responseSz);
+        if (ret >= 0) {
+            key->responseSz = ret;
+            ret = 0;
+        }
+    }
+    if (ret == 0) {
+        /* export public */
+        byte pub[CURVE448_PUB_KEY_SIZE];
+        word32 pubLen = CURVE448_PUB_KEY_SIZE;
+        ret = wc_curve448_export_public_ex(&curveKey, pub, &pubLen,
+            EC448_LITTLE_ENDIAN);
+        if (ret == 0) {
+            /* compute fingerprint for key */
+            word32 fpSz = (word32)sizeof(key->fingerprint);
+            ret = wolfKeyCalcFingerprint(keyType, pub, pubLen,
+                key->fingerprint, &fpSz);
+        }
+    }
+    wc_curve448_free(&curveKey);
+
+    if (ret != 0) {
+        XLOG(WOLFKM_LOG_ERROR, "Curve448 Key Generation Failed! %d\n", ret);
+    }
+
+    return ret;
+}
+#endif /* HAVE_CURVE448 */
+
 #if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
 static int GenNewKeyDh(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 {
@@ -824,14 +914,12 @@ int wolfEtsiKeyGen(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
 #endif
 #ifdef HAVE_CURVE25519
     if (keyType == ETSI_KEY_TYPE_X25519) {
-        /* TODO: X25519 Key Gen */
+        ret = GenNewKeyCurve25519(key, keyType, rng);
     }
 #endif
 #ifdef HAVE_CURVE448
     if (keyType == ETSI_KEY_TYPE_X448) {
-        /* TODO: X448 Key Gen */
-        //curveId = ECC_X448;
-        //keySize = 56;
+        ret = GenNewKeyCurve448(key, keyType, rng);
     }
 #endif
 
@@ -905,14 +993,14 @@ int wolfEtsiCalcTlsFingerprint(EtsiKeyType keyType,
 #endif
 #ifdef HAVE_CURVE25519
     if (keyType == ETSI_KEY_TYPE_X25519) {
-        /* TODO: X25519 Key Gen */
+        /* For Curve25519 is 32 bytes as unsigned bin */
+        ret = wolfKeyCalcFingerprint(keyType, pub, pubSz, fp, &fpSz);
     }
 #endif
 #ifdef HAVE_CURVE448
     if (keyType == ETSI_KEY_TYPE_X448) {
-        /* TODO: X448 Key Gen */
-        //curveId = ECC_X448;
-        //keySize = 56;
+        /* For Curve448 is 56 bytes as unsigned bin */
+        ret = wolfKeyCalcFingerprint(keyType, pub, pubSz, fp, &fpSz);
     }
 #endif
 
@@ -950,7 +1038,6 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
     keyAlgo = wolfEtsiKeyGetPkType(key);
 #ifdef HAVE_ECC
     if (keyAlgo == WC_PK_TYPE_ECDH) {
-        /* example for loading ECC key */
         ecc_key ecKey;
         ret = wc_ecc_init(&ecKey);
         if (ret == 0) {
@@ -977,7 +1064,6 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
 #endif
 #if !defined(NO_DH) && defined(WOLFSSL_DH_EXTRA)
     if (keyAlgo == WC_PK_TYPE_DH) {
-        /* example for loading DHE key */
         DhKey dhKey;
         ret = wc_InitDhKey(&dhKey);
         if (ret == 0) {
@@ -1001,16 +1087,49 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
 #endif
 #ifdef HAVE_CURVE25519
     if (keyAlgo == WC_PK_TYPE_CURVE25519) {
-        /* TODO: add example for loading X25519 key and print */
-        //curve25519_key x25519;
-        XLOG(WOLFKM_LOG_INFO, "X25519 Pub: TODO\n");
+        curve25519_key curveKey;
+        ret = wc_curve25519_init(&curveKey);
+        if (ret == 0) {
+            word32 idx = 0;
+            ret = wc_Curve25519PrivateKeyDecode((byte*)key->response, &idx,
+                &curveKey, key->responseSz);
+            if (ret == 0) {
+                byte pub[CURVE25519_KEYSIZE];
+                word32 pubLen = CURVE25519_KEYSIZE;
+                ret = wc_curve25519_export_public_ex(&curveKey, pub, &pubLen,
+                    EC25519_LITTLE_ENDIAN);
+                if (ret == 0) {
+                    /* compute fingerprint for key */
+                    ret = wolfKeyCalcFingerprint(key->type, pub, pubLen,
+                        fp, &fpSz);
+                }
+            }
+            wc_curve25519_free(&curveKey);
+        }
     }
 #endif
 #ifdef HAVE_CURVE448
     if (keyAlgo == WC_PK_TYPE_CURVE448) {
-        /* TODO: add example for loading X448 key and print */
-        //curve448_key x448;
-        XLOG(WOLFKM_LOG_INFO, "X448 Pub: TODO\n");
+        curve448_key curveKey;
+        ret = wc_curve448_init(&curveKey);
+        if (ret == 0) {
+            word32 idx = 0;
+            ret = wc_Curve448PrivateKeyDecode((byte*)key->response, &idx,
+                &curveKey, key->responseSz);
+            if (ret == 0) {
+                byte pub[CURVE448_PUB_KEY_SIZE];
+                word32 pubLen = CURVE448_PUB_KEY_SIZE;
+                ret = wc_curve448_export_public_ex(&curveKey, pub, &pubLen,
+                    EC448_LITTLE_ENDIAN);
+                if (ret == 0) {
+                    /* compute fingerprint for key */
+                    ret = wolfKeyCalcFingerprint(key->type, pub, pubLen,
+                        fp, &fpSz);
+                }
+            }
+            wc_curve448_free(&curveKey);
+        }
+    }
 #endif
 
     key->fingerprintSz = fpSz;
