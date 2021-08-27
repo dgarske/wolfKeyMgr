@@ -19,9 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Support for ETSI Key Manager */
+/* Support for ETSI Key Manager Middle-box Decryption */
 
-#include "wolfkeymgr/options.h"
 #include "wolfkeymgr/mod_etsi.h"
 #include "examples/middlebox/decrypt.h"
 #include "examples/test_config.h"
@@ -61,112 +60,9 @@ enum {
 static pcap_t* gPcap = NULL;
 static pcap_if_t* gPcapAllDevs = NULL;
 static int gIsOfflinePcap = 0;
-static EtsiClientCtx* gEtsiClient = NULL;
 
 /* Private local functions */
-static void etsi_client_cleanup(void)
-{
-    if (gEtsiClient) {
-        wolfEtsiClientFree(gEtsiClient);
-        gEtsiClient = NULL;
-
-        wolfEtsiClientCleanup();
-    }
-}
-
-static int etsi_client_connect(char* urlStr)
-{
-    int ret = 0;
-    static HttpUrl url;
-
-    /* setup key manager connection */
-    if (gEtsiClient == NULL) {
-        wolfEtsiClientInit();
-
-        gEtsiClient = wolfEtsiClientNew();
-        if (gEtsiClient) {
-            wolfEtsiClientAddCA(gEtsiClient, ETSI_TEST_CLIENT_CA);
-            wolfEtsiClientSetKey(gEtsiClient,
-                ETSI_TEST_CLIENT_KEY, ETSI_TEST_CLIENT_PASS,
-                ETSI_TEST_CLIENT_CERT, WOLFSSL_FILETYPE_PEM);
-
-            if (urlStr) {
-                memset(&url, 0, sizeof(url));
-                wolfHttpUrlDecode(&url, urlStr);
-            }
-
-            ret = wolfEtsiClientConnect(gEtsiClient, url.domain, url.port,
-                ETSI_TEST_TIMEOUT_MS);
-            if (ret != 0) {
-                printf("Error connecting to ETSI server! %d\n", ret);                
-                etsi_client_cleanup();
-            }
-        }
-        else {
-            ret = WOLFKM_BAD_MEMORY;
-        }
-    }
-    return ret;
-}
-
-static int etsi_client_get(char* urlStr, EtsiKey* key)
-{
-    int ret;
-    
-    ret = etsi_client_connect(urlStr);
-    if (ret == 0 && key) {
-        ret = wolfEtsiClientGet(gEtsiClient, key, ETSI_TEST_KEY_TYPE, 
-            NULL, NULL, ETSI_TEST_TIMEOUT_MS);
-        /* positive return means new key returned
-         * zero means, same key is used
-         * negative means error */
-        if (ret < 0) {
-            printf("Error getting ETSI static ephemeral key! %d\n", ret);
-            etsi_client_cleanup();
-        }
-        else {
-            printf("Got ETSI static ephemeral key (%d bytes)\n",
-                key->responseSz);
-            wolfEtsiKeyPrint(key);
-        }
-    }
-    return ret;
-}
-
 #ifdef WOLFSSL_SNIFFER_KEY_CALLBACK
-static int etsi_client_find(char* urlStr, EtsiKey* key, int namedGroup, 
-    const byte* pub, word32 pubSz)
-{
-    int ret;
-
-    if (key == NULL)
-        return BAD_FUNC_ARG;
-
-    ret = etsi_client_connect(urlStr);
-    if (ret == 0) {
-        char fpStr[ETSI_MAX_FINGERPRINT_STR];
-        word32 fpStrSz = (word32)sizeof(fpStr);
-
-        ret = wolfEtsiCalcTlsFingerprint((EtsiKeyType)namedGroup, pub, pubSz,
-            fpStr, &fpStrSz);
-        if (ret == 0) {
-            ret = wolfEtsiClientFind(gEtsiClient, key, namedGroup, fpStr,
-                NULL, ETSI_TEST_TIMEOUT_MS);
-        }
-        if (ret < 0) {
-            printf("Error finding ETSI static ephemeral key! %d\n", ret);
-            etsi_client_cleanup();
-        }
-        else {
-            printf("Found ETSI static ephemeral key (%d bytes)\n",
-                key->responseSz);
-            wolfEtsiKeyPrint(key);
-        }
-        (void)fpStrSz;
-    }
-    return ret;
-}
-
 static int myKeyCb(void* vSniffer, int namedGroup,
     const unsigned char* srvPub, unsigned int srvPubSz,
     const unsigned char* cliPub, unsigned int cliPubSz,
@@ -175,19 +71,16 @@ static int myKeyCb(void* vSniffer, int namedGroup,
     int ret;
     static EtsiKey key;
 
-    ret = etsi_client_find(NULL, &key, namedGroup, srvPub, srvPubSz);
+    ret = test_etsi_client_find(NULL, &key, namedGroup, srvPub, srvPubSz);
     if (ret >= 0) {
         byte* keyBuf = NULL;
         word32 keySz = 0;
         wolfEtsiKeyGetPtr(&key, &keyBuf, &keySz);
 
-        if (privKey->length != keySz) {
-            void* heap = privKey->heap;
-            wc_FreeDer(&privKey);
-            wc_AllocDer(&privKey, keySz, PRIVATEKEY_TYPE, heap);
+        if (privKey->length <= keySz) {
+            memcpy(privKey->buffer, keyBuf, keySz);
         }
-        memcpy(privKey->buffer, keyBuf, keySz);
-        ret = 0; /* mark success */
+        ret = 0; /* mark success - don't fail */
     }
 
     (void)vSniffer;
@@ -293,12 +186,37 @@ static const char* ip6tos(const struct in6_addr* addr)
     return inet_ntop(AF_INET6, addr, output, 42);
 }
 
+typedef struct {
+    const char* name;
+    const char* server;
+    const char* passwd;
+    char* err;
+    int port;
+} LoadKeyInfo_t;
+
+static int etsi_key_cb(EtsiKey* key, void* cbCtx)
+{
+    int ret;
+    byte* keyBuf = NULL;
+    word32 keySz = 0;
+    LoadKeyInfo_t* info = (LoadKeyInfo_t*)cbCtx;
+
+    wolfEtsiKeyGetPtr(key, &keyBuf, &keySz);
+#ifdef HAVE_SNI
+    ret = ssl_SetNamedEphemeralKeyBuffer(info->name, info->server, info->port,
+        (char*)keyBuf, keySz, FILETYPE_DER, info->passwd, info->err);
+#else
+    ret = ssl_SetEphemeralKeyBuffer(info->server, info->port,
+        (char*)keyBuf, keySz, FILETYPE_DER, info->passwd, info->err);
+#endif
+    return ret;
+}
 
 /* try and load as both static ephemeral and private key
  * only fail if no key is loaded
- * Allow comma seperated list of files 
+ * Allow comma seperated list of files
  */
-static int load_key(const char* name, const char* server, int port, 
+static int load_key(const char* name, const char* server, int port,
     const char* keyFiles, const char* passwd, char* err)
 {
     int ret = -1;
@@ -309,24 +227,16 @@ static int load_key(const char* name, const char* server, int port,
     while (keyFile != NULL) {
         /* is URL? */
         if (strncmp(keyFile, "https://", 8) == 0) {
-            EtsiKey key;
-            memset(&key, 0, sizeof(key));
+            LoadKeyInfo_t info;
+            info.name = name;
+            info.server = server;
+            info.port = port;
+            info.passwd = passwd;
+            info.err = err;
             /* setup connection */
-            ret = etsi_client_get(keyFile, &key);
+            ret = test_etsi_client_get_all(keyFile, etsi_key_cb, &info);
             if (ret < 0) {
                 printf("Error connecting to ETSI server: %s\n", keyFile);
-            }
-            else {
-                byte* keyBuf = NULL;
-                word32 keySz = 0;
-                wolfEtsiKeyGetPtr(&key, &keyBuf, &keySz);
-            #ifdef HAVE_SNI
-                ret = ssl_SetNamedEphemeralKeyBuffer(name, server, port,
-                    (char*)keyBuf, keySz, FILETYPE_DER, passwd, err);
-            #else
-                ret = ssl_SetEphemeralKeyBuffer(server, port,
-                    (char*)keyBuf, keySz, FILETYPE_DER, passwd, err);
-            #endif
             }
         }
         else {
@@ -342,7 +252,7 @@ static int load_key(const char* name, const char* server, int port,
         }
         if (ret == 0)
             loadCount++;
-        
+
         if (loadCount == 0) {
             printf("Failed loading private key %s: ret %d\n", keyFile, ret);
             ret = -1;
