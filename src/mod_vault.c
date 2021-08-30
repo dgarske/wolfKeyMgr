@@ -26,6 +26,10 @@
 
 #ifdef WOLFKM_VAULT
 
+#if defined(WOLFKM_VAULT_ENC) && !defined(HAVE_AESGCM)
+    #error Vault encryption requires AES GCM
+#endif
+
 #define VAULT_HEADER_ID  0x666C6F57U /* Wolf - little endian */
 #define VAULT_ITEM_ID    0x6B636150U /* Pack - little endian */
 #define VAULT_HEADER_VER 1
@@ -218,6 +222,7 @@ int wolfVaultOpen(wolfVaultCtx** ctx, const char* file)
 }
 
 #ifdef WOLFKM_VAULT_ENC
+
 static int wolfVaultSetupKey(wolfVaultCtx* ctx)
 {
     int ret;
@@ -252,11 +257,6 @@ static int wolfVaultSetupKey(wolfVaultCtx* ctx)
     else {
         XLOG(WOLFKM_LOG_ERROR, "Error %d setting up AES key!\n", ret);
     }
-
-#else
-    #error Vault encryption requires AES GCM
-    ret = WOLFKM_NOT_COMPILED_IN;
-    (void)ctx;
 #endif
 
     return ret;
@@ -276,11 +276,6 @@ static int wolfVaultDecrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
 
     ret = wc_AesGcmDecrypt(&ctx->aes, data, data, dataSz, iv, sizeof(iv),
         tag, tagSz, NULL, 0);
-#else
-    (void)ctx;
-    (void)data;
-    (void)dataSz;
-    (void)sector;
 #endif
     return ret;
 }
@@ -298,11 +293,6 @@ static int wolfVaultEncrypt(wolfVaultCtx* ctx, byte* data, word32 dataSz,
 
     ret = wc_AesGcmEncrypt(&ctx->aes, data, data, dataSz, iv, sizeof(iv),
         tag, tagSz, NULL, 0);
-#else
-    (void)ctx;
-    (void)data;
-    (void)dataSz;
-    (void)sector;
 #endif
     return ret;
 }
@@ -444,7 +434,7 @@ static int wolfVaultGetItemHeader(wolfVaultCtx* ctx, size_t itemPos)
 
 static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
 {
-    int ret;
+    int ret = 0;
 
 #ifdef WOLFKM_VAULT_ENC
     /* make sure key has been setup */
@@ -452,8 +442,6 @@ static int wolfVaultGetItemData(wolfVaultCtx* ctx, wolfVaultItem* item)
     if (ret != 0) {
         return ret;
     }
-#else
-    ret = 0;
 #endif
 
     /* populate header */

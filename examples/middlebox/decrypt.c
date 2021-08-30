@@ -69,13 +69,52 @@ static int myKeyCb(void* vSniffer, int namedGroup,
     DerBuffer* privKey, void* cbCtx, char* error)
 {
     int ret;
-    static EtsiKey key;
+    int keyType;
+    EtsiKey* key = NULL;
+#ifdef HAVE_ECC
+    static EtsiKey keyEcc;
+#endif
+#ifndef NO_DH
+    static EtsiKey keyDh;
+#endif
+#ifdef HAVE_CURVE25519
+    static EtsiKey keyX25519;
+#endif
 
-    ret = test_etsi_client_find(NULL, &key, namedGroup, srvPub, srvPubSz);
+    /* lookup based on key type */
+    keyType = wolfEtsiGetPkType(namedGroup);
+    switch (keyType) {
+        case WC_PK_TYPE_ECDH:
+        #ifdef HAVE_ECC
+            key = &keyEcc;
+        #endif
+            break;
+        case WC_PK_TYPE_DH:
+        #ifndef NO_DH
+            key = &keyDh;
+        #endif
+            break;
+        case WC_PK_TYPE_CURVE25519:
+        #ifdef HAVE_CURVE25519
+            key = &keyX25519;
+        #endif
+            break;
+        case WC_PK_TYPE_CURVE448:
+            /* curve448 not yet supported in sniffer */
+        default:
+            /* not supported */
+            key = NULL;
+            break;
+    }
+    if (key == NULL) {
+        return 0; /* return, but do not fail */
+    }
+
+    ret = etsi_client_find(NULL, key, namedGroup, srvPub, srvPubSz);
     if (ret >= 0) {
         byte* keyBuf = NULL;
         word32 keySz = 0;
-        wolfEtsiKeyGetPtr(&key, &keyBuf, &keySz);
+        wolfEtsiKeyGetPtr(key, &keyBuf, &keySz);
 
         if (privKey->length <= keySz) {
             memcpy(privKey->buffer, keyBuf, keySz);
@@ -91,7 +130,7 @@ static int myKeyCb(void* vSniffer, int namedGroup,
 
     return ret;
 }
-#endif
+#endif /* WOLFSSL_SNIFFER_KEY_CALLBACK */
 
 static void FreeAll(void)
 {
@@ -110,38 +149,37 @@ static void DumpStats(void)
     SSLStats sslStats;
     ssl_ReadStatistics(&sslStats);
 
-    /* TODO: Consider stderr */
-    printf("SSL Stats (sslStandardConns):%lu\n",
+    fprintf(stderr, "SSL Stats (sslStandardConns):%lu\n",
             sslStats.sslStandardConns);
-    printf("SSL Stats (sslClientAuthConns):%lu\n",
+    fprintf(stderr, "SSL Stats (sslClientAuthConns):%lu\n",
             sslStats.sslClientAuthConns);
-    printf("SSL Stats (sslResumedConns):%lu\n",
+    fprintf(stderr, "SSL Stats (sslResumedConns):%lu\n",
             sslStats.sslResumedConns);
-    printf("SSL Stats (sslEphemeralMisses):%lu\n",
+    fprintf(stderr, "SSL Stats (sslEphemeralMisses):%lu\n",
             sslStats.sslEphemeralMisses);
-    printf("SSL Stats (sslResumeMisses):%lu\n",
+    fprintf(stderr, "SSL Stats (sslResumeMisses):%lu\n",
             sslStats.sslResumeMisses);
-    printf("SSL Stats (sslCiphersUnsupported):%lu\n",
+    fprintf(stderr, "SSL Stats (sslCiphersUnsupported):%lu\n",
             sslStats.sslCiphersUnsupported);
-    printf("SSL Stats (sslKeysUnmatched):%lu\n",
+    fprintf(stderr, "SSL Stats (sslKeysUnmatched):%lu\n",
             sslStats.sslKeysUnmatched);
-    printf("SSL Stats (sslKeyFails):%lu\n",
+    fprintf(stderr, "SSL Stats (sslKeyFails):%lu\n",
             sslStats.sslKeyFails);
-    printf("SSL Stats (sslDecodeFails):%lu\n",
+    fprintf(stderr, "SSL Stats (sslDecodeFails):%lu\n",
             sslStats.sslDecodeFails);
-    printf("SSL Stats (sslAlerts):%lu\n",
+    fprintf(stderr, "SSL Stats (sslAlerts):%lu\n",
             sslStats.sslAlerts);
-    printf("SSL Stats (sslDecryptedBytes):%lu\n",
+    fprintf(stderr, "SSL Stats (sslDecryptedBytes):%lu\n",
             sslStats.sslDecryptedBytes);
-    printf("SSL Stats (sslEncryptedBytes):%lu\n",
+    fprintf(stderr, "SSL Stats (sslEncryptedBytes):%lu\n",
             sslStats.sslEncryptedBytes);
-    printf("SSL Stats (sslEncryptedPackets):%lu\n",
+    fprintf(stderr, "SSL Stats (sslEncryptedPackets):%lu\n",
             sslStats.sslEncryptedPackets);
-    printf("SSL Stats (sslDecryptedPackets):%lu\n",
+    fprintf(stderr, "SSL Stats (sslDecryptedPackets):%lu\n",
             sslStats.sslDecryptedPackets);
-    printf("SSL Stats (sslKeyMatches):%lu\n",
+    fprintf(stderr, "SSL Stats (sslKeyMatches):%lu\n",
             sslStats.sslKeyMatches);
-    printf("SSL Stats (sslEncryptedConns):%lu\n",
+    fprintf(stderr, "SSL Stats (sslEncryptedConns):%lu\n",
             sslStats.sslEncryptedConns);
 }
 #endif /* WOLFSSL_SNIFFER_STATS */
@@ -209,6 +247,13 @@ static int etsi_key_cb(EtsiKey* key, void* cbCtx)
     ret = ssl_SetEphemeralKeyBuffer(info->server, info->port,
         (char*)keyBuf, keySz, FILETYPE_DER, info->passwd, info->err);
 #endif
+
+    if (ret != 0) {
+        /* log error, but do not fail */
+        fprintf(stderr, "Error loading private key %s: ret %d\n",
+            wolfEtsiKeyGetTypeStr(key->type), ret);
+        ret = 0; /* this is okay */
+    }
     return ret;
 }
 
@@ -234,9 +279,9 @@ static int load_key(const char* name, const char* server, int port,
             info.passwd = passwd;
             info.err = err;
             /* setup connection */
-            ret = test_etsi_client_get_all(keyFile, etsi_key_cb, &info);
+            ret = etsi_client_get_all(keyFile, etsi_key_cb, &info);
             if (ret < 0) {
-                printf("Error connecting to ETSI server: %s\n", keyFile);
+                fprintf(stderr, "Error connecting to ETSI server: %s\n", keyFile);
             }
         }
         else {
@@ -254,7 +299,7 @@ static int load_key(const char* name, const char* server, int port,
             loadCount++;
 
         if (loadCount == 0) {
-            printf("Failed loading private key %s: ret %d\n", keyFile, ret);
+            fprintf(stderr, "Failed loading private key %s: ret %d\n", keyFile, ret);
             ret = -1;
         }
         else {
@@ -356,7 +401,7 @@ int middlebox_decrypt_test(int argc, char** argv)
 
         gPcap = pcap_create(d->name, err);
         if (gPcap == NULL) {
-            printf("pcap_create failed %s\n", err);
+            fprintf(stderr, "pcap_create failed %s\n", err);
         }
 
         /* print out addresses for selected interface */
@@ -378,23 +423,23 @@ int middlebox_decrypt_test(int argc, char** argv)
 
         ret = pcap_set_snaplen(gPcap, 65536);
         if (ret != 0) {
-            printf("pcap_set_snaplen failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "pcap_set_snaplen failed %s\n", pcap_geterr(gPcap));
         }
         ret = pcap_set_timeout(gPcap, 1000);
         if (ret != 0) {
-            printf("pcap_set_timeout failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "pcap_set_timeout failed %s\n", pcap_geterr(gPcap));
         }
         ret = pcap_set_buffer_size(gPcap, 1000000);
         if (ret != 0) {
-            printf("pcap_set_buffer_size failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "pcap_set_buffer_size failed %s\n", pcap_geterr(gPcap));
         }
         ret = pcap_set_promisc(gPcap, 1);
         if (ret != 0) {
-            printf("pcap_set_promisc failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "pcap_set_promisc failed %s\n", pcap_geterr(gPcap));
         }
         ret = pcap_activate(gPcap);
         if (ret != 0) {
-            printf("pcap_activate failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "pcap_activate failed %s\n", pcap_geterr(gPcap));
         }
 
         printf("Enter the port to scan [default: %d]: ", portDef);
@@ -410,14 +455,14 @@ int middlebox_decrypt_test(int argc, char** argv)
 
         ret = pcap_compile(gPcap, &fp, filter, 0, 0);
         if (ret != 0) {
-            printf("pcap_compile failed %s\n", pcap_geterr(gPcap));
-            printf("Try using `sudo` permissions with middlebox/decrypt\n");
+            fprintf(stderr, "pcap_compile failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "Try using `sudo` permissions with middlebox/decrypt\n");
             exit(EXIT_FAILURE);
         }
 
         ret = pcap_setfilter(gPcap, &fp);
         if (ret != 0) {
-            printf("pcap_setfilter failed %s\n", pcap_geterr(gPcap));
+            fprintf(stderr, "pcap_setfilter failed %s\n", pcap_geterr(gPcap));
         }
 
         /* specify the key file or URL for ETSI key manager */
@@ -471,7 +516,7 @@ int middlebox_decrypt_test(int argc, char** argv)
         gIsOfflinePcap = 1;
         gPcap = pcap_open_offline(argv[1], err);
         if (gPcap == NULL) {
-            printf("pcap_open_offline failed %s\n", err);
+            fprintf(stderr, "pcap_open_offline failed %s\n", err);
             ret = -1;
         }
         else {
@@ -498,13 +543,13 @@ int middlebox_decrypt_test(int argc, char** argv)
             /* Only let through TCP/IP packets */
             ret = pcap_compile(gPcap, &fp, "(ip6 or ip) and tcp", 0, 0);
             if (ret != 0) {
-                printf("pcap_compile failed %s\n", pcap_geterr(gPcap));
+                fprintf(stderr, "pcap_compile failed %s\n", pcap_geterr(gPcap));
                 exit(EXIT_FAILURE);
             }
 
             ret = pcap_setfilter(gPcap, &fp);
             if (ret != 0) {
-                printf("pcap_setfilter failed %s\n", pcap_geterr(gPcap));
+                fprintf(stderr, "pcap_setfilter failed %s\n", pcap_geterr(gPcap));
                 exit(EXIT_FAILURE);
             }
         }
@@ -542,7 +587,7 @@ int middlebox_decrypt_test(int argc, char** argv)
             ret = ssl_DecodePacketWithSessionInfo(packet, header.caplen, &data,
                                                   &sslInfo, err);
             if (ret < 0) {
-                printf("ssl_Decode ret = %d, %s\n", ret, err);
+                fprintf(stderr, "ssl_Decode ret = %d, %s\n", ret, err);
                 hadBadPacket = 1;
             }
             if (ret > 0) {

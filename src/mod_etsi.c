@@ -448,26 +448,30 @@ EtsiKey* wolfEtsiKeyNew(void)
     return key;
 }
 
+int wolfEtsiGetPkType(EtsiKeyType type)
+{
+    if (type >= ETSI_KEY_TYPE_SECP160K1 && 
+        type <= ETSI_KEY_TYPE_BRAINPOOLP512R1) {
+        return WC_PK_TYPE_ECDH;
+    }
+    if (type >= ETSI_KEY_TYPE_FFDHE_2048 && 
+        type <= ETSI_KEY_TYPE_FFDHE_8192) {
+        return WC_PK_TYPE_DH;
+    }
+    if (type == ETSI_KEY_TYPE_X25519) {
+        return WC_PK_TYPE_CURVE25519;
+    }
+    if (type == ETSI_KEY_TYPE_X448) {
+        return WC_PK_TYPE_CURVE448;
+    }
+    return WC_PK_TYPE_NONE;
+}
+
 int wolfEtsiKeyGetPkType(EtsiKey* key)
 {
     if (key == NULL)
         return WOLFKM_BAD_ARGS;
-
-    if (key->type >= ETSI_KEY_TYPE_SECP160K1 && 
-        key->type <= ETSI_KEY_TYPE_BRAINPOOLP512R1) {
-        return WC_PK_TYPE_ECDH;
-    }
-    if (key->type >= ETSI_KEY_TYPE_FFDHE_2048 && 
-        key->type <= ETSI_KEY_TYPE_FFDHE_8192) {
-        return WC_PK_TYPE_DH;
-    }
-    if (key->type == ETSI_KEY_TYPE_X25519) {
-        return WC_PK_TYPE_CURVE25519;
-    }
-    if (key->type == ETSI_KEY_TYPE_X448) {
-        return WC_PK_TYPE_CURVE448;
-    }
-    return WC_PK_TYPE_NONE;
+    return wolfEtsiGetPkType(key->type);
 }
 
 const char* wolfEtsiKeyGetTypeStr(EtsiKeyType type)
@@ -713,7 +717,8 @@ static int GenNewKeyEcc(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
     if (ret == 0) {
         /* export public */
         byte pub[MAX_ECC_BYTES*2];
-        word32 pubXLen = sizeof(pub)/2, pubYLen = sizeof(pub)/2;
+        word32 pubXLen = (word32)sizeof(pub)/2;
+        word32 pubYLen = (word32)sizeof(pub)/2;
         ret = wc_ecc_export_ex(&ecc,
             pub,         &pubXLen,
             pub+keySize, &pubYLen, 
@@ -760,7 +765,7 @@ static int GenNewKeyCurve25519(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
     if (ret == 0) {
         /* export public */
         byte pub[CURVE25519_KEYSIZE];
-        word32 pubLen = CURVE25519_KEYSIZE;
+        word32 pubLen = (word32)sizeof(pub);
         ret = wc_curve25519_export_public_ex(&curveKey, pub, &pubLen,
             EC25519_LITTLE_ENDIAN);
         if (ret == 0) {
@@ -805,7 +810,7 @@ static int GenNewKeyCurve448(EtsiKey* key, EtsiKeyType keyType, WC_RNG* rng)
     if (ret == 0) {
         /* export public */
         byte pub[CURVE448_PUB_KEY_SIZE];
-        word32 pubLen = CURVE448_PUB_KEY_SIZE;
+        word32 pubLen = (word32)sizeof(pub);
         ret = wc_curve448_export_public_ex(&curveKey, pub, &pubLen,
             EC448_LITTLE_ENDIAN);
         if (ret == 0) {
@@ -1046,7 +1051,8 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
                 key->responseSz);
             if (ret == 0) {
                 byte pub[MAX_ECC_BYTES*2];
-                word32 pubXLen = sizeof(pub)/2, pubYLen = sizeof(pub)/2;
+                word32 pubXLen = (word32)sizeof(pub)/2;
+                word32 pubYLen = (word32)sizeof(pub)/2;
                 word32 keySize = wc_ecc_size(&ecKey);
                 ret = wc_ecc_export_ex(&ecKey,
                     pub, &pubXLen,
@@ -1072,7 +1078,7 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
                 key->responseSz);
             if (ret == 0) {
                 byte pubKey[MAX_DH_PUB_SZ];
-                word32 pubKeyLen = sizeof(pubKey);
+                word32 pubKeyLen = (word32)sizeof(pubKey);
                 ret = wc_export_int(&dhKey.pub, pubKey, &pubKeyLen,
                     MAX_DH_PUB_SZ, WC_TYPE_UNSIGNED_BIN);
                 if (ret == 0) {
@@ -1095,7 +1101,7 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
                 &curveKey, key->responseSz);
             if (ret == 0) {
                 byte pub[CURVE25519_KEYSIZE];
-                word32 pubLen = CURVE25519_KEYSIZE;
+                word32 pubLen = (word32)sizeof(pub);
                 ret = wc_curve25519_export_public_ex(&curveKey, pub, &pubLen,
                     EC25519_LITTLE_ENDIAN);
                 if (ret == 0) {
@@ -1118,7 +1124,7 @@ int wolfEtsiKeyComputeName(EtsiKey* key)
                 &curveKey, key->responseSz);
             if (ret == 0) {
                 byte pub[CURVE448_PUB_KEY_SIZE];
-                word32 pubLen = CURVE448_PUB_KEY_SIZE;
+                word32 pubLen = (word32)sizeof(pub);
                 ret = wc_curve448_export_public_ex(&curveKey, pub, &pubLen,
                     EC448_LITTLE_ENDIAN);
                 if (ret == 0) {

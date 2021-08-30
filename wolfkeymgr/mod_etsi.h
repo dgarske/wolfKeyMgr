@@ -183,6 +183,8 @@ WOLFKM_API void wolfEtsiClientFree(EtsiClientCtx* client);
 WOLFKM_API EtsiKey* wolfEtsiKeyNew(void);
 /* Returns the wolf PK type (enum wc_PkType) */
 WOLFKM_API int wolfEtsiKeyGetPkType(EtsiKey* key);
+/* Lookup the wolfSSL PK type (enum wc_PkType) from named group */
+WOLFKM_API int wolfEtsiGetPkType(EtsiKeyType type);
 /* Load key to WOLFSSL_CTX directly */
 WOLFKM_API int wolfEtsiKeyLoadCTX(EtsiKey* key, WOLFSSL_CTX* ctx);
 /* Load key to WOLFSSL session directly */

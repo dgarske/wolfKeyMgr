@@ -40,7 +40,11 @@ static void sig_handler(const int sig)
 static int etsi_key_cb(EtsiKey* key, void* cbCtx)
 {
     WOLFSSL_CTX* ctx = (WOLFSSL_CTX*)cbCtx;
-    return wolfEtsiKeyLoadCTX(key, ctx);
+    int ret = wolfEtsiKeyLoadCTX(key, ctx);
+    if (ret == NOT_COMPILED_IN) {
+        ret = 0; /* this is okay - if feature is not compiled in */
+    }
+    return ret;
 }
 
 int https_server_test(int argc, char** argv)
@@ -85,7 +89,7 @@ int https_server_test(int argc, char** argv)
     if (ret != 0) goto exit;
 
     do {
-        ret = test_etsi_client_get_all(etsiServer, etsi_key_cb, ctx);
+        ret = etsi_client_get_all(etsiServer, etsi_key_cb, ctx);
         if (ret != 0) {
             mStop = 1;
             goto end_sess;

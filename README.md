@@ -101,7 +101,7 @@ Notes:
 * A custom install location can be specified using: `./configure --prefix=/opt/local`
 * `autogen.sh` is script to generate configure, you'll need the autoconf tools
 installed, then proceed to the next step.
-
+* `src/wolfkeymgr` is the key manager service / dameon. A make install will typically put it into `/usr/local/bin/wolfkeymgr` or ``/usr/bin/wolfkeymgr`.
 
 ## Examples
 
@@ -317,9 +317,7 @@ Content-Length: 44
 
 ## Features Missing
 
-* make install for src/wolfkeymgr is confusing perhaps not required?
 * Find error response message (currently disconnects with socket FIN)
-* Curve25519 and Curve448
 * X509 Visibility support
 * TLS v1.2 ephemeral key support
 

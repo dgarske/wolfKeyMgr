@@ -84,6 +84,9 @@ static int keyCb(EtsiClientCtx* client, EtsiKey* key, void* userCtx)
         ret = wolfSSL_CTX_set_ephemeral_key(tctx->ctx,
             keyAlgo, (char*)key->response, key->responseSz,
             WOLFSSL_FILETYPE_ASN1);
+        if (ret == NOT_COMPILED_IN) {
+            ret = 0; /* not compiled in case is okay */
+        }
     #endif
     }
     if (ret == 0) {
