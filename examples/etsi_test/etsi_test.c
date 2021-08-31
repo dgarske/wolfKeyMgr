@@ -173,7 +173,7 @@ static void* DoRequests(void* arg)
     if (ret != 0) {
         XLOG(WOLFKM_LOG_ERROR, "Error loading ETSI client key/cert %d!\n", ret);
     }
-    ret = wolfEtsiClientConnect(client, info->host, info->port, 
+    ret = wolfEtsiClientConnect(client, info->host, info->port,
         info->timeoutSec);
     if (ret == 0) {
         /* setup test CTX to demonstrate loading static ephemeral */
@@ -331,7 +331,7 @@ int etsi_test(int argc, char** argv)
 
     if (errorMode)
         return DoErrorMode();
-    
+
     wolfEtsiClientInit();
 
     if (poolSize == 0) {

@@ -69,7 +69,7 @@ int https_server_test(int argc, char** argv)
     printf("HTTPS Server: Port %d\n", HTTPS_TEST_PORT);
 
     wolfSSL_Init();
-    
+
     /* log setup */
     //wolfSSL_Debugging_ON();
     wolfKeyMgr_SetLogFile(NULL, 0, WOLFKM_LOG_DEBUG);
@@ -99,14 +99,14 @@ int https_server_test(int argc, char** argv)
             HTTPS_TEST_TIMEOUT_SEC);
         if (ret == WOLFKM_BAD_TIMEOUT) continue;
         if (ret != 0) goto end_sess;
-        
+
         printf("TLS Accept %s\n", wolfSocketAddrStr(&clientAddr));
 
         /* Get HTTP request and print */
         dataSz = (int)sizeof(data);
         ret = wolfTlsRead(ssl, data, &dataSz, HTTPS_TEST_TIMEOUT_SEC);
         if (ret < 0) goto end_sess;
-        
+
         ret = wolfHttpServer_ParseRequest(&req, data, dataSz);
         if (ret == 0) {
             wolfHttpRequestPrint(&req);

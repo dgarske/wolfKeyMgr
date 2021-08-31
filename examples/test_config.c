@@ -74,7 +74,7 @@ int etsi_client_get(const char* urlStr, EtsiKey* key, int keyType)
         /* Get and set a static ephemeral for each supported key type */
         ret = wolfEtsiClientGet(gEtsiClient, key, keyType, NULL, NULL,
             ETSI_TEST_TIMEOUT_MS);
-        
+
         /* negative means error */
         if (ret < 0) {
             printf("Error getting ETSI %s static ephemeral key! %d\n", keyStr, ret);
