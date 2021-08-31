@@ -116,7 +116,7 @@ This application handles secure distribution and optional storage of the generat
 
 ```sh
 $ ./src/wolfkeymgr -?
-wolfKeyManager 0.11
+wolfKeyManager 1.0
 -?          Help, print this usage
 -i          Do not chdir / in daemon mode
 -b          Daemon mode, run in background
@@ -142,7 +142,7 @@ This demonstrates secure interactions with the key manager service using the ETS
 
 ```sh
 $ ./examples/etsi_test/etsi_test -?
-etsi_test 0.11
+etsi_test 1.0
 -?          Help, print this usage
 -e          Error mode, force error response
 -h <str>    Host to connect to, default localhost
