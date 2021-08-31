@@ -62,6 +62,7 @@ Notes:
 * To enable all ARMv8 (aarch64) speedups use `--enable-armasm --enable-sp --enable-sp-asm`
 * Requires at least wolfSSL v4.8.0 with PR:
    - https://github.com/wolfSSL/wolfssl/pull/4181
+   - https://github.com/wolfSSL/wolfssl/pull/4335 (required for Curve25519)
 
 2. Install libevent version 2.0+
 
